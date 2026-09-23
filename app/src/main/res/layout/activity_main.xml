@@ -27,9 +27,9 @@
                 android:minHeight="56dp" android:text="启用分析" />
             <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchBadge"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:minHeight="56dp" android:text="在消息下方显示 Jev 提示" />
+                android:minHeight="56dp" android:text="显示当前页面的 Jev 分析结果" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="分析已显示的对方文字消息，提供情绪概率、风险和建议，仅供参考。不会替你回复。"
+                android:text="仅分析当前屏幕中对方的纯文本。语音、文件、图片、视频等全部跳过。点击聊天底部 Jev 状态条查看结果，不会替你回复。"
                 android:textAppearance="?attr/textAppearanceBodySmall" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_marginTop="28dp" android:text="使用状态" android:textAppearance="?attr/textAppearanceTitleMedium" />

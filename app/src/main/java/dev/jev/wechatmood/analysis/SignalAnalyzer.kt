@@ -16,28 +16,33 @@ object SignalAnalyzer {
     private val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(25, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()
     private val failures = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val failureMessages = java.util.concurrent.ConcurrentHashMap<String, String>()
+    fun failure(key: String): String? = failureMessages[key]
 
-    fun submit(text: String, talker: String?): String? {
+    fun submit(text: String, talker: String?, stillVisible: () -> Boolean = { true }): String? {
         if (!ModulePrefs.canAnalyze) return null
         val trimmed = text.trim().take(4000)
-        if (trimmed.isEmpty() || (trimmed.startsWith("[") && trimmed.endsWith("]"))) return null
+        if (trimmed.isEmpty()) return null
         val key = MoodStore.keyOf(trimmed, talker)
         if (System.currentTimeMillis() - (failures[key] ?: 0L) < 30_000) return key
         if (!MoodStore.claim(key)) return key
+        failureMessages.remove(key)
         scope.launch {
             try {
                 slots.withPermit {
                     ModulePrefs.reload()
-                    if (!ModulePrefs.canAnalyze) { MoodStore.release(key); return@withPermit }
+                    if (!ModulePrefs.canAnalyze || !stillVisible()) { MoodStore.release(key); return@withPermit }
                     val mood = requestMood(trimmed)
                     MoodStore.complete(key, mood)
                     failures.remove(key)
+                    failureMessages.remove(key)
                     MoodLog.i("Jev 分析完成：${mood.label}，风险=${mood.risk}")
                     ModulePrefs.report("Jev 分析完成，已缓存 ${MoodStore.size()} 条")
                 }
             } catch (e: Exception) {
-                MoodStore.release(key)
                 failures[key] = System.currentTimeMillis()
+                failureMessages[key] = e.message ?: "分析失败，请稍后重试"
+                MoodStore.release(key)
                 MoodLog.e("分析失败：${e.message}")
                 ModulePrefs.report("分析失败：${e.message}")
             }

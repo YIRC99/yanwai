@@ -3,10 +3,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    // YukiHookAPI 的注解处理器：自动生成 assets/xposed_init 和
-    // resources/META-INF/yukihookapi_init 两个入口声明文件。
-    // 这两个文件**不要手写**，处理器会在编译时生成/覆盖它们。
-    alias(libs.plugins.kotlin.ksp)
 }
 
 val personalConfig = Properties().apply {
@@ -24,8 +20,8 @@ android {
         applicationId = "dev.jev.wechatmood"
         minSdk = 28          // 与 WeKit 一致；Android 9+
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         buildConfigField("String", "JEV_ENDPOINT", configString("endpoint", "https://api.typesafe.ai/v1/systemone"))
         buildConfigField("String", "JEV_MODEL", configString("model", "jev-1.13.0"))
         buildConfigField("String", "JEV_API_KEY", configString("apiKey"))
@@ -107,7 +103,6 @@ dependencies {
     }
 
     implementation(libs.yukihookapi.api)
-    ksp(libs.yukihookapi.ksp)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

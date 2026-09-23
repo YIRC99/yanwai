@@ -11,6 +11,7 @@
         android:theme="@style/Theme.WeChatMood">
         <provider android:name=".core.SettingsProvider"
             android:authorities="dev.jev.wechatmood.settings"
+            android:grantUriPermissions="true"
             android:exported="true" />
 
         <!-- 旧的 Xposed API 用这三个 meta-data；现代 Module API 改用 META-INF/xposed/ -->

@@ -23,6 +23,7 @@ object ModulePrefs {
         }.getOrNull()
     }
     // If the bridge is unavailable, fail closed so a disabled switch cannot silently become enabled.
+    val bridgeAvailable get() = config != null
     val enabled get() = config?.getBoolean(KEY_ENABLED, true) == true
     val exploreMode get() = config?.getBoolean(KEY_EXPLORE, false) == true
     val showBadge get() = config?.getBoolean(KEY_SHOW_BADGE, true) == true

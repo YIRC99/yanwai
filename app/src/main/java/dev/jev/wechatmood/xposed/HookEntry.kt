@@ -1,41 +1,70 @@
 package dev.jev.wechatmood.xposed
 
+import android.app.Activity
 import android.app.Application
+import android.app.Instrumentation
 import android.content.Context
-import com.highcapable.yukihookapi.YukiHookAPI
-import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
-import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
+import android.widget.Toast
+import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
+import de.robv.android.xposed.callbacks.XC_LoadPackage
 import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
-import dev.jev.wechatmood.hook.MessageExplorer
 import dev.jev.wechatmood.hook.MessageSniffer
 
-@InjectYukiHookWithXposed
-object HookEntry : IYukiHookXposedInit {
+/** Direct package entry, independent of the optional initZygote callback. */
+class HookEntry : IXposedHookLoadPackage {
     private var installed = false
-    override fun onInit() {}
-    override fun onHook() {
-        YukiHookAPI.encase {
-            XposedHelpers.findAndHookMethod(Application::class.java, "attach", Context::class.java,
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val context = param.args.firstOrNull() as? Context ?: return
-                        if (context.packageName != "com.tencent.mm" || installed ||
-                            Application.getProcessName() != "com.tencent.mm") return
-                        installed = true
-                        runCatching {
-                            MoodLog.init(context)
-                            ModulePrefs.init(context)
-                            MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
-                            ModulePrefs.report("模块已加载，等待打开聊天")
-                            if (ModulePrefs.exploreMode) MessageExplorer.run(param.thisObject as Application)
-                            MessageSniffer.install(context)
-                        }.onFailure { MoodLog.e("模块初始化失败：${it.javaClass.simpleName}") }
+    private var announced = false
+
+    override fun handleLoadPackage(param: XC_LoadPackage.LoadPackageParam) {
+        if (param.packageName != "com.tencent.mm" || param.processName != "com.tencent.mm") return
+        XposedBridge.log("WeChatMood ${BuildConfig.VERSION_NAME}: entered WeChat main process")
+        XposedHelpers.findAndHookMethod(Application::class.java, "attach", Context::class.java,
+            object : XC_MethodHook() {
+                override fun afterHookedMethod(p: MethodHookParam) { initialize(p.args[0] as Context) }
+            })
+        // Covers module loaders that attach after Application.attach has already run.
+        XposedBridge.hookAllMethods(Instrumentation::class.java, "callActivityOnResume", object : XC_MethodHook() {
+            override fun afterHookedMethod(p: MethodHookParam) {
+                val activity = p.args.firstOrNull() as? Activity ?: return
+                if (activity.packageName != "com.tencent.mm") return
+                initialize(activity.application)
+                if (!installed) {
+                    Toast.makeText(activity, "情绪助手初始化失败，请查看模块日志", Toast.LENGTH_LONG).show()
+                    return
+                }
+                runCatching {
+                    MessageSniffer.resume(activity)
+                    if (!announced) {
+                        announced = true
+                        Toast.makeText(activity, "微信情绪助手已加载 · 仅分析纯文本", Toast.LENGTH_LONG).show()
                     }
-                })
+                }.onFailure { MoodLog.e("连接微信页面失败：${it.javaClass.simpleName}") }
+            }
+        })
+        XposedBridge.hookAllMethods(Instrumentation::class.java, "callActivityOnPause", object : XC_MethodHook() {
+            override fun beforeHookedMethod(p: MethodHookParam) {
+                (p.args.firstOrNull() as? Activity)?.let { MessageSniffer.pause(it) }
+            }
+        })
+    }
+
+    @Synchronized private fun initialize(context: Context) {
+        if (installed) return
+        runCatching {
+            MoodLog.init(context)
+            ModulePrefs.init(context)
+            MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
+            ModulePrefs.report("模块 ${BuildConfig.VERSION_NAME} 已加载，等待打开聊天")
+            MessageSniffer.install(context)
+            installed = true
+        }.onFailure {
+            XposedBridge.log("WeChatMood initialization failed: ${it.javaClass.name}")
+            MoodLog.e("模块初始化失败：${it.javaClass.simpleName}")
         }
     }
 }

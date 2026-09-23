@@ -32,6 +32,11 @@ class MainActivity : AppCompatActivity() {
         }
         ViewCompat.requestApplyInsets(binding.root)
         MoodLog.init(this)
+        // Makes the settings provider visible to WeChat on Android 11+.
+        // The provider still validates the caller UID and exposes no chat text or credentials.
+        runCatching {
+            grantUriPermission("com.tencent.mm", SettingsProvider.URI, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }.onFailure { MoodLog.w("微信设置连接授权失败：${it.javaClass.simpleName}") }
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
         // First personal build migrates the old opt-in badge to the user's requested ready-to-use default.
         if (prefs.getInt("personal_defaults_version", 0) < 2) {
