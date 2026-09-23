@@ -1,0 +1,33 @@
+# 构建产物
+build/
+.gradle/
+*.apk
+*.aab
+
+# 本机路径，不该入库（每台机器的 SDK 位置不同）
+local.properties
+
+# KSP 生成的 Xposed 入口声明——编译期产物，不能手写也不能入库。
+# 改入口请改 @InjectYukiHookWithXposed 注解的参数，见 README。
+app/src/main/assets/xposed_init
+app/src/main/resources/META-INF/yukihookapi_init
+
+# 当前使用传统 Xposed 入口，作用域在 Manifest 与资源数组中声明。
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# 日志/临时文件
+*.log
+build.txt
+test.txt
+
+# 个人构建密钥和签名材料不入库。
+*.keystore
+*.jks
+keystore.properties
+.kotlin/
+jev.local.properties
+verification/

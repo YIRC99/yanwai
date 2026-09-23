@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="?attr/colorSurface" android:orientation="vertical">
+    <com.google.android.material.appbar.MaterialToolbar android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:minHeight="?attr/actionBarSize" app:title="微信情绪助手" />
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:fillViewport="true" android:clipToPadding="false">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:padding="20dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Jev 已为你配置好" android:textAppearance="?attr/textAppearanceHeadlineSmall" />
+            <TextView android:id="@+id/textModelStatus" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:text="无需填写接口地址或密钥" android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonTestModel"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="48dp" android:layout_marginTop="16dp" android:text="检测模型连接" />
+            <TextView android:id="@+id/textTestResult" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:accessibilityLiveRegion="polite" android:visibility="gone"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="28dp" android:text="聊天提示" android:textAppearance="?attr/textAppearanceTitleMedium" />
+            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchEnabled"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="56dp" android:text="启用分析" />
+            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchBadge"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="56dp" android:text="在消息下方显示 Jev 提示" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="分析已显示的对方文字消息，提供情绪概率、风险和建议，仅供参考。不会替你回复。"
+                android:textAppearance="?attr/textAppearanceBodySmall" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="28dp" android:text="使用状态" android:textAppearance="?attr/textAppearanceTitleMedium" />
+            <TextView android:id="@+id/textFrameworkStatus" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="首次使用：在 LSPosed 中启用本模块，作用域选择微信，然后重新启动微信。"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonDebug"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="20dp" android:minHeight="48dp" android:text="展开排查信息" />
+            <LinearLayout android:id="@+id/debugPanel" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchExplore"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:minHeight="56dp" android:text="记录微信适配信息" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="这里显示本 APP 的检测记录；微信内的详细日志由电脑读取。修改适配开关后需重启微信。"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonRefreshLog"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" android:text="刷新状态与记录" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonCopyLog"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" android:text="复制检测记录" />
+                <TextView android:id="@+id/textLog" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

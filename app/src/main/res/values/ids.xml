@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 用来把分析结果键挂在 View 的 tag 上。
+         用专门的 id 而不是硬编码整数，避免和微信自己的 tag key 撞车。 -->
+    <item name="wechatmood_mood_key" type="id" />
+</resources>

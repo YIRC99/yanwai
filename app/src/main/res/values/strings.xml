@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">微信情绪助手</string>
+    <string name="xposed_description">读取收到的消息并分析对方情绪，把结果显示在聊天界面上。不修改消息、不自动回复、不发送任何内容。</string>
+
+    <string name="status_framework">Xposed 框架</string>
+    <string name="status_wechat">微信进程状态</string>
+    <string name="section_switch">功能开关</string>
+    <string name="section_api">模型接口</string>
+    <string name="section_debug">调试</string>
+
+    <string name="label_enabled">启用情绪分析</string>
+    <string name="label_explore">探索模式（定位 hook 点）</string>
+    <string name="label_show_badge">在气泡旁显示情绪标记（默认关闭）</string>
+    <string name="label_api_key">API Key</string>
+    <string name="label_api_base">接口地址</string>
+    <string name="label_api_model">模型名</string>
+    <string name="label_log">查看运行日志</string>
+    <string name="label_clear_log">清空日志</string>
+
+    <string name="hint_api_base">例如 https://api.deepseek.com/v1</string>
+    <string name="hint_api_model">例如 deepseek-chat</string>
+
+    <string name="empty_log">还没有日志。装好模块重启微信，收到消息后这里会有记录。</string>
+</resources>

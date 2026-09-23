@@ -1,0 +1,48 @@
+[versions]
+agp = "8.5.2"
+# Kotlin 版本被 YukiHookAPI 1.3.0 的传递依赖约束：它带 kotlin-stdlib 2.1.10，
+# 用更老的 Kotlin 编译器读它会报元数据版本不兼容。
+kotlin = "2.1.10"
+# KSP 版本必须与 Kotlin 严格配对，格式 <kotlin>-<ksp>
+ksp = "2.1.10-1.0.31"
+
+# 这几个 androidx 版本与 compileSdk 35 + AGP 8.5.2 兼容。
+# 不能升：YukiHookAPI 1.3.2 会拉 core-ktx 1.17.0 / appcompat 1.7.1，
+# 那些要求 compileSdk 36/37 和 AGP 8.9.1+，而 platforms;android-37
+# 在 Google 的 SDK 仓库里根本还不存在。所以刻意钉住。
+coreKtx = "1.13.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+
+# Xposed 模块开发框架。
+# 注意版本上限：1.3.2 的 AAR 声明 minCompileSdk=37，装不上；1.3.0 声明 minCompileSdk=1。
+yukihookapi = "1.3.0"
+# 编译期需要 Xposed API；运行期由框架提供，所以是 compileOnly
+xposedApi = "82"
+# 运行时扫 APK 的 dex，按特征定位混淆后的类/方法
+dexkit = "2.0.1"
+
+coroutines = "1.8.1"
+okhttp = "4.12.0"
+junit = "4.13.2"
+
+[libraries]
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+material = { module = "com.google.android.material:material", version.ref = "material" }
+
+yukihookapi-api = { module = "com.highcapable.yukihookapi:api", version.ref = "yukihookapi" }
+yukihookapi-ksp = { module = "com.highcapable.yukihookapi:ksp-xposed", version.ref = "yukihookapi" }
+
+xposed-api = { module = "de.robv.android.xposed:api", version.ref = "xposedApi" }
+
+dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }
+
+coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+junit = { module = "junit:junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
