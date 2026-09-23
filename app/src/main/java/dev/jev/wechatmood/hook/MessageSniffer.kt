@@ -212,7 +212,7 @@ object MessageSniffer {
         val status = when {
             !ModulePrefs.bridgeAvailable -> "设置连接失败，点此打开助手后重试"
             !ModulePrefs.enabled -> "分析已关闭，点此打开设置"
-            ModulePrefs.apiKey.isBlank() -> "安装包缺少模型配置"
+            ModulePrefs.apiKey.isBlank() -> "请打开言外填写并保存 API Key"
             records.isEmpty() -> "未识别到消息 · $adapterStatus"
             messages.isEmpty() -> "本屏无可分析文字，非纯文本及超过 1000 字符的消息已跳过"
             else -> {

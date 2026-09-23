@@ -41,7 +41,7 @@ class HookEntry : IXposedHookLoadPackage {
                     MessageSniffer.resume(activity)
                     if (!announced) {
                         announced = true
-                        Toast.makeText(activity, "微信情绪助手已加载 · 仅分析纯文本", Toast.LENGTH_LONG).show()
+                        Toast.makeText(activity, "言外已加载 · 仅分析纯文本", Toast.LENGTH_LONG).show()
                     }
                 }.onFailure { MoodLog.e("连接微信页面失败：${it.javaClass.simpleName}") }
             }

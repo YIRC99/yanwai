@@ -23,5 +23,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "WeChatMood"
+rootProject.name = "Yanwai"
 include(":app")

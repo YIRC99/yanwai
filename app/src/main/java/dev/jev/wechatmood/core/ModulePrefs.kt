@@ -10,13 +10,15 @@ object ModulePrefs {
     const val KEY_ENABLED = "enabled"
     const val KEY_EXPLORE = "explore_mode"
     const val KEY_SHOW_BADGE = "show_badge"
+    const val KEY_API_KEY = "api_key"
+    const val KEY_API_BASE = "api_base"
     private var context: Context? = null
-    private var config: Bundle? = null
+    @Volatile private var config: Bundle? = null
     private var lastRead = -1000L
-    fun init(context: Context) { this.context = context.applicationContext ?: context; reload() }
-    @Synchronized fun reload() {
+    fun init(context: Context) { this.context = context.applicationContext ?: context; reload(force = true) }
+    @Synchronized fun reload(force: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastRead < 1000) return
+        if (!force && now - lastRead < 1000) return
         lastRead = now
         config = runCatching {
             context?.contentResolver?.call(SettingsProvider.URI, "config", null, null)
@@ -27,8 +29,11 @@ object ModulePrefs {
     val enabled get() = config?.getBoolean(KEY_ENABLED, true) == true
     val exploreMode get() = config?.getBoolean(KEY_EXPLORE, false) == true
     val showBadge get() = config?.getBoolean(KEY_SHOW_BADGE, true) == true
-    val apiKey get() = BuildConfig.JEV_API_KEY
-    val apiBase get() = BuildConfig.JEV_ENDPOINT
+    val apiKey get() = config?.getString(KEY_API_KEY).orEmpty()
+    fun apiSettings(): ApiSettings {
+        val snapshot = config
+        return ApiSettings.fromInput(snapshot?.getString(KEY_API_BASE).orEmpty(), snapshot?.getString(KEY_API_KEY).orEmpty())
+    }
     val apiModel get() = BuildConfig.JEV_MODEL
     val canAnalyze get() = enabled && apiKey.isNotBlank()
     @Synchronized fun setSwitch(key: String, value: Boolean): Boolean = runCatching {

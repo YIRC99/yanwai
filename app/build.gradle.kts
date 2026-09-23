@@ -1,16 +1,7 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 }
-
-val personalConfig = Properties().apply {
-    rootProject.file("jev.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-}
-fun configString(name: String, fallback: String = ""): String =
-    "\"" + personalConfig.getProperty(name, fallback)
-        .replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\""
 
 android {
     namespace = "dev.jev.wechatmood"
@@ -20,11 +11,9 @@ android {
         applicationId = "dev.jev.wechatmood"
         minSdk = 28          // 与 WeKit 一致；Android 9+
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.5.2"
-        buildConfigField("String", "JEV_ENDPOINT", configString("endpoint", "https://api.typesafe.ai/v1/systemone"))
-        buildConfigField("String", "JEV_MODEL", configString("model", "jev-1.13.0"))
-        buildConfigField("String", "JEV_API_KEY", configString("apiKey"))
+        versionCode = 10
+        versionName = "1.0.0"
+        buildConfigField("String", "JEV_MODEL", "\"jev-1.13.0\"")
 
         // 依赖（androidx + DexKit）把方法数撑出了十几个 dex，入口类一度落在
         // classes11.dex 里。框架加载入口类走模块自己的 ClassLoader，理论上

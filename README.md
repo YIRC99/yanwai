@@ -1,17 +1,24 @@
-# 微信情绪助手
+# 言外 · Yanwai
 
-个人使用的 Android LSPosed / Xposed 模块，当前版本 **0.5.2**。
+读懂聊天中的言外之意。Android LSPosed / Xposed 模块，当前版本 **1.0.0**，建议仓库名 `yanwai`。
 
-对微信当前屏幕中**对方的纯文本消息**调用 Jev，展示情绪概率、闲聊事件、可能的潜台词和一句具体沟通建议。内置 8 类场景、32 套分析卡，卡片随解释、行动、接受和收尾变化。首行为 `Jev 0.5.2`，不再展示原话引用、好感/互动线索及占位提示。模型判断仅供参考，不发送消息、不自动回复。
+对微信当前屏幕中**对方的纯文本消息**调用 Jev，展示情绪概率、闲聊事件、可能的潜台词和一句具体沟通建议。内置 8 类场景、32 套分析卡，卡片随解释、行动、接受和收尾变化。卡片首行为 `Jev 1.0.0`。模型判断仅供参考，不自动发送微信消息、不自动回复。
 
 ## 安装使用
 
-1. 安装 `app/build/outputs/apk/debug/app-debug.apk`，先打开一次「微信情绪助手」，建立微信读取设置的授权。
-2. 个人 APK 已内置 Jev 地址、模型和密钥，无需填写。
+1. 在 Android 9+、已配置 LSPosed / Xposed 的设备上安装 APK，先打开一次「言外」，建立微信读取设置的授权。开发试用包在 `app/build/outputs/apk/debug/app-debug.apk`。
+2. 填写 **API 地址**和 **API Key**，点击「保存配置」或「保存并检测连接」。默认地址为 `https://api.typesafe.ai/v1/systemone`，Key 从 Jev 官网获取；模型固定为 `jev-1.13.0`，不需要填写。从旧个人版升级也需要手动填写 Key。
 3. 在 LSPosed 启用本模块，作用域选择微信，**彻底结束微信后重新打开**；升级 APK 也需要重启微信进程。
-4. 注入成功后，微信首次进入前台会提示「微信情绪助手已加载」。微信「我 → 设置」底部增加「微信情绪助手」入口，可打开助手设置。
+4. 注入成功后，微信首次进入前台会提示「言外已加载」。微信「我 → 设置」底部增加「言外」入口，可打开助手设置。
 5. 对方纯文本气泡下直接显示 Jev 分析卡。聊天右上角「绘制」开关控制显示，长按打开状态、分析本屏和助手设置。关闭绘制只隐藏结果；关闭助手里的「启用分析」才停止新请求。
-6. 独立 APP 的「检测模型连接」只发送内置示例；连接成功不代表微信模块已加载。
+6. 独立 APP 的「保存并检测连接」只发送内置示例；连接成功不代表微信模块已加载。保存配置供后续新请求使用，已发送请求及已有分析缓存不会因此重做。清空 Key 并保存可停止后续请求。
+
+### 自定义地址与隐私
+
+- 可填写其他服务的完整 HTTP(S) 接口地址，程序按填写的地址请求，不自动拼接路径。建议使用 HTTPS；HTTP 在微信内还受宿主的网络策略限制。
+- 当前使用 **Jev 专用请求与概率响应协议**。仅填写 OpenRouter 或 OpenAI 兼容地址不等于协议兼容；1.0.0 未实现、未验证 OpenRouter 适配。
+- Key 保存在应用私有设置中，关闭系统备份；受调用方检查保护的设置桥仅向本应用及微信进程提供配置。APK 不包含用户 Key，也不会在页面状态或日志中输出 Key。
+- 启用分析后，目标消息及符合条件的前文会发送到用户填写的接口地址；聊天原文和分析结果不持久化。请使用自己信任的服务。
 
 ## 分析范围
 
@@ -30,19 +37,20 @@
 ## 构建
 
 ```powershell
-powershell -File tools/import-jev-config.ps1
 powershell -File tools/gradle.ps1 :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemon
+powershell -File tools/gradle.ps1 :app:assembleRelease --no-daemon
 ```
 
-导入脚本只读取 `D:\code_file\jev_demo\.env` 的 Jev 配置，写入 Git 忽略的 `jev.local.properties`，不修改 jev_demo。
-个人 APK 包含密钥，不应公开分发；源码、日志和界面不输出密钥。
+本机快捷脚本使用 `D:\DevEnv\Java\jdk21`、`D:\DevEnv\gradle` 和 `local.properties` 中的 Android SDK 路径。其他环境可使用 JDK 17+、Gradle 8.9、Android SDK 35，从项目根目录运行相同 Gradle 任务。
+
+构建不再读取 `jev.local.properties`，旧导入脚本已移除。Debug 包用于本机试用；Release 产物为 `app/build/outputs/apk/release/app-release-unsigned.apk`，公开发版前需用自己的固定签名密钥签名。签名文件、本机配置与 `output/` 均忽略提交。旧版个人 APK 内置过 Key，不要将旧包公开发布。
 
 ## 实现与排查
 
 - 使用直接 `IXposedHookLoadPackage` 入口，`app/src/main/assets/xposed_init` 纳入 Git，不依赖生成入口的 `initZygote` 前置状态。
 - 同时监听 Application.attach 和前台 Activity，入口写入 LSPosed 日志，初始化后回传独立 APP。
 - 旧 ListView 读取可见行的数据对象；新版通过 DexKit 定位 `MvvmChattingItem` 的绑定方法并读取真实消息对象。新版绑定特征和消息字段核对了 [WeKit 的消息 View 监听](https://github.com/Ujhhgtg/WeKit/blob/master/app/src/main/java/dev/ujhhgtg/wekit/features/api/ui/WeChatMessageViewApi.kt)及其消息模型。
-- SettingsProvider 只接受本应用和微信 UID，接口不暴露密钥或聊天内容。首次打开 APP 时向微信授予此 URI 的读取权限，处理 Android 11+ 的包可见性；[Android 官方说明](https://developer.android.com/training/package-visibility/automatic)。
+- SettingsProvider 只接受本应用和微信 UID，向微信内运行的模块提供开关与 API 配置，不提供聊天内容。首次打开 APP 时向微信授予此 URI 的读取权限，处理 Android 11+ 的包可见性；[Android 官方说明](https://developer.android.com/training/package-visibility/automatic)。
 - 后台最多两条分析流水线，每条最多两轮 HTTP 请求，单轮最长 30 秒。每轮前检查目标仍可见且分析开启；离开或关闭后不继续第二轮，已发送的请求不主动取消。第二轮失败不缓存半成品，显示原因并允许当前可见消息 30 秒后重试。聊天原文和结果不持久化。
 - 页面检测只在微信 Activity 前台期间运行；离开时停止回调并撤下开关与分析卡。
 
@@ -50,6 +58,6 @@ powershell -File tools/gradle.ps1 :app:testDebugUnitTest :app:assembleDebug :app
 adb logcat -s WeChatMood
 ```
 
-如果没有「已加载」提示，也没有设置入口，先查看 LSPosed 是否出现 `WeChatMood 0.5.2: entered WeChat main process`。卡片首行也显示实际运行代码的版本；只更新 APK 不会替换微信进程已加载的模块，需彻底重启微信。
+如果没有「已加载」提示，也没有设置入口，先查看 LSPosed 是否出现 `WeChatMood 1.0.0: entered WeChat main process`。卡片首行也显示实际运行代码的版本；只更新 APK 不会替换微信进程已加载的模块，需彻底重启微信。
 
 上次实机微信版本为 8.0.71。0.4.0 已实机确认标题栏开关、气泡下方分析卡、关闭绘制恢复布局。0.5.2 的文案与建议效果由用户在微信中验收；本轮离线测试不代表真实模型或实机效果。验证记录见 [docs/VERIFY.md](docs/VERIFY.md)。

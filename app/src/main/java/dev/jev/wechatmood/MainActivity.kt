@@ -11,6 +11,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
+import dev.jev.wechatmood.core.ApiSettings
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.SettingsProvider
 import dev.jev.wechatmood.databinding.ActivityMainBinding
@@ -34,17 +35,16 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(binding.root)
         MoodLog.init(this)
         // Makes the settings provider visible to WeChat on Android 11+.
-        // The provider still validates the caller UID and exposes no chat text or credentials.
+        // The provider validates the caller UID before sharing settings with WeChat.
         runCatching {
             grantUriPermission("com.tencent.mm", SettingsProvider.URI, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }.onFailure { MoodLog.w("微信设置连接授权失败：${it.javaClass.simpleName}") }
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
-        // First personal build migrates the old opt-in badge to the user's requested ready-to-use default.
-        if (prefs.getInt("personal_defaults_version", 0) < 2) {
-            prefs.edit().putBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
-                .putBoolean(ModulePrefs.KEY_ENABLED, prefs.getBoolean(ModulePrefs.KEY_ENABLED, true))
-                .remove("api_key").remove("api_base").remove("api_model")
-                .putInt("personal_defaults_version", 2).commit()
+        ModulePrefs.init(this)
+        binding.inputApiBase.setText(prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))
+        binding.inputApiKey.setText(prefs.getString(ModulePrefs.KEY_API_KEY, ""))
+        binding.buttonSaveApi.setOnClickListener {
+            if (saveApiSettings()) Toast.makeText(this, "配置已保存，后续请求使用新配置", Toast.LENGTH_SHORT).show()
         }
         binding.switchEnabled.isChecked = prefs.getBoolean(ModulePrefs.KEY_ENABLED, true)
         binding.switchBadge.isChecked = prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
@@ -74,6 +74,35 @@ class MainActivity : AppCompatActivity() {
         refresh()
     }
 
+    private fun saveApiSettings(): Boolean {
+        binding.layoutApiBase.error = null
+        binding.layoutApiKey.error = null
+        val endpoint = binding.inputApiBase.text?.toString().orEmpty()
+        val key = binding.inputApiKey.text?.toString().orEmpty()
+        try { ApiSettings.fromInput(endpoint, "") } catch (e: IllegalArgumentException) {
+            binding.layoutApiBase.error = e.message
+            binding.inputApiBase.requestFocus()
+            return false
+        }
+        val settings = try { ApiSettings.fromInput(endpoint, key) } catch (e: IllegalArgumentException) {
+            binding.layoutApiKey.error = e.message
+            binding.inputApiKey.requestFocus()
+            return false
+        }
+        val saved = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE).edit()
+            .putString(ModulePrefs.KEY_API_BASE, settings.endpoint)
+            .putString(ModulePrefs.KEY_API_KEY, settings.apiKey).commit()
+        if (!saved) {
+            Toast.makeText(this, "保存失败，请重试", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        binding.inputApiBase.setText(settings.endpoint)
+        binding.textTestResult.visibility = View.GONE
+        ModulePrefs.reload(force = true)
+        refresh()
+        return true
+    }
+
     override fun onResume() { super.onResume(); refresh() }
 
     private fun refresh() {
@@ -82,8 +111,9 @@ class MainActivity : AppCompatActivity() {
         binding.switchEnabled.isChecked = prefs.getBoolean(ModulePrefs.KEY_ENABLED, true)
         binding.switchBadge.isChecked = prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
         syncingSwitches = false
-        binding.textModelStatus.text = if (BuildConfig.JEV_API_KEY.isNotBlank())
-            "${BuildConfig.JEV_MODEL} · 地址和密钥已内置" else "此安装包未包含密钥，请重新构建个人版"
+        binding.textModelStatus.text = if (prefs.getString(ModulePrefs.KEY_API_KEY, "").isNullOrBlank())
+            "言外 ${BuildConfig.VERSION_NAME} · 请填写 API Key" else
+            "言外 ${BuildConfig.VERSION_NAME} · 配置已保存，可检测连接"
         val wechat = runCatching {
             @Suppress("DEPRECATION")
             "微信 ${packageManager.getPackageInfo("com.tencent.mm", 0).versionName}"
@@ -97,7 +127,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun testModel() {
+        if (!saveApiSettings()) return
+        if (ModulePrefs.apiKey.isBlank()) {
+            binding.layoutApiKey.error = "请先填写 API Key"
+            binding.inputApiKey.requestFocus()
+            return
+        }
         binding.buttonTestModel.isEnabled = false
+        binding.buttonSaveApi.isEnabled = false
         binding.buttonTestModel.text = "正在检测…"
         binding.textTestResult.visibility = View.VISIBLE
         binding.textTestResult.text = "正在用一条示例消息检测，不读取你的聊天。"
@@ -114,6 +151,7 @@ class MainActivity : AppCompatActivity() {
                 MoodLog.e("模型连接检测失败：${e.message}")
             } finally {
                 binding.buttonTestModel.isEnabled = true
+                binding.buttonSaveApi.isEnabled = true
                 binding.buttonTestModel.text = "重新检测模型连接"
                 refresh()
             }

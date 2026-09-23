@@ -102,7 +102,7 @@ class HostUi(private val activity: Activity) {
 
     private fun showActions() {
         if (dialog?.isShowing == true) return
-        dialog = AlertDialog.Builder(activity).setTitle("微信情绪助手")
+        dialog = AlertDialog.Builder(activity).setTitle("言外")
             .setMessage("$status\n展示情绪概率、可能的潜台词和一句沟通建议。参考之前最多 10 条双方消息，超过 1000 字符的文字跳过。模型判断仅供参考。")
             .setPositiveButton("分析本屏") { _, _ ->
                 if (ModulePrefs.setSwitch(ModulePrefs.KEY_ENABLED, true)) {
@@ -127,7 +127,7 @@ class HostUi(private val activity: Activity) {
         content.addView(wrapper, ViewGroup.LayoutParams(-1, -1))
         wrapper.addView(host, LinearLayout.LayoutParams(-1, 0, 1f))
         wrapper.addView(TextView(activity).apply {
-            text = "微信情绪助手  ›\n已加载 · 仅分析纯文本"
+            text = "言外  ›\n已加载 · 仅分析纯文本"
             textSize = 14f
             minHeight = dp(52)
             setPadding(dp(16), dp(10), dp(16), dp(10))
@@ -147,7 +147,7 @@ class HostUi(private val activity: Activity) {
     private fun openSettings() {
         runCatching {
             activity.startActivity(Intent().setComponent(ComponentName("dev.jev.wechatmood", "dev.jev.wechatmood.MainActivity")))
-        }.onFailure { Toast.makeText(activity, "请从桌面打开微信情绪助手", Toast.LENGTH_SHORT).show() }
+        }.onFailure { Toast.makeText(activity, "请从桌面打开言外", Toast.LENGTH_SHORT).show() }
     }
     fun hide() { removeControl(); restoreSettings(); dialog?.dismiss(); messages = emptyList() }
     fun dispose() = hide()

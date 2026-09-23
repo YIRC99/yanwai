@@ -3,19 +3,47 @@
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:background="?attr/colorSurface" android:orientation="vertical">
     <com.google.android.material.appbar.MaterialToolbar android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:minHeight="?attr/actionBarSize" app:title="微信情绪助手" />
+        android:layout_height="wrap_content" android:minHeight="?attr/actionBarSize" app:title="@string/app_name" />
     <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="0dp"
         android:layout_weight="1" android:fillViewport="true" android:clipToPadding="false">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:padding="20dp">
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="Jev 已为你配置好" android:textAppearance="?attr/textAppearanceHeadlineSmall" />
+                android:text="连接你的模型" android:textAppearance="?attr/textAppearanceHeadlineSmall" />
             <TextView android:id="@+id/textModelStatus" android:layout_width="match_parent"
                 android:layout_height="wrap_content" android:layout_marginTop="8dp"
-                android:text="无需填写接口地址或密钥" android:textAppearance="?attr/textAppearanceBodyMedium" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/buttonTestModel"
+                android:text="请填写 API Key" android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiBase"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:minHeight="48dp" android:layout_marginTop="16dp" android:text="检测模型连接" />
+                android:layout_marginTop="20dp" android:hint="API 地址"
+                app:helperText="默认使用 Jev 官方接口，也可填写完整的自定义接口地址。">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiBase"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:minHeight="56dp" android:inputType="textUri" android:maxLines="3"
+                    android:importantForAutofill="no" android:saveEnabled="false" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiKey"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="12dp" android:hint="API Key" app:endIconMode="password_toggle"
+                app:helperText="填写从 Jev 官网获取的 Key；自定义地址请使用对应服务的 Key。">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiKey"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:minHeight="56dp" android:inputType="textPassword" android:singleLine="true"
+                    android:importantForAutofill="no" android:saveEnabled="false" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Key 仅保存在本机。启用分析后，消息和相关前文将发送到填写的地址。自定义服务需兼容 Jev 协议。"
+                android:textAppearance="?attr/textAppearanceBodySmall" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonSaveApi"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="48dp" android:layout_marginTop="16dp" android:text="保存配置" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonTestModel"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="48dp" android:layout_marginTop="4dp" android:text="保存并检测连接" />
             <TextView android:id="@+id/textTestResult" android:layout_width="match_parent"
                 android:layout_height="wrap_content" android:layout_marginTop="8dp"
                 android:accessibilityLiveRegion="polite" android:visibility="gone"

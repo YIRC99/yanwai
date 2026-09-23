@@ -29,3 +29,6 @@ keystore.properties
 .kotlin/
 jev.local.properties
 verification/
+output/
+.env
+.env.*

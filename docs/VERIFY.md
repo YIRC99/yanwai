@@ -1,3 +1,18 @@
+# 1.0.0 言外与用户 API 配置（2026-09-23）
+
+- 应用显示名为「言外」，versionName=1.0.0、versionCode=10，保留原 applicationId 以支持覆盖升级。
+- 设置页提供 API 地址和掩码 Key，默认 Jev 官方地址，可保存自定义完整地址；连接检测先保存输入。配置经仅允许本应用/微信 UID 的设置桥读取；同一条分析的两轮请求使用同一份配置快照。
+- 移除构建时读取个人密钥和导入脚本；新安装或从个人版升级需手动填写 Key。自定义地址仍需兼容 Jev 协议，本轮未实现 OpenRouter 协议适配。
+- 新增 5 项配置校验测试，完整单测 **64/64 通过**。Debug、未签名 Release 构建及 lintDebug 通过；没有启动项目服务、安装到手机或调用真实模型，界面与跨进程保存效果待用户实机验收。
+- 首次增量构建曾复用包含旧版本字符串的 Kotlin 编译结果；普通 clean 仍从构建缓存恢复旧结果。禁用构建缓存与 Kotlin 增量编译后完整构建通过。实际检查两份 APK：均包含 `Jev 1.0.0`，均不含 `Jev 0.5.2` 或本机原先那枚 Key。当前已跟踪文件和 Git 历史也未匹配该 Key；这是针对已知 Key 的检查，不代表穷尽所有秘密。
+- 最终构建命令（PowerShell）：
+
+```powershell
+& ./tools/gradle.ps1 -GradleArgs @(':app:clean', ':app:testDebugUnitTest', ':app:assembleDebug', ':app:assembleRelease', ':app:lintDebug', '--no-build-cache', '-Pkotlin.incremental=false', '--no-daemon')
+```
+
+Release 产物尚未签名，发布前需使用维护者自己的固定签名。
+
 # 0.5.2 对话对象、建议条件和独立动作选择（2026-09-23）
 
 - 保留情绪提示词和概率展示。第一轮增加针对对象、交流行为、是否求建议、待兑现约定、我方未处理过错、新话题六项判断；不增加第三轮调用。

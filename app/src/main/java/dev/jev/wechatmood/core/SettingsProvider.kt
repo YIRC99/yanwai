@@ -8,7 +8,7 @@ import android.os.Binder
 import android.os.Bundle
 import android.os.Process
 
-/** Cross-process switches only. Never returns credentials, chat text, or arbitrary files. */
+/** Settings bridge restricted to this app and WeChat, where the model requests run. */
 class SettingsProvider : ContentProvider() {
     override fun onCreate() = true
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
@@ -31,6 +31,8 @@ class SettingsProvider : ContentProvider() {
                     putBoolean(ModulePrefs.KEY_ENABLED, prefs.getBoolean(ModulePrefs.KEY_ENABLED, true))
                     putBoolean(ModulePrefs.KEY_SHOW_BADGE, prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true))
                     putBoolean(ModulePrefs.KEY_EXPLORE, prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false))
+                    putString(ModulePrefs.KEY_API_BASE, prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))
+                    putString(ModulePrefs.KEY_API_KEY, prefs.getString(ModulePrefs.KEY_API_KEY, ""))
                 }
             }
             "report" -> {

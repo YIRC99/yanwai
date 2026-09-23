@@ -61,8 +61,11 @@ object SignalAnalyzer {
 
     private suspend fun analyze(input: AnalysisInput, shouldContinue: () -> Boolean = { true }): Mood = withContext(Dispatchers.IO) {
         val job = currentCoroutineContext()
+        // Keep both rounds on the same endpoint and credential, even if settings change mid-request.
+        val settings = ModulePrefs.apiSettings()
+        check(settings.isConfigured) { "请先在言外设置中填写并保存 API Key" }
         try {
-            ChatAnalysis.analyze(input, ModulePrefs.apiModel, ::exchange) {
+            ChatAnalysis.analyze(input, ModulePrefs.apiModel, { exchange(it, settings) }) {
                 job.ensureActive()
                 shouldContinue()
             }
@@ -73,10 +76,9 @@ object SignalAnalyzer {
         }
     }
 
-    private fun exchange(payload: org.json.JSONObject): String {
-        check(ModulePrefs.apiKey.isNotBlank()) { "安装包没有内置密钥" }
-        val request = Request.Builder().url(ModulePrefs.apiBase)
-            .header("Authorization", "Bearer ${ModulePrefs.apiKey}")
+    private fun exchange(payload: org.json.JSONObject, settings: ApiSettings): String {
+        val request = Request.Builder().url(settings.endpoint)
+            .header("Authorization", "Bearer ${settings.apiKey}")
             .post(payload.toString()
                 .toRequestBody("application/json; charset=utf-8".toMediaType())).build()
         try {
