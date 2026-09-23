@@ -30,10 +30,11 @@ object MoodStore {
     private val cache = ConcurrentHashMap<String, Mood>()
     private val pending = ConcurrentHashMap.newKeySet<String>()
 
-    /** 消息内容的稳定键。前 16 位十六进制足够避免碰撞，又不会太长。 */
+    /** Include the conversation and use SHA-256 to avoid Java hash collisions. */
     fun keyOf(text: String, talker: String?): String {
-        val h = (talker.orEmpty() + "\u0000" + text).hashCode().toUInt().toString(16)
-        return "${text.length}-$h"
+        val source = "${talker.orEmpty().length}:${talker.orEmpty()}$text"
+        return java.security.MessageDigest.getInstance("SHA-256")
+            .digest(source.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     }
 
     fun get(key: String): Mood? = cache[key]

@@ -27,9 +27,9 @@
                 android:minHeight="56dp" android:text="启用分析" />
             <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchBadge"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:minHeight="56dp" android:text="显示当前页面的 Jev 分析结果" />
+                android:minHeight="56dp" android:text="在文字气泡下绘制分析结果" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="仅分析当前屏幕中对方的纯文本。语音、文件、图片、视频等全部跳过。点击聊天底部 Jev 状态条查看结果，不会替你回复。"
+                android:text="仅分析当前屏幕中对方的纯文本。语音、文件、图片、视频等全部跳过。聊天右上角「绘制」控制显示，长按可分析本屏或打开设置。关闭绘制只隐藏结果；关闭上方分析开关才停止新请求。不会替你回复。"
                 android:textAppearance="?attr/textAppearanceBodySmall" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_marginTop="28dp" android:text="使用状态" android:textAppearance="?attr/textAppearanceTitleMedium" />

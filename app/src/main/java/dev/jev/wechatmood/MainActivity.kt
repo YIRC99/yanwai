@@ -19,6 +19,7 @@ import kotlinx.coroutines.*
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var syncingSwitches = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,8 +49,8 @@ class MainActivity : AppCompatActivity() {
         binding.switchEnabled.isChecked = prefs.getBoolean(ModulePrefs.KEY_ENABLED, true)
         binding.switchBadge.isChecked = prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
         binding.switchExplore.isChecked = prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false)
-        binding.switchEnabled.setOnCheckedChangeListener { _, value -> save(ModulePrefs.KEY_ENABLED, value) }
-        binding.switchBadge.setOnCheckedChangeListener { _, value -> save(ModulePrefs.KEY_SHOW_BADGE, value) }
+        binding.switchEnabled.setOnCheckedChangeListener { _, value -> if (!syncingSwitches) save(ModulePrefs.KEY_ENABLED, value) }
+        binding.switchBadge.setOnCheckedChangeListener { _, value -> if (!syncingSwitches) save(ModulePrefs.KEY_SHOW_BADGE, value) }
         binding.switchExplore.setOnCheckedChangeListener { _, value ->
             save(ModulePrefs.KEY_EXPLORE, value)
             Toast.makeText(this, "重新启动微信后生效", Toast.LENGTH_SHORT).show()
@@ -76,6 +77,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() { super.onResume(); refresh() }
 
     private fun refresh() {
+        val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
+        syncingSwitches = true
+        binding.switchEnabled.isChecked = prefs.getBoolean(ModulePrefs.KEY_ENABLED, true)
+        binding.switchBadge.isChecked = prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
+        syncingSwitches = false
         binding.textModelStatus.text = if (BuildConfig.JEV_API_KEY.isNotBlank())
             "${BuildConfig.JEV_MODEL} · 地址和密钥已内置" else "此安装包未包含密钥，请重新构建个人版"
         val wechat = runCatching {

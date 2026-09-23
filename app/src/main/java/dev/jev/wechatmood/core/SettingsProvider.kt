@@ -18,6 +18,13 @@ class SettingsProvider : ContentProvider() {
         val wechat = ctx.packageManager.getPackagesForUid(caller)?.contains("com.tencent.mm") == true
         if (!own && !wechat) throw SecurityException("Caller is not allowed")
         return when (method) {
+            "set_switch" -> {
+                require(arg == ModulePrefs.KEY_ENABLED || arg == ModulePrefs.KEY_SHOW_BADGE)
+                require(extras?.containsKey("value") == true)
+                check(ctx.getSharedPreferences(ModulePrefs.FILE_NAME, 0).edit()
+                    .putBoolean(arg, extras.getBoolean("value")).commit())
+                call("config", null, null)
+            }
             "config" -> {
                 val prefs = ctx.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
                 Bundle().apply {

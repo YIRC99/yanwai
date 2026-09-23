@@ -31,6 +31,14 @@ object ModulePrefs {
     val apiBase get() = BuildConfig.JEV_ENDPOINT
     val apiModel get() = BuildConfig.JEV_MODEL
     val canAnalyze get() = enabled && apiKey.isNotBlank()
+    @Synchronized fun setSwitch(key: String, value: Boolean): Boolean = runCatching {
+        require(key == KEY_ENABLED || key == KEY_SHOW_BADGE)
+        val result = context?.contentResolver?.call(SettingsProvider.URI, "set_switch", key,
+            Bundle().apply { putBoolean("value", value) }) ?: return false
+        config = result
+        lastRead = SystemClock.elapsedRealtime()
+        result.getBoolean(key) == value
+    }.getOrDefault(false)
     fun report(status: String) {
         runCatching { context?.contentResolver?.call(SettingsProvider.URI, "report", status.take(200), null) }
     }

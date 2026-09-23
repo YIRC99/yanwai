@@ -69,6 +69,13 @@ object MessageSniffer {
                         MoodLog.i("聊天绑定适配：${method.declaringClass.name}.${method.name}，数据字段 ${adapterFields.size} 个")
                     }
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val holder = param.args.firstOrNull() ?: return
+                            runCatching {
+                                val row = fields(holder.javaClass).firstOrNull { it.type == View::class.java }?.get(holder) as? View
+                                if (row != null) { BubbleDecorator.clear(row); bindings.remove(row) }
+                            }
+                        }
                         override fun afterHookedMethod(param: MethodHookParam) {
                             val holder = param.args.firstOrNull() ?: return
                             val row = runCatching {
@@ -112,6 +119,7 @@ object MessageSniffer {
 
     fun resume(activity: Activity) {
         main.removeCallbacks(tick)
+        BubbleDecorator.clearAll()
         ui?.dispose()
         ui = null
         visibleKeys = emptySet()
@@ -122,27 +130,36 @@ object MessageSniffer {
     fun pause(activity: Activity) {
         if (active.get() !== activity) return
         main.removeCallbacks(tick)
+        BubbleDecorator.clearAll()
         ui?.dispose()
         ui = null
         visibleKeys = emptySet()
         active.clear()
     }
 
+    fun refresh() {
+        main.removeCallbacks(tick)
+        if (active.get() != null) main.post(tick)
+    }
+
     private fun scan(activity: Activity) {
         ModulePrefs.reload()
-        val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
+        // Embedded ChattingUILayout is a sibling of LauncherUI's content frame.
+        val root = activity.window.decorView as? ViewGroup ?: return
         val nodes = nodes(root)
         val settings = activity.javaClass.name.let {
             it.endsWith(".SettingsUI") || it.endsWith(".MainSettingsUI")
         }
         val chat = nodes.any { it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" }
         if (!settings && !chat) {
+            BubbleDecorator.clearAll()
             ui?.hide()
             visibleKeys = emptySet()
             return
         }
         val panel = ui ?: HostUi(activity).also { ui = it }
         if (settings) {
+            BubbleDecorator.clearAll()
             visibleKeys = emptySet()
             panel.showSettings()
             report("微信设置入口已显示 · $adapterStatus")
@@ -175,6 +192,16 @@ object MessageSniffer {
                 SignalAnalyzer.submit(message.text, message.talker) { key in visibleKeys }
             }
         }
+        BubbleDecorator.prune()
+        var unsupported = 0
+        if (ModulePrefs.enabled && ModulePrefs.showBadge) {
+            records.distinctBy { it.first }.forEach { (row, message) ->
+                runCatching {
+                    if (!BubbleDecorator.show(row, message) && message.incomingText() != null) unsupported++
+                }
+                    .onFailure { BubbleDecorator.clear(row); MoodLog.w("气泡绘制失败：${it.javaClass.simpleName}") }
+            }
+        } else BubbleDecorator.clearAll()
         val status = when {
             !ModulePrefs.bridgeAvailable -> "设置连接失败，点此打开助手后重试"
             !ModulePrefs.enabled -> "分析已关闭，点此打开设置"
@@ -191,8 +218,9 @@ object MessageSniffer {
                 }
             }
         }
-        report(status)
-        panel.showStatus("Jev · $status", if (ModulePrefs.enabled && ModulePrefs.showBadge) messages else emptyList())
+        val displayStatus = if (unsupported > 0) "$status；$unsupported 条气泡布局暂不支持绘制" else status
+        report(displayStatus)
+        panel.showStatus("Jev · $displayStatus", if (ModulePrefs.enabled && ModulePrefs.showBadge) messages else emptyList())
     }
 
     private fun report(status: String) {
@@ -216,7 +244,7 @@ object MessageSniffer {
         view.windowVisibility == View.VISIBLE && view.getGlobalVisibleRect(Rect())
 
     private fun refreshVisibleAdapters(activity: Activity) {
-        val root = activity.findViewById<View>(android.R.id.content) ?: return
+        val root = activity.window.decorView
         val views = nodes(root)
         if (views.none { it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" }) return
         for (view in views) {

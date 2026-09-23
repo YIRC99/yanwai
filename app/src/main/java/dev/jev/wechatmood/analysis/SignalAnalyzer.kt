@@ -18,6 +18,7 @@ object SignalAnalyzer {
     private val failures = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val failureMessages = java.util.concurrent.ConcurrentHashMap<String, String>()
     fun failure(key: String): String? = failureMessages[key]
+    fun retryFailure(key: String) { failures.remove(key); failureMessages.remove(key) }
 
     fun submit(text: String, talker: String?, stillVisible: () -> Boolean = { true }): String? {
         if (!ModulePrefs.canAnalyze) return null
