@@ -16,6 +16,6 @@ object ChatAnalysis {
         if (ChatTemplates.candidates(profile).isEmpty()) return JevProtocol.fallback(profile)
         val detail = exchange(JevProtocol.detailPayload(input, model, profile))
         checkActive()
-        return JevProtocol.parseDetail(detail, input, profile)
+        return JevProtocol.parseDetail(detail, profile)
     }
 }

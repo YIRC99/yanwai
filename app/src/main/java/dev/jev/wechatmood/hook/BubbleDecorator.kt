@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
 import dev.jev.wechatmood.analysis.SignalAnalyzer
+import dev.jev.wechatmood.analysis.JevProtocol
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.MoodStore
@@ -36,8 +37,8 @@ object BubbleDecorator {
             cards[row] = state
         }
         val value = MoodStore.get(key)?.detail ?: SignalAnalyzer.failure(key)?.let {
-            "Jev · 分析失败\n$it\n点击此卡重试"
-        } ?: if (ModulePrefs.canAnalyze) "Jev · 正在看语气、前文和潜台词…" else "Jev · 模型未配置"
+            "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
+        } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze) "正在分析…" else "模型未配置"
         if (state.view.text.toString() != value) state.view.text = value
         return true
     }

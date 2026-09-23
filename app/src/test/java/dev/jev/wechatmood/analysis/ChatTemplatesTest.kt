@@ -6,7 +6,7 @@ import org.junit.Test
 class ChatTemplatesTest {
     private fun decision(value: String) = ChatDecision(value, mapOf(value to 1.0), 1.0)
     private fun profile(scene: String, progress: String) =
-        ChatProfile(decision(scene), decision("calm"), decision("neutral"), decision(progress))
+        ChatProfile(decision(scene), decision("calm"), decision(progress))
 
     @Test fun `eight scenes have four distinct complete cards each`() {
         assertEquals(32, ChatTemplates.all.size)

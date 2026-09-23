@@ -29,7 +29,7 @@
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:minHeight="56dp" android:text="在文字气泡下绘制分析结果" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="结合前文，看看情绪、好感线索和可能的潜台词。卡片会随分享、邀约、解释、行动和收尾变化；模型推测不代表对方的真实想法。只分析可见的对方纯文本，超过 1000 字符及媒体消息跳过。聊天右上角「绘制」控制显示，长按打开操作；关闭上方分析开关才停止新请求。不会替你回复。"
+                android:text="结合前文展示情绪概率、可能的潜台词和一句沟通建议。没有可靠解读时只显示情绪概率，模型判断仅供参考。只分析可见的对方纯文本，超过 1000 字符及媒体消息跳过。聊天右上角「绘制」控制显示，长按打开操作；关闭上方分析开关才停止新请求。不会替你回复。"
                 android:textAppearance="?attr/textAppearanceBodySmall" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_marginTop="28dp" android:text="使用状态" android:textAppearance="?attr/textAppearanceTitleMedium" />

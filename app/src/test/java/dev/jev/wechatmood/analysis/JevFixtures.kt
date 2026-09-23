@@ -12,9 +12,8 @@ internal object JevFixtures {
             val choice = selected[key] ?: when (key) {
                 "scene" -> "promise"
                 "emotion" -> "hurt"
-                "warmth" -> "engaged"
                 "progress" -> "act"
-                "evidence", "focus" -> "none"
+                "focus" -> "none"
                 else -> "signal"
             }
             require(criteria.has(choice)) { "Unknown test option $key/$choice" }
