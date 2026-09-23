@@ -103,7 +103,7 @@ class HostUi(private val activity: Activity) {
     private fun showActions() {
         if (dialog?.isShowing == true) return
         dialog = AlertDialog.Builder(activity).setTitle("微信情绪助手")
-            .setMessage("$status\n分析对方纯文本，参考之前最多 10 条双方消息。超过 1000 字符的文字跳过。结果显示在气泡下方。")
+            .setMessage("$status\n解读闲聊的情绪、好感线索和可能的潜台词，给出下一步沟通建议。参考之前最多 10 条双方消息，超过 1000 字符的文字跳过。模型推测不代表对方的真实想法。")
             .setPositiveButton("分析本屏") { _, _ ->
                 if (ModulePrefs.setSwitch(ModulePrefs.KEY_ENABLED, true)) {
                     ModulePrefs.setSwitch(ModulePrefs.KEY_SHOW_BADGE, true)

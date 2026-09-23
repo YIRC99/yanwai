@@ -103,7 +103,9 @@ class MainActivity : AppCompatActivity() {
         binding.textTestResult.text = "正在用一条示例消息检测，不读取你的聊天。"
         uiScope.launch {
             try {
-                val mood = SignalAnalyzer.requestMood("第一版先做商品展示，支付和物流后续再加，可以吗？")
+                val mood = SignalAnalyzer.requestMood("这还差不多。", listOf(
+                    dev.jev.wechatmood.core.ContextMessage("对方", "你是不是忘了周末吃饭的事？"),
+                    dev.jev.wechatmood.core.ContextMessage("我", "记得，这次我来安排，明天把餐厅和时间告诉你。")))
                 binding.textTestResult.text = "模型连接成功\n${mood.detail}"
                 MoodLog.i("模型连接检测成功")
             } catch (e: CancellationException) { throw e

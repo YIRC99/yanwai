@@ -37,7 +37,7 @@ object BubbleDecorator {
         }
         val value = MoodStore.get(key)?.detail ?: SignalAnalyzer.failure(key)?.let {
             "Jev · 分析失败\n$it\n点击此卡重试"
-        } ?: if (ModulePrefs.canAnalyze) "Jev · 正在分析这条文字…" else "Jev · 模型未配置"
+        } ?: if (ModulePrefs.canAnalyze) "Jev · 正在看语气、前文和潜台词…" else "Jev · 模型未配置"
         if (state.view.text.toString() != value) state.view.text = value
         return true
     }

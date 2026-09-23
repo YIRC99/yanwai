@@ -21,7 +21,7 @@
                 android:accessibilityLiveRegion="polite" android:visibility="gone"
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="28dp" android:text="聊天提示" android:textAppearance="?attr/textAppearanceTitleMedium" />
+                android:layout_marginTop="28dp" android:text="闲聊潜台词" android:textAppearance="?attr/textAppearanceTitleMedium" />
             <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchEnabled"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:minHeight="56dp" android:text="启用分析" />
@@ -29,7 +29,7 @@
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:minHeight="56dp" android:text="在文字气泡下绘制分析结果" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="仅分析当前屏幕中对方的纯文本。语音、文件、图片、视频等全部跳过。聊天右上角「绘制」控制显示，长按可分析本屏或打开设置。关闭绘制只隐藏结果；关闭上方分析开关才停止新请求。不会替你回复。"
+                android:text="结合前文，看看情绪、好感线索和可能的潜台词。卡片会随分享、邀约、解释、行动和收尾变化；模型推测不代表对方的真实想法。只分析可见的对方纯文本，超过 1000 字符及媒体消息跳过。聊天右上角「绘制」控制显示，长按打开操作；关闭上方分析开关才停止新请求。不会替你回复。"
                 android:textAppearance="?attr/textAppearanceBodySmall" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_marginTop="28dp" android:text="使用状态" android:textAppearance="?attr/textAppearanceTitleMedium" />

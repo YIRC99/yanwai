@@ -32,13 +32,19 @@ object SignalAnalyzer {
                 slots.withPermit {
                     ModulePrefs.reload()
                     if (!ModulePrefs.canAnalyze || !stillVisible()) { MoodStore.release(key); return@withPermit }
-                    val mood = requestMood(input.text, input.context, input.speaker)
+                    val mood = analyze(input) {
+                        ModulePrefs.reload()
+                        ModulePrefs.canAnalyze && stillVisible()
+                    }
                     MoodStore.complete(key, mood)
                     failures.remove(key)
                     failureMessages.remove(key)
-                    MoodLog.i("Jev 分析完成：${mood.label}，风险=${mood.risk}")
+                    MoodLog.i("Jev 闲聊解读完成：${mood.label}")
                     ModulePrefs.report("Jev 分析完成，已缓存 ${MoodStore.size()} 条")
                 }
+            } catch (e: CancellationException) {
+                MoodStore.release(key)
+                throw e
             } catch (e: Exception) {
                 failures[key] = System.currentTimeMillis()
                 failureMessages[key] = e.message ?: "分析失败，请稍后重试"
@@ -51,11 +57,27 @@ object SignalAnalyzer {
     }
 
     suspend fun requestMood(text: String, context: List<ContextMessage> = emptyList(),
-        speaker: String = "对方"): Mood = withContext(Dispatchers.IO) {
+        speaker: String = "对方"): Mood = analyze(AnalysisInput(text, "sample", context, speaker = speaker))
+
+    private suspend fun analyze(input: AnalysisInput, shouldContinue: () -> Boolean = { true }): Mood = withContext(Dispatchers.IO) {
+        val job = currentCoroutineContext()
+        try {
+            ChatAnalysis.analyze(input, ModulePrefs.apiModel, ::exchange) {
+                job.ensureActive()
+                shouldContinue()
+            }
+        } catch (e: org.json.JSONException) {
+            throw IllegalStateException("模型返回不完整，本次不显示判断")
+        } catch (e: IllegalArgumentException) {
+            throw IllegalStateException("模型返回不完整，本次不显示判断")
+        }
+    }
+
+    private fun exchange(payload: org.json.JSONObject): String {
         check(ModulePrefs.apiKey.isNotBlank()) { "安装包没有内置密钥" }
         val request = Request.Builder().url(ModulePrefs.apiBase)
             .header("Authorization", "Bearer ${ModulePrefs.apiKey}")
-            .post(JevProtocol.payload(text, ModulePrefs.apiModel, context, speaker).toString()
+            .post(payload.toString()
                 .toRequestBody("application/json; charset=utf-8".toMediaType())).build()
         try {
             client.newCall(request).execute().use { response ->
@@ -68,8 +90,7 @@ object SignalAnalyzer {
                     }
                     throw IllegalStateException("$reason（HTTP ${response.code}）")
                 }
-                try { JevProtocol.parse(response.body?.string().orEmpty()) }
-                catch (e: Exception) { throw IllegalStateException("模型返回不完整，本次不显示判断") }
+                return response.body?.string().orEmpty()
             }
         } catch (e: java.io.IOException) {
             throw IllegalStateException("连接超时或网络不可用，请稍后重试")
