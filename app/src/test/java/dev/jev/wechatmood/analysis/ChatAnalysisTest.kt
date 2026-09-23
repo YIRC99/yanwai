@@ -14,7 +14,7 @@ class ChatAnalysisTest {
         val result = ChatAnalysis.analyze(input, "test", { body ->
             calls += body
             if (calls.size == 1) JevFixtures.reply(body)
-            else JevFixtures.reply(body, mapOf("focus" to "promise_action"))
+            else JevFixtures.reply(body, mapOf("focus" to "promise_action", "action" to "fulfill"))
         })
         assertEquals(2, calls.size)
         assertEquals("act", calls[1].getJSONObject("state").getJSONObject("first_pass").getJSONObject("progress").getString("choice"))
@@ -26,7 +26,8 @@ class ChatAnalysisTest {
             var calls = 0
             val result = ChatAnalysis.analyze(input, "test", { body ->
                 calls++
-                val response = JSONObject(JevFixtures.reply(body, mapOf("scene" to if (uncertain) "promise" else "other")))
+                val response = JSONObject(JevFixtures.reply(body, mapOf(
+                    "scene" to if (uncertain) "promise" else "other", "commitment" to "none")))
                 if (uncertain) response.getJSONObject("answers").getJSONObject("scene").put("confidence", 0.1)
                 response.toString()
             })

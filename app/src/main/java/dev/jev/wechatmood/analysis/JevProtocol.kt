@@ -28,9 +28,10 @@ object JevProtocol {
         speaker: String = "对方"): JSONObject = JSONObject()
         .put("model", model).put("state", state(text, context, speaker))
         .put("questions", JSONObject()
-            .put("scene", choice("当前最适合哪类闲聊解读？工作事务不硬套亲密互动；已接受回应优先考虑缓和收尾。", ChatTemplates.scenes))
+            .put("scene", choice("当前最适合哪类闲聊解读？按交流方式判断，不按话题名词排除。向朋友聊比赛、奖学金、工作经历仍可属于日常分享。区分抱怨第三方和双方矛盾；事情结束不等于聊天结束，后半句有新话题时优先考虑新话题。", ChatTemplates.scenes))
             .put("emotion", choice("当前文字表现出的情绪是什么？区分开心、平静、生气、失落、委屈、缓和；不能从标点单独定性，不把失落或委屈硬算成生气。", emotions))
-            .put("progress", choice("当前这一步在等待怎样的回应？只依据已经发生的前文，区分等解释、等行动和已接受。", progress)))
+            .put("progress", choice("当前这一步在等待怎样的回应？只依据已经发生的前文，区分等解释、等行动和已接受。已接受指明确接受我方回应或安排，不是接受命运或带条件的假设。事件完成但开始新话题时仍是分享，不是收尾。", progress))
+            .apply { ChatFacts.questions.forEach { (key, q) -> put(key, choice(q.instructions, q.options)) } })
 
     private fun state(text: String, context: List<ContextMessage>, speaker: String): JSONObject = JSONObject()
         .put("message", requireNotNull(MessagePolicy.textOrNull(text)) { "消息为空或超过 1000 字符" })
@@ -46,15 +47,24 @@ object JevProtocol {
     fun parseProfile(body: String): ChatProfile {
         val answers = JSONObject(body).getJSONObject("answers")
         return ChatProfile(readChoice(answers, "scene", ChatTemplates.scenes),
-            readChoice(answers, "emotion", emotions), readChoice(answers, "progress", progress))
+            readChoice(answers, "emotion", emotions), readChoice(answers, "progress", progress),
+            ChatFacts.questions.mapValues { (key, q) -> readChoice(answers, key, q.options) })
     }
 
     fun detailPayload(input: AnalysisInput, model: String, profile: ChatProfile): JSONObject {
         val candidates = ChatTemplates.candidates(profile)
-        require(candidates.isNotEmpty())
-        val questions = JSONObject().put("focus", choice(
+        val actions = ChatActions.candidates(profile)
+        require(candidates.isNotEmpty() || actions.isNotEmpty())
+        val questions = JSONObject()
+        if (candidates.isNotEmpty()) questions.put("focus", choice(
             "哪张分析卡的问题最贴合当前消息、最值得提醒？已解释过不重复催解释，已接受不重复催道歉。没有贴合项选 none。",
             focusOptions(candidates)))
+        if (actions.isNotEmpty()) questions.put("action", choice(
+            "结合真实聊天原文，哪一个下一步动作最适合现在？逐项核对适用前提；第一轮判断可能有误。" +
+                "不要假设能看到同轮 focus 或 reading 的答案，独立选择动作。优先回应当前未回应的信息，" +
+                "不要重复已经给过的安慰、解释或问题。新话题优先接新话题，吐槽第三方不要求我方道歉。" +
+                "没有明确约定不能建议兑现，没求办法不急着指导。候选都不合适或前提不成立就选 none。",
+            ChatActions.options(profile)))
         for (card in candidates) {
             questions.put("reading_${card.id}", choice(
                 "只在此问题适合当前语境时判断，否则选 unclear。${card.question}" +
@@ -62,7 +72,7 @@ object JevProtocol {
         }
         val estimates = JSONObject()
         mapOf("scene" to profile.scene, "emotion" to profile.emotion,
-            "progress" to profile.progress).forEach { (key, result) ->
+            "progress" to profile.progress).plus(profile.facts).forEach { (key, result) ->
             estimates.put(key, JSONObject().put("choice", result.choice).put("confidence", result.confidence)
                 .put("probabilities", JSONObject(result.probabilities)))
         }
@@ -75,21 +85,30 @@ object JevProtocol {
 
     fun parseDetail(body: String, profile: ChatProfile): Mood {
         val candidates = ChatTemplates.candidates(profile)
-        require(candidates.isNotEmpty())
+        val actions = ChatActions.candidates(profile)
+        require(candidates.isNotEmpty() || actions.isNotEmpty())
         val answers = JSONObject(body).getJSONObject("answers")
-        val focus = readChoice(answers, "focus", focusOptions(candidates))
+        val focus = if (candidates.isNotEmpty()) readChoice(answers, "focus", focusOptions(candidates)) else null
+        val action = if (actions.isNotEmpty()) readChoice(answers, "action", ChatActions.options(profile)) else null
         // Validate every requested answer, even when the focus is none. Partial replies must be retryable failures.
         val readings = candidates.associate { it.id to readChoice(answers, "reading_${it.id}", it.options) }
-        if (!focus.clear || focus.choice == "none") return fallback(profile)
-        val card = candidates.first { it.id == focus.choice }
-        val reading = readings.getValue(card.id)
-        if (!reading.clear || reading.choice == "unclear") return fallback(profile)
-        val action = if (reading.choice == "signal") card.action else card.ordinaryAction
-        val odds = reading.probabilities.entries.sortedByDescending { it.value }.take(2)
-            .joinToString("\n") { "· ${card.options.getValue(it.key)}：${(it.value * 100).roundToInt()}%" }
-        val scene = ChatTemplates.scenes.getValue(profile.scene.choice).substringBefore('：')
-        val detail = "$header\n${emotionProbabilities(profile)}\n事件：$scene\n${card.question}\n$odds\n建议：$action"
-        return Mood(scene, emotionScore(profile), 0, "", detail)
+        val card = candidates.firstOrNull { it.id == focus?.takeIf { result -> result.clear }?.choice }
+        val reading = card?.let { readings.getValue(it.id) }?.takeIf { it.clear && it.choice != "unclear" }
+        val selectedAction = actions.firstOrNull { it.id == action?.takeIf { result -> result.clear }?.choice }
+        val lines = mutableListOf(header, emotionProbabilities(profile))
+        if (card != null && reading != null) {
+            lines += "事件：${ChatTemplates.scenes.getValue(card.scene).substringBefore('：')}"
+            lines += card.question
+            lines += reading.probabilities.entries.sortedByDescending { it.value }.take(2)
+                .map { "· ${card.options.getValue(it.key)}：${(it.value * 100).roundToInt()}%" }
+        }
+        if (selectedAction != null) lines += "建议：${selectedAction.text}"
+        val label = when {
+            card != null && reading != null -> ChatTemplates.scenes.getValue(card.scene).substringBefore('：')
+            selectedAction != null -> "下一步动作"
+            else -> "情绪概率"
+        }
+        return Mood(label, emotionScore(profile), 0, "", lines.joinToString("\n"))
     }
 
     fun fallback(profile: ChatProfile): Mood = Mood("情绪概率", emotionScore(profile), 0, "",

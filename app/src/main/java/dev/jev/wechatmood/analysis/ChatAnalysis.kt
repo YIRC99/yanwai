@@ -13,7 +13,9 @@ object ChatAnalysis {
         checkActive()
         val profile = JevProtocol.parseProfile(exchange(JevProtocol.payload(input.text, model, input.context, input.speaker)))
         checkActive()
-        if (ChatTemplates.candidates(profile).isEmpty()) return JevProtocol.fallback(profile)
+        if (ChatTemplates.candidates(profile).isEmpty() && ChatActions.candidates(profile).isEmpty()) {
+            return JevProtocol.fallback(profile)
+        }
         val detail = exchange(JevProtocol.detailPayload(input, model, profile))
         checkActive()
         return JevProtocol.parseDetail(detail, profile)

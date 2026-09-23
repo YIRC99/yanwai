@@ -35,7 +35,8 @@ class JevProtocolTest {
 
     @Test fun `first pass identifies scene emotion and progress and preserves source`() {
         val body = JevProtocol.payload(input.text, "test", input.context)
-        assertEquals(setOf("scene", "emotion", "progress"), body.getJSONObject("questions").keys().asSequence().toSet())
+        assertEquals(setOf("scene", "emotion", "progress", "target", "speech_act", "advice_need",
+            "commitment", "own_fault", "new_topic"), body.getJSONObject("questions").keys().asSequence().toSet())
         assertEquals(input.text, body.getJSONObject("state").getString("message"))
         assertEquals("我想起来了", body.getJSONObject("state").getJSONArray("context").getJSONObject(0).getString("message"))
         assertEquals("对方", body.getJSONObject("state").getString("speaker"))
@@ -64,10 +65,10 @@ class JevProtocolTest {
         assertFalse(detail.getJSONObject("state").has("evidence_candidates"))
     }
 
-    @Test fun `card gives a different concrete action for each interpretation`() {
+    @Test fun `card uses independently selected action instead of template branch`() {
         val profile = JevFixtures.profile()
         val detail = JevProtocol.detailPayload(input, "test", profile)
-        val answer = JevFixtures.reply(detail, mapOf("focus" to "promise_action"))
+        val answer = JevFixtures.reply(detail, mapOf("focus" to "promise_action", "action" to "fulfill"))
         val card = JevProtocol.parseDetail(answer, profile)
         assertTrue(card.detail.contains("现在更需要实际安排吗"))
         assertTrue(card.detail.contains("什么时候做"))
@@ -77,14 +78,14 @@ class JevProtocolTest {
         val ordinary = JevProtocol.parseDetail(JevFixtures.reply(detail, mapOf(
             "focus" to "promise_action", "reading_promise_action" to "ordinary")), profile)
         assertFalse(ordinary.detail.contains("该接行动了"))
-        assertTrue(ordinary.detail.contains("先补齐"))
+        assertFalse(ordinary.detail.contains("建议："))
     }
 
     @Test fun `accepted repair suggests closure instead of more apologies`() {
         val profile = JevFixtures.profile("repair", "accepted")
         val detail = JevProtocol.detailPayload(input.copy(text = "这还差不多"), "test", profile)
-        val mood = JevProtocol.parseDetail(JevFixtures.reply(detail, mapOf("focus" to "repair_accept")), profile)
-        assertTrue(mood.detail.contains("按约定行动"))
+        val mood = JevProtocol.parseDetail(JevFixtures.reply(detail, mapOf("focus" to "repair_accept", "action" to "fulfill")), profile)
+        assertTrue(mood.detail.contains("约定的事准备怎么做"))
         assertFalse(mood.detail.contains("针对实际疏漏道歉"))
     }
 
@@ -119,7 +120,7 @@ class JevProtocolTest {
     @Test fun `unknown card interpretation or absent second round answer is rejected`() {
         val profile = JevFixtures.profile()
         val detail = JevProtocol.detailPayload(input, "test", profile)
-        for (field in listOf("focus", "reading_promise_action")) {
+        for (field in listOf("focus", "action", "reading_promise_action")) {
             val body = JSONObject(JevFixtures.reply(detail))
             body.getJSONObject("answers").getJSONObject(field).put("choice", "invented")
             assertThrows(Exception::class.java) { JevProtocol.parseDetail(body.toString(), profile) }

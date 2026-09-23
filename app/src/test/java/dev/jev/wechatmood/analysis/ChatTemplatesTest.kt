@@ -4,9 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ChatTemplatesTest {
-    private fun decision(value: String) = ChatDecision(value, mapOf(value to 1.0), 1.0)
-    private fun profile(scene: String, progress: String) =
-        ChatProfile(decision(scene), decision("calm"), decision(progress))
+    private fun profile(scene: String, progress: String) = JevFixtures.profile(scene, progress)
 
     @Test fun `eight scenes have four distinct complete cards each`() {
         assertEquals(32, ChatTemplates.all.size)
@@ -15,7 +13,6 @@ class ChatTemplatesTest {
         ChatTemplates.all.groupBy { it.scene }.values.forEach { assertEquals(4, it.size) }
         ChatTemplates.all.forEach {
             assertTrue(it.title.isNotBlank() && it.question.isNotBlank())
-            assertTrue(it.action.isNotBlank() && it.ordinaryAction.isNotBlank())
             assertEquals(setOf("signal", "ordinary", "unclear"), it.options.keys)
         }
     }
