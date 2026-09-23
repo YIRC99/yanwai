@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MessageMetadataTest {
+    @Test fun `over 1000 characters are skipped rather than truncated`() {
+        assertEquals(1000, MessageMetadata(1, 0, "好".repeat(1000), "friend").incomingText()?.length)
+        assertNull(MessageMetadata(1, 0, "好".repeat(1001), "friend").incomingText())
+        assertNotNull(MessageMetadata(1, 0, "😀".repeat(1000), "friend").incomingText())
+        assertNull(MessageMetadata(1, 0, "😀".repeat(1001), "friend").incomingText())
+    }
+    @Test fun `length limit counts surrounding whitespace before normalization`() {
+        assertNull(MessageMetadata(1, 0, " ".repeat(1000) + "好", "friend").incomingText())
+        assertEquals("好", MessageMetadata(1, 0, " 好 ", "friend").incomingText())
+    }
     open class Fields(
         @JvmField val field_type: Int = 1,
         @JvmField val field_isSend: Int = 0,

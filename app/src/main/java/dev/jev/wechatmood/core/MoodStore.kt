@@ -20,7 +20,7 @@ data class Mood(
  * 分析结果缓存。
  *
  * 三条约束决定了它的形状：
- * 1. 同一条消息不能重复请求模型 —— 用内容哈希做键。
+ * 1. 同一条消息及上下文不能重复请求模型 —— 用会话、消息身份和完整输入做键。
  * 2. 界面线程要能**立刻**拿到结果，不能等网络 —— 所以是「先占位、后填充」，
  *    装饰器拿到 null 就先不画，异步补上再通知刷新。
  * 3. 微信进程可能被回收 —— 只放内存，不做持久化；丢了大不了重新分析。
@@ -30,9 +30,17 @@ object MoodStore {
     private val cache = ConcurrentHashMap<String, Mood>()
     private val pending = ConcurrentHashMap.newKeySet<String>()
 
-    /** Include the conversation and use SHA-256 to avoid Java hash collisions. */
-    fun keyOf(text: String, talker: String?): String {
-        val source = "${talker.orEmpty().length}:${talker.orEmpty()}$text"
+    /** Length-prefix every field so different contexts or message identities never share a result. */
+    fun keyOf(text: String, talker: String?, context: List<ContextMessage> = emptyList(),
+        messageId: Long = 0, speaker: String = "对方"): String {
+        val source = buildString {
+            fun field(value: String) { append(value.length).append(':').append(value) }
+            field(talker.orEmpty())
+            field(messageId.toString())
+            field(speaker)
+            field(text)
+            context.forEach { field(it.speaker); field(it.text) }
+        }
         return java.security.MessageDigest.getInstance("SHA-256")
             .digest(source.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     }

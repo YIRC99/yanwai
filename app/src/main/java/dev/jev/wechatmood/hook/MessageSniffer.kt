@@ -13,16 +13,18 @@ import de.robv.android.xposed.XposedBridge
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
+import dev.jev.wechatmood.core.AnalysisInput
 import org.luckypray.dexkit.DexKitBridge
 import java.lang.ref.WeakReference
 import java.lang.reflect.Field
 import java.util.Collections
 import java.util.WeakHashMap
 
-/** Observe visible rows only. Never scrape arbitrary TextViews or read the message database. */
+/** Analyze visible targets with a bounded preceding window from the loaded adapter, never the database. */
 object MessageSniffer {
     private val main = Handler(Looper.getMainLooper())
-    private val bindings = Collections.synchronizedMap(WeakHashMap<View, MessageMetadata>())
+    private data class BoundMessage(val input: AnalysisInput?)
+    private val bindings = Collections.synchronizedMap(WeakHashMap<View, BoundMessage>())
     private var active = WeakReference<Activity>(null)
     private var installed = false
     @Volatile private var adapterStatus = "正在连接新版聊天列表"
@@ -88,9 +90,12 @@ object MessageSniffer {
                                 val message = adapterFields.firstNotNullOfOrNull { field ->
                                     val adapter = field.get(param.thisObject) ?: return@firstNotNullOfOrNull null
                                     runCatching {
-                                        val item = adapter.javaClass.getMethod("getItem", Int::class.javaPrimitiveType)
-                                            .invoke(adapter, position)
-                                        MessageMetadata.read(item)
+                                        val getItem = adapter.javaClass.getMethod("getItem", Int::class.javaPrimitiveType)
+                                        val current = MessageMetadata.read(getItem.invoke(adapter, position))
+                                            ?: return@runCatching null
+                                        BoundMessage(MessageContext.collect(current, position) { index ->
+                                            MessageMetadata.read(getItem.invoke(adapter, index))
+                                        })
                                     }.getOrNull()
                                 }
                                 if (message != null) bindings[row] = message
@@ -165,14 +170,19 @@ object MessageSniffer {
             report("微信设置入口已显示 · $adapterStatus")
             return
         }
-        val records = mutableListOf<Pair<View, MessageMetadata>>()
-        // Legacy ListView: query the data item of each VISIBLE child, never the whole adapter.
+        val records = mutableListOf<Pair<View, BoundMessage>>()
+        // Only visible targets trigger analysis; read at most ten preceding loaded rows for context.
         for (list in nodes.filterIsInstance<ListView>()) {
             for (index in 0 until list.childCount) {
                 val row = list.getChildAt(index)
                 if (!isVisible(row)) continue
-                val item = runCatching { list.getItemAtPosition(list.firstVisiblePosition + index) }.getOrNull()
-                MessageMetadata.read(item)?.let { records += row to it }
+                val position = list.firstVisiblePosition + index
+                val item = runCatching { list.getItemAtPosition(position) }.getOrNull()
+                MessageMetadata.read(item)?.let { current ->
+                    records += row to BoundMessage(MessageContext.collect(current, position) { previous ->
+                        MessageMetadata.read(list.getItemAtPosition(previous))
+                    })
+                }
             }
         }
         synchronized(bindings) {
@@ -181,15 +191,12 @@ object MessageSniffer {
         }
         val messages = records.sortedBy { (view, _) ->
             IntArray(2).also { view.getLocationOnScreen(it) }[1]
-        }.mapNotNull { (_, message) ->
-            val text = message.incomingText() ?: return@mapNotNull null
-            VisibleMessage(text, message.talker)
-        }.distinctBy { it.key }
+        }.mapNotNull { (_, message) -> message.input }.distinctBy { it.key }
         visibleKeys = messages.map { it.key }.toSet()
         if (ModulePrefs.canAnalyze) {
             for (message in messages) {
                 val key = message.key
-                SignalAnalyzer.submit(message.text, message.talker) { key in visibleKeys }
+                SignalAnalyzer.submit(message) { key in visibleKeys }
             }
         }
         BubbleDecorator.prune()
@@ -197,7 +204,7 @@ object MessageSniffer {
         if (ModulePrefs.enabled && ModulePrefs.showBadge) {
             records.distinctBy { it.first }.forEach { (row, message) ->
                 runCatching {
-                    if (!BubbleDecorator.show(row, message) && message.incomingText() != null) unsupported++
+                    if (!BubbleDecorator.show(row, message.input) && message.input != null) unsupported++
                 }
                     .onFailure { BubbleDecorator.clear(row); MoodLog.w("气泡绘制失败：${it.javaClass.simpleName}") }
             }
@@ -207,7 +214,7 @@ object MessageSniffer {
             !ModulePrefs.enabled -> "分析已关闭，点此打开设置"
             ModulePrefs.apiKey.isBlank() -> "安装包缺少模型配置"
             records.isEmpty() -> "未识别到消息 · $adapterStatus"
-            messages.isEmpty() -> "本屏无对方纯文本，其他消息已跳过"
+            messages.isEmpty() -> "本屏无可分析文字，非纯文本及超过 1000 字符的消息已跳过"
             else -> {
                 val done = messages.count { dev.jev.wechatmood.core.MoodStore.get(it.key) != null }
                 val failed = messages.count { SignalAnalyzer.failure(it.key) != null }
@@ -256,8 +263,4 @@ object MessageSniffer {
             }
         }
     }
-}
-
-data class VisibleMessage(val text: String, val talker: String) {
-    val key get() = dev.jev.wechatmood.core.MoodStore.keyOf(text.trim().take(4000), talker)
 }

@@ -1,11 +1,22 @@
 package dev.jev.wechatmood.hook
 
-data class MessageMetadata(val type: Int, val isSend: Int, val content: String, val talker: String) {
-    fun incomingText(): String? {
-        if (type != 1 || isSend != 0 || talker.isBlank()) return null
-        val text = if (talker.endsWith("@chatroom") && content.contains(":\n"))
+import dev.jev.wechatmood.core.MessagePolicy
+
+data class MessageMetadata(val type: Int, val isSend: Int, val content: String, val talker: String,
+    val messageId: Long = 0) {
+    fun incomingText(): String? = if (isSend == 0) plainText() else null
+
+    fun plainText(): String? {
+        if (type != 1 || isSend !in 0..1 || talker.isBlank()) return null
+        val text = if (isSend == 0 && talker.endsWith("@chatroom") && content.contains(":\n"))
             content.substringAfter(":\n") else content
-        return text.trim().takeIf { it.isNotEmpty() }
+        return MessagePolicy.textOrNull(text)
+    }
+
+    fun speaker(): String = when {
+        isSend == 1 -> "我"
+        talker.endsWith("@chatroom") && content.contains(":\n") -> content.substringBefore(":\n").ifBlank { "对方" }
+        else -> "对方"
     }
     companion object {
         fun read(item: Any?): MessageMetadata? {
@@ -23,7 +34,8 @@ data class MessageMetadata(val type: Int, val isSend: Int, val content: String, 
                 MessageMetadata(value("field_type") as? Int ?: return null,
                     value("field_isSend") as? Int ?: return null,
                     value("field_content") as? String ?: "",
-                    value("field_talker") as? String ?: "")
+                    value("field_talker") as? String ?: "",
+                    (value("field_msgId") as? Number)?.toLong() ?: 0)
             }.getOrNull()
         }
     }

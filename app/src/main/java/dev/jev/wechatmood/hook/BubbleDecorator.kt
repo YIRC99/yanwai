@@ -11,6 +11,7 @@ import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.MoodStore
+import dev.jev.wechatmood.core.AnalysisInput
 import java.util.IdentityHashMap
 
 /** Append a sibling below the real text bubble, without replacing a host row or ViewHolder. */
@@ -22,10 +23,9 @@ object BubbleDecorator {
     private val cards = IdentityHashMap<View, Card>()
     private val unsupported = mutableSetOf<String>()
 
-    fun show(row: View, message: MessageMetadata): Boolean {
-        val text = message.incomingText()
-        if (text == null || !ModulePrefs.enabled || !ModulePrefs.showBadge) { clear(row); return false }
-        val key = MoodStore.keyOf(text.take(4000), message.talker)
+    fun show(row: View, message: AnalysisInput?): Boolean {
+        if (message == null || !ModulePrefs.enabled || !ModulePrefs.showBadge) { clear(row); return false }
+        val key = message.key
         var state = cards[row]
         if (state != null && (state.key != key || state.view.parent !== state.parent)) {
             clear(row)

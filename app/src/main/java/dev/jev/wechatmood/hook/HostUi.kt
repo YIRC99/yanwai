@@ -15,13 +15,14 @@ import android.widget.TextView
 import android.widget.Toast
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
+import dev.jev.wechatmood.core.AnalysisInput
 
 /** Add controls to the existing header; never replace the chat's content or action bar. */
 class HostUi(private val activity: Activity) {
     private var control: Switch? = null
     private var syncing = false
     private var status = ""
-    private var messages = emptyList<VisibleMessage>()
+    private var messages = emptyList<AnalysisInput>()
     private var dialog: AlertDialog? = null
     private var title: TextView? = null
     private var oldTitleWidth = Int.MAX_VALUE
@@ -31,7 +32,7 @@ class HostUi(private val activity: Activity) {
     private var settingsHost: View? = null
     private var settingsParams: ViewGroup.LayoutParams? = null
 
-    fun showStatus(value: String, current: List<VisibleMessage>) {
+    fun showStatus(value: String, current: List<AnalysisInput>) {
         restoreSettings()
         status = value
         messages = current
@@ -102,7 +103,7 @@ class HostUi(private val activity: Activity) {
     private fun showActions() {
         if (dialog?.isShowing == true) return
         dialog = AlertDialog.Builder(activity).setTitle("微信情绪助手")
-            .setMessage("$status\n只分析对方纯文本。结果显示在文字气泡下方。")
+            .setMessage("$status\n分析对方纯文本，参考之前最多 10 条双方消息。超过 1000 字符的文字跳过。结果显示在气泡下方。")
             .setPositiveButton("分析本屏") { _, _ ->
                 if (ModulePrefs.setSwitch(ModulePrefs.KEY_ENABLED, true)) {
                     ModulePrefs.setSwitch(ModulePrefs.KEY_SHOW_BADGE, true)

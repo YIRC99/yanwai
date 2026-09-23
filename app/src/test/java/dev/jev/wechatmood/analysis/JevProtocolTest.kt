@@ -1,10 +1,28 @@
 package dev.jev.wechatmood.analysis
 
+import dev.jev.wechatmood.core.ContextMessage
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
 class JevProtocolTest {
+    @Test fun `history is separate data and four questions still share one payload`() {
+        val stateBody = JevProtocol.payload("好的", "jev-test", listOf(ContextMessage("我", "明天再说")))
+        val state = stateBody.getJSONObject("state")
+        assertEquals("好的", state.getString("message"))
+        assertEquals("对方", state.getString("speaker"))
+        assertEquals("明天再说", state.getJSONArray("context").getJSONObject(0).getString("message"))
+        assertEquals("我", state.getJSONArray("context").getJSONObject(0).getString("speaker"))
+        assertEquals(4, stateBody.getJSONObject("questions").length())
+    }
+
+    @Test fun `payload refuses overlong target and filters overlong history`() {
+        assertThrows(IllegalArgumentException::class.java) { JevProtocol.payload("长".repeat(1001), "jev-test") }
+        val state = JevProtocol.payload("当前", "jev-test", listOf(
+            ContextMessage("我", "长".repeat(1001)), ContextMessage("对方", "有效")
+        )).getJSONObject("state")
+        assertEquals(1, state.getJSONArray("context").length())
+    }
     private fun response() = JSONObject("""{"answers":{
         "emotion":{"type":"choice","choice":"calm","confidence":0.8,"probabilities":{"positive":0.1,"calm":0.8,"negative":0.1}},
         "intent":{"type":"choice","choice":"request","confidence":0.7,"probabilities":{"chat":0.1,"request":0.7,"pressure":0.1,"discontent":0.1}},

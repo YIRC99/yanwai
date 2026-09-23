@@ -20,8 +20,8 @@ android {
         applicationId = "dev.jev.wechatmood"
         minSdk = 28          // 与 WeKit 一致；Android 9+
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.0"
+        versionCode = 6
+        versionName = "0.4.1"
         buildConfigField("String", "JEV_ENDPOINT", configString("endpoint", "https://api.typesafe.ai/v1/systemone"))
         buildConfigField("String", "JEV_MODEL", configString("model", "jev-1.13.0"))
         buildConfigField("String", "JEV_API_KEY", configString("apiKey"))
