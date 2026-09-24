@@ -179,6 +179,29 @@
                 style="@style/Yanwai.Button.Text" android:text="检查更新" />
             <com.google.android.material.button.MaterialButton android:id="@+id/buttonReleasePage"
                 style="@style/Yanwai.Button.Text" android:text="GitHub 发布页 ↗" />
+            <TextView style="@style/Yanwai.Section" android:text="联系作者" />
+            <TextView style="@style/Yanwai.Body" android:text="使用反馈或交流建议，可以添加作者微信。" />
+            <ImageView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="16dp" android:adjustViewBounds="true" android:maxHeight="280dp"
+                android:scaleType="fitCenter" android:src="@drawable/author_wechat_qr"
+                android:contentDescription="作者微信二维码，微信号 YIRC99" />
+            <TextView style="@style/Yanwai.Body" android:layout_marginTop="12dp"
+                android:gravity="center" android:text="作者微信：YIRC99" android:textColor="@color/text_primary"
+                android:fontFamily="sans-serif-medium" android:textIsSelectable="true" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonCopyAuthor"
+                style="@style/Yanwai.Button.Text" android:text="复制作者微信号" />
+
+            <TextView style="@style/Yanwai.Section" android:text="免费与开源" />
+            <TextView style="@style/Yanwai.Badge" android:text="言外完全免费"
+                android:textColor="@color/status_success" android:backgroundTint="@color/status_success_bg" />
+            <TextView style="@style/Yanwai.Body" android:layout_marginTop="12dp"
+                android:text="本项目不收费，没有会员或付费解锁。\n第三方模型服务可能按其规则收费，费用不属于言外。" />
+            <TextView style="@style/Yanwai.Caption" android:layout_marginTop="16dp" android:text="项目开源地址" />
+            <TextView style="@style/Yanwai.Body" android:layout_marginTop="4dp"
+                android:text="https://github.com/YIRC99/yanwai" android:textColor="@color/brand_primary"
+                android:textIsSelectable="true" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonOpenSource"
+                style="@style/Yanwai.Button.Outline" android:layout_marginTop="8dp" android:text="查看开源代码 ↗" />
             <TextView style="@style/Yanwai.Caption" android:layout_marginTop="16dp"
                 android:text="理解多一种可能，不替你下结论。\n模型判断仅供参考。" android:gravity="center" />
         </LinearLayout>

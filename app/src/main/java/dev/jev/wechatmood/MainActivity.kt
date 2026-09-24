@@ -1,6 +1,8 @@
 package dev.jev.wechatmood
 
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.net.Uri
@@ -135,6 +137,14 @@ class MainActivity : AppCompatActivity() {
         binding.buttonRefreshLog.setOnClickListener { refresh() }
         binding.buttonCopyLog.setOnClickListener { Diagnostics.copy(this) }
         binding.buttonExportLog.setOnClickListener { Diagnostics.export(this) }
+        binding.buttonOpenSource.setOnClickListener { openHelp("https://github.com/YIRC99/yanwai") }
+        binding.buttonCopyAuthor.setOnClickListener {
+            runCatching {
+                (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager)
+                    .setPrimaryClip(ClipData.newPlainText("作者微信号", "YIRC99"))
+            }.onSuccess { Toast.makeText(this, "已复制微信号 YIRC99", Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(this, "复制失败，请长按上方微信号手动复制", Toast.LENGTH_LONG).show() }
+        }
         binding.buttonTestModel.setOnClickListener { testModel() }
         updateNotice = UpdateNotice(this, binding, uiScope, ::openHelp)
     }

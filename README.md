@@ -6,7 +6,7 @@
 
 在微信文字气泡下，结合前文展示情绪概率、可能的潜台词与一句沟通建议。
 
-![Version](https://img.shields.io/badge/version-1.1.4-2C7A73)
+![Version](https://img.shields.io/badge/version-1.2.0-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)
@@ -44,7 +44,7 @@
   </tr>
 </table>
 
-以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.1.4**，设置页改为状态概览、下一步引导和分区配置，支持浅深色及明确的保存/检测反馈，并保留微信内日志导出、多渠道接入和更新提醒；截图中的旧版本文字保留原样。
+以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.2.0**，设置页改为状态概览、下一步引导和分区配置，支持浅深色及明确的保存/检测反馈，并保留微信内日志导出、多渠道接入和更新提醒；底部可查看作者微信、免费说明与开源地址。截图中的旧版本文字保留原样。
 
 ## 开始使用
 
@@ -158,3 +158,15 @@
 - [WeKit](https://github.com/Ujhhgtg/WeKit)：新版消息 View 监听与消息模型适配的重要参考。
 
 本项目为独立开发的第三方模块，与微信官方无隶属关系。
+
+## 联系作者
+
+使用反馈或交流建议，可以添加作者微信：**YIRC99**。
+
+<img src="app/src/main/res/drawable-nodpi/author_wechat_qr.jpg" width="260" alt="作者微信二维码，微信号 YIRC99" />
+
+## 免费与开源
+
+**言外完全免费，没有会员或付费解锁。** 第三方模型服务可能按其规则收费，费用不属于言外。
+
+项目开源地址：[github.com/YIRC99/yanwai](https://github.com/YIRC99/yanwai)。
