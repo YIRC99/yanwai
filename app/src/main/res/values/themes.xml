@@ -5,5 +5,14 @@
         <item name="colorOnPrimary">@color/brand_on_primary</item>
         <item name="colorSecondary">@color/brand_primary</item>
         <item name="colorOnSecondary">@color/brand_on_primary</item>
+        <item name="android:colorBackground">@color/page_background</item>
+        <item name="colorSurface">@color/panel_surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorOutline">@color/outline_subtle</item>
+        <item name="colorPrimaryContainer">@color/status_success_bg</item>
+        <item name="colorOnPrimaryContainer">@color/status_success</item>
+        <item name="colorError">@color/status_error</item>
+        <item name="colorErrorContainer">@color/status_error_bg</item>
     </style>
 </resources>
