@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.ApiSettings
@@ -19,12 +20,14 @@ import dev.jev.wechatmood.core.JevProvider
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.SettingsProvider
 import dev.jev.wechatmood.databinding.ActivityMainBinding
+import dev.jev.wechatmood.updates.UpdateNotice
 import kotlinx.coroutines.*
 import androidx.core.widget.doAfterTextChanged
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private lateinit var updateNotice: UpdateNotice
     private var syncingSwitches = false
     private var selectedProvider = JevProvider.TYPESAFE
     // No data class: accidental logging must not print a key. Drafts never cross channels.
@@ -92,6 +95,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "检测记录已复制", Toast.LENGTH_SHORT).show()
         }
         binding.buttonTestModel.setOnClickListener { testModel() }
+        updateNotice = UpdateNotice(this, binding, uiScope, ::openHelp)
     }
 
     private fun save(key: String, value: Boolean) {
@@ -170,7 +174,16 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    override fun onResume() { super.onResume(); refresh() }
+    override fun onResume() {
+        super.onResume()
+        refresh()
+        // Lifecycle dispatch finishes after onResume; cached notices also need RESUMED.
+        binding.root.post {
+            if (!isFinishing && !isDestroyed && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                updateNotice.onResume()
+            }
+        }
+    }
 
     private fun refresh() {
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)

@@ -1,3 +1,14 @@
+# 1.1.2 GitHub Release 更新提醒（2026-09-24）
+
+- versionName=1.1.2、versionCode=13。打开设置页后检查 GitHub 最新正式 Release，增加手动检查、发布页入口及同版本一次弹窗。检查正常间隔 24 小时，失败间隔 15 分钟，手动至少间隔 1 分钟，并处理 API 限流及 ETag / 304。无后台更新服务，不在微信进程检查。
+- 对照官方 Release API 与匿名限流文档；对 `YIRC99/yanwai` 的真实匿名 GET 返回 HTTP 200，tag `1.0.0`、非草稿/非预发布，附件 `yanwai1_0_0.apk`。仅 push 代码不会发布新版；发布规则见 [UPDATES.md](UPDATES.md)。
+- 新增 6 项自动化测试，覆盖数字版本顺序、草稿/预发布/无 APK 排除、固定仓库跳转、检查间隔、匿名 GET、ETag / 304、404、429 等待、重定向和损坏 JSON。HTTP 异常及高版本场景由本地 MockWebServer 注入，不冒充 GitHub 实际发布结果。
+- 完整离线测试 **94/94 通过**，0 failures / 0 errors；Debug、未签名 Release 和 lintDebug 成功，Lint **0 errors、57 warnings**。实际检查两份 APK 均为 versionCode=13 / versionName=1.1.2。
+- 静态复查后修正缓存提醒时机：设置页恢复后将检查投递到主线程下一轮，等待 Activity 生命周期进入 RESUMED；网络结果返回时也检查生命周期，销毁时取消页面任务。未进行手机安装、弹窗或浏览器跳转验收；已有 1.1.1 的划卡验收不等同于本轮更新提醒验收。
+- 构建已退出，无遗留本项目服务或 Gradle / Kotlin 编译进程。本轮仅本地提交，未推送或创建线上 Release。
+
+---
+
 # 1.1.1 划掉最近任务后的配置恢复（2026-09-24）
 
 - versionName=1.1.1、versionCode=12。用户确认操作是从最近任务划掉言外。旧代码在 Provider 读取失败时清空配置的路径已确认；尚未捕获手机划卡瞬间的系统原因，不把推断写成实机复现结论。

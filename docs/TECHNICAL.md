@@ -18,6 +18,7 @@
 
 - 渠道配置集中在 `JevProvider`，预设均采用 TypeSafe 兼容接口。`ApiSettings` 将渠道、地址、模型和 Key 组合为不可变快照，旧配置按精确域名和已知路径识别迁移，未知接口保留自定义。设置桥传递当前渠道及模型；同一条分析的两轮使用同一个快照。
 - `JevHttpClient` 是应用与显式在线验证共用的真实 HTTP 传输。错误提示不输出原始服务响应或 Key；Vercel 账户验证、余额、鉴权、限流和模型路径问题分别提示；重定向不自动跟随。申请入口与官方协议见 [渠道教程](API_PROVIDERS.md)。
+- `ReleaseClient` 使用独立匿名 HTTP 客户端读取 GitHub 最新正式 Release。`UpdateNotice` 仅随设置 Activity 检查与提醒，缓存记录独立于模型设置，不进入 SettingsProvider 或微信进程。没有后台更新服务。频率、tag 与安装包要求见[更新提醒说明](UPDATES.md)。
 
 - 使用直接 `IXposedHookLoadPackage` 入口，`app/src/main/assets/xposed_init` 纳入 Git，不依赖生成入口的 `initZygote` 前置状态。
 - 同时监听 Application.attach 和前台 Activity，入口写入 LSPosed 日志，初始化后回传独立 APP。
@@ -31,6 +32,6 @@
 adb logcat -s WeChatMood
 ```
 
-如果没有「已加载」提示，也没有设置入口，先查看 LSPosed 是否出现 `WeChatMood 1.1.1: entered WeChat main process`。卡片首行也显示实际运行代码的版本；只更新 APK 不会替换微信进程已加载的模块，需彻底重启微信。
+如果没有「已加载」提示，也没有设置入口，先查看 LSPosed 是否出现 `WeChatMood 1.1.2: entered WeChat main process`。卡片首行也显示实际运行代码的版本；只更新 APK 不会替换微信进程已加载的模块，需彻底重启微信。
 
 上次实机微信版本为 8.0.71。0.4.0 已实机确认标题栏开关、气泡下方分析卡、关闭绘制恢复布局。0.5.2 的文案与建议效果由用户在微信中验收；1.1.0 已验证 OpenRouter 的真实模型分析，新的渠道选择、申请链接与跨进程保存仍需用户实机验收。1.1.1 安装后，用户已确认划掉言外后继续使用的场景可用；广播边界和微信被杀后的首次读取仍需单独验收。验证记录见 [docs/VERIFY.md](VERIFY.md)。

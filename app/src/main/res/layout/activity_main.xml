@@ -9,7 +9,23 @@
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:padding="20dp">
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="连接你的模型" android:textAppearance="?attr/textAppearanceHeadlineSmall" />
+                android:text="版本更新" android:textAppearance="?attr/textAppearanceTitleMedium" />
+            <TextView android:id="@+id/textUpdateStatus" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:accessibilityLiveRegion="polite" android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:orientation="horizontal" android:baselineAligned="false">
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonCheckUpdate"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                    android:minHeight="48dp" android:text="检查更新" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonReleasePage"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp" android:minHeight="48dp" android:text="GitHub 发布页" />
+            </LinearLayout>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="24dp" android:text="连接你的模型" android:textAppearance="?attr/textAppearanceHeadlineSmall" />
             <TextView android:id="@+id/textModelStatus" android:layout_width="match_parent"
                 android:layout_height="wrap_content" android:layout_marginTop="8dp"
                 android:text="请填写 API Key" android:textAppearance="?attr/textAppearanceBodyMedium" />

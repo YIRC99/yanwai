@@ -6,7 +6,7 @@
 
 在微信文字气泡下，结合前文展示情绪概率、可能的潜台词与一句沟通建议。
 
-![Version](https://img.shields.io/badge/version-1.1.1-2C7A73)
+![Version](https://img.shields.io/badge/version-1.1.2-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)
@@ -44,7 +44,7 @@
   </tr>
 </table>
 
-以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.1.1**，支持多渠道接入、Key 申请指引，并修复设置连接中断时丢失已加载配置的问题；截图中的旧版本文字保留原样。
+以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.1.2**，支持多渠道接入、Key 申请指引、GitHub 更新提醒，并保留划掉最近任务后的配置修复；截图中的旧版本文字保留原样。
 
 ## 开始使用
 
@@ -68,6 +68,8 @@
 微信已加载设置后，可以划掉最近任务中的「言外」，当前微信进程会保留设置，已由用户在手机上确认可用。微信自身重启后仍需重新读取设置，若连接失败请打开一次言外。其他机型仍需验证，机制与验收步骤见[后台运行说明](docs/BACKGROUND.md)。
 
 ### 常用操作
+
+从 1.1.2 开始，打开言外会检查 GitHub 正式新版（正常每 24 小时一次），也可点击“检查更新”。发现新版后前往 GitHub 下载 APK 覆盖安装；同一版本只自动提醒一次。无需自己的服务器。旧版用户需先手动升级以获得此功能，发布规则见[更新提醒说明](docs/UPDATES.md)。
 
 | 操作 | 效果 |
 | --- | --- |
