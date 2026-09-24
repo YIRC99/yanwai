@@ -46,18 +46,8 @@
             </com.google.android.material.card.MaterialCardView>
 
             <TextView style="@style/Yanwai.Section" android:text="聊天分析" />
-            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchEnabled"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:minHeight="56dp" android:text="启用分析" android:textSize="16sp"
-                android:textColor="@color/text_primary" />
-            <TextView android:id="@+id/textAnalysisHint" style="@style/Yanwai.Caption"
-                android:text="开启后，会分析当前可见的对方文字消息。" />
-            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchBadge"
-                android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp"
-                android:minHeight="56dp" android:text="在聊天中显示结果" android:textSize="16sp"
-                android:textColor="@color/text_primary" />
-            <TextView android:id="@+id/textDisplayHint" style="@style/Yanwai.Caption"
-                android:text="对应微信右上角的「绘制」开关；隐藏结果不会关闭分析总开关。" />
+            <TextView style="@style/Yanwai.Caption"
+                android:text="联系人和群聊默认关闭。进入聊天后，打开右上角「分析」，本地会记住这个聊天的选择。关闭后隐藏结果，并停止新的分析请求。" />
 
             <TextView android:id="@+id/modelSection" style="@style/Yanwai.Section" android:text="模型连接" />
             <TextView android:id="@+id/textModelStatus" style="@style/Yanwai.Body" android:text="先选择渠道，再填写对应的 API Key。" />
@@ -144,7 +134,7 @@
                 <TextView style="@style/Yanwai.Body" android:layout_marginTop="16dp" android:fontFamily="sans-serif-medium"
                     android:textColor="@color/text_primary" android:text="03  打开一个聊天" />
                 <TextView style="@style/Yanwai.Body" android:layout_marginTop="4dp"
-                    android:text="打开有对方文字消息的聊天，开启右上角「绘制」。长按开关可查看操作或导出日志。" />
+                    android:text="打开聊天，按需开启右上角「分析」。每个聊天单独记住选择；长按开关可查看操作或导出日志。" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/buttonOpenWechat"
                     style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="打开微信" />
             </LinearLayout>
@@ -158,7 +148,7 @@
             <LinearLayout android:id="@+id/debugPanel" android:layout_width="match_parent"
                 android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                 <TextView style="@style/Yanwai.Caption"
-                    android:text="桌面页包含本应用日志和微信最近上报的记录。若未收到微信日志，请在微信内长按「绘制」或「言外」入口直接导出。" />
+                    android:text="桌面页包含本应用日志和微信最近上报的记录。若未收到微信日志，请在微信内长按「分析」或「言外」入口直接导出。" />
                 <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchExplore"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:minHeight="56dp" android:text="记录微信适配信息" />

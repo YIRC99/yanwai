@@ -98,11 +98,7 @@ class MainActivity : AppCompatActivity() {
         binding.buttonSaveApi.setOnClickListener {
             if (saveApiSettings()) showResult("配置已保存\n可以继续检测连接，确认当前渠道和 Key 是否可用。", StatusTone.NEUTRAL)
         }
-        binding.switchEnabled.isChecked = prefs.getBoolean(ModulePrefs.KEY_ENABLED, true)
-        binding.switchBadge.isChecked = prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
         binding.switchExplore.isChecked = prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false)
-        binding.switchEnabled.setOnCheckedChangeListener { _, value -> if (!syncingSwitches) save(ModulePrefs.KEY_ENABLED, value) }
-        binding.switchBadge.setOnCheckedChangeListener { _, value -> if (!syncingSwitches) save(ModulePrefs.KEY_SHOW_BADGE, value) }
         binding.switchExplore.setOnCheckedChangeListener { _, value ->
             if (!syncingSwitches) {
                 save(ModulePrefs.KEY_EXPLORE, value)
@@ -261,8 +257,6 @@ class MainActivity : AppCompatActivity() {
     private fun refresh() {
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
         syncingSwitches = true
-        binding.switchEnabled.isChecked = prefs.getBoolean(ModulePrefs.KEY_ENABLED, true)
-        binding.switchBadge.isChecked = prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
         binding.switchExplore.isChecked = prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false)
         syncingSwitches = false
         val savedProvider = JevProvider.resolve(prefs.getString(ModulePrefs.KEY_API_PROVIDER, null),
@@ -340,7 +334,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun overview() = SetupPresenter.resolve(
         !getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE).getString(ModulePrefs.KEY_API_KEY, "").isNullOrBlank(),
-        draftDirty(), probeState, binding.switchEnabled.isChecked, binding.switchBadge.isChecked,
+        draftDirty(), probeState,
         getSharedPreferences(SettingsProvider.RUNTIME_FILE, MODE_PRIVATE).getLong("last_seen", 0), System.currentTimeMillis())
 
     private fun renderOverview() {
@@ -368,11 +362,6 @@ class MainActivity : AppCompatActivity() {
         binding.buttonJumpModel.visibility = if (state.action == SetupAction.CONFIGURE || state.action == SetupAction.TEST) View.GONE else View.VISIBLE
         binding.textDraftStatus.visibility = if (draftDirty()) View.VISIBLE else View.GONE
         tintStatus(binding.textDraftStatus, StatusTone.WARNING)
-        binding.textAnalysisHint.text = if (binding.switchEnabled.isChecked)
-            "已开启。模型连接且微信模块生效后，会分析当前可见的对方文字。" else "已暂停，不再发起新的自动分析请求。"
-        binding.textDisplayHint.text = if (binding.switchBadge.isChecked)
-            "显示开关已打开；分析关闭时不会显示结果。微信右上角「绘制」也可控制。" else
-            "结果已隐藏，分析总开关保持原状态。重新打开可恢复展示。"
     }
 
     private fun tintStatus(view: TextView, tone: StatusTone) {

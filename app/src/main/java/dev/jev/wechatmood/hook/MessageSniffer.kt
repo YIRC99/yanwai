@@ -23,7 +23,7 @@ import java.util.WeakHashMap
 /** Analyze visible targets with a bounded preceding window from the loaded adapter, never the database. */
 object MessageSniffer {
     private val main = Handler(Looper.getMainLooper())
-    private data class BoundMessage(val input: AnalysisInput?)
+    private data class BoundMessage(val talker: String, val input: AnalysisInput?)
     private val bindings = Collections.synchronizedMap(WeakHashMap<View, BoundMessage>())
     private var active = WeakReference<Activity>(null)
     private var installed = false
@@ -36,6 +36,8 @@ object MessageSniffer {
             val activity = active.get() ?: return
             if (activity.isFinishing || activity.isDestroyed) return
             runCatching { scan(activity) }.onFailure {
+                visibleKeys = emptySet()
+                BubbleDecorator.clearAll()
                 report("读取当前页面失败：${it.javaClass.simpleName}")
                 ui?.showStatus("Jev · 页面读取失败，点击查看", emptyList())
             }
@@ -93,7 +95,7 @@ object MessageSniffer {
                                         val getItem = adapter.javaClass.getMethod("getItem", Int::class.javaPrimitiveType)
                                         val current = MessageMetadata.read(getItem.invoke(adapter, position))
                                             ?: return@runCatching null
-                                        BoundMessage(MessageContext.collect(current, position) { index ->
+                                        BoundMessage(current.talker, MessageContext.collect(current, position) { index ->
                                             MessageMetadata.read(getItem.invoke(adapter, index))
                                         })
                                     }.getOrNull()
@@ -147,15 +149,67 @@ object MessageSniffer {
         if (active.get() != null) main.post(tick)
     }
 
+    // Re-read the visible conversation at tap time, including during rapid chat navigation.
+    fun setChatEnabled(talker: String?, enabled: Boolean): Boolean = runCatching {
+        if (talker == null) return@runCatching false
+        val activity = active.get() ?: return@runCatching false
+        val scope = chatNodes(activity.window.decorView)
+        if (scope.isEmpty() || conversation(activity, scope, records(scope)) != talker) return@runCatching false
+        ModulePrefs.setChatEnabled(talker, enabled)
+    }.onFailure { MoodLog.e("CHAT_SWITCH_FAILED 无法确认当前会话", it) }.getOrDefault(false)
+
+    private fun chatNodes(root: View): List<View> {
+        val footer = nodes(root).filter {
+            it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" && isVisible(it)
+        }.singleOrNull() ?: return emptyList()
+        val chatRoot = generateSequence(footer.parent as? View) { it.parent as? View }
+            .firstOrNull { it.javaClass.name.endsWith(".ChattingUILayout") } ?: root
+        return nodes(chatRoot)
+    }
+
+    private fun conversation(activity: Activity, scope: List<View>, records: List<Pair<View, BoundMessage>>): String? {
+        val footer = scope.firstOrNull { it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" }
+        val footerTalker = footer?.let {
+            runCatching { it.javaClass.getMethod("getTalkerUserName").invoke(it) as? String }.getOrNull()
+        }
+        // LauncherUI can retain the intent of an older embedded chat; never use that intent.
+        val dedicated = if (activity.javaClass.name.endsWith(".ChattingUI"))
+            activity.intent?.getStringExtra("Chat_User") else null
+        return ConversationIdentity.resolve(records.map { it.second.talker }, footerTalker, dedicated)
+    }
+
+    private fun records(scope: List<View>): List<Pair<View, BoundMessage>> {
+        val records = mutableListOf<Pair<View, BoundMessage>>()
+        for (list in scope.filterIsInstance<ListView>()) {
+            for (index in 0 until list.childCount) {
+                val row = list.getChildAt(index)
+                if (!isVisible(row)) continue
+                val position = list.firstVisiblePosition + index
+                val item = runCatching { list.getItemAtPosition(position) }.getOrNull()
+                MessageMetadata.read(item)?.let { current ->
+                    records += row to BoundMessage(current.talker, MessageContext.collect(current, position) { previous ->
+                        MessageMetadata.read(list.getItemAtPosition(previous))
+                    })
+                }
+            }
+        }
+        val views = scope.toSet()
+        synchronized(bindings) {
+            bindings.entries.filter { it.key in views && isVisible(it.key) }
+                .forEach { records += it.key to it.value }
+        }
+        return records
+    }
+
     private fun scan(activity: Activity) {
         ModulePrefs.reload()
         // Embedded ChattingUILayout is a sibling of LauncherUI's content frame.
         val root = activity.window.decorView as? ViewGroup ?: return
-        val nodes = nodes(root)
         val settings = activity.javaClass.name.let {
             it.endsWith(".SettingsUI") || it.endsWith(".MainSettingsUI")
         }
-        val chat = nodes.any { it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" }
+        val chatScope = chatNodes(root)
+        val chat = chatScope.isNotEmpty()
         if (!settings && !chat) {
             BubbleDecorator.clearAll()
             ui?.hide()
@@ -170,30 +224,14 @@ object MessageSniffer {
             report("微信设置入口已显示 · $adapterStatus")
             return
         }
-        val records = mutableListOf<Pair<View, BoundMessage>>()
-        // Only visible targets trigger analysis; read at most ten preceding loaded rows for context.
-        for (list in nodes.filterIsInstance<ListView>()) {
-            for (index in 0 until list.childCount) {
-                val row = list.getChildAt(index)
-                if (!isVisible(row)) continue
-                val position = list.firstVisiblePosition + index
-                val item = runCatching { list.getItemAtPosition(position) }.getOrNull()
-                MessageMetadata.read(item)?.let { current ->
-                    records += row to BoundMessage(MessageContext.collect(current, position) { previous ->
-                        MessageMetadata.read(list.getItemAtPosition(previous))
-                    })
-                }
-            }
-        }
-        synchronized(bindings) {
-            bindings.entries.filter { it.key.rootView === root.rootView && isVisible(it.key) }
-                .forEach { records += it.key to it.value }
-        }
+        val records = records(chatScope)
+        val talker = conversation(activity, chatScope, records)
+        val enabled = ModulePrefs.isChatEnabled(talker)
         val messages = records.sortedBy { (view, _) ->
             IntArray(2).also { view.getLocationOnScreen(it) }[1]
-        }.mapNotNull { (_, message) -> message.input }.distinctBy { it.key }
-        visibleKeys = messages.map { it.key }.toSet()
-        if (ModulePrefs.canAnalyze) {
+        }.mapNotNull { (_, message) -> message.input?.takeIf { it.talker == talker } }.distinctBy { it.key }
+        visibleKeys = if (enabled) messages.map { it.key }.toSet() else emptySet()
+        if (ModulePrefs.canAnalyze(talker)) {
             for (message in messages) {
                 val key = message.key
                 SignalAnalyzer.submit(message) { key in visibleKeys }
@@ -201,17 +239,19 @@ object MessageSniffer {
         }
         BubbleDecorator.prune()
         var unsupported = 0
-        if (ModulePrefs.enabled && ModulePrefs.showBadge) {
+        if (enabled) {
             records.distinctBy { it.first }.forEach { (row, message) ->
                 runCatching {
-                    if (!BubbleDecorator.show(row, message.input) && message.input != null) unsupported++
+                    val input = message.input?.takeIf { it.talker == talker }
+                    if (!BubbleDecorator.show(row, input) && input != null) unsupported++
                 }
                     .onFailure { BubbleDecorator.clear(row); MoodLog.w("气泡绘制失败：${it.javaClass.simpleName}") }
             }
         } else BubbleDecorator.clearAll()
         val status = when {
+            talker == null -> "暂未识别当前聊天，收到消息后重试"
+            !enabled -> "此聊天分析已关闭，打开右上角开关即可记住"
             !ModulePrefs.bridgeAvailable -> "设置连接失败，点此打开助手后重试"
-            !ModulePrefs.enabled -> "分析已关闭，点此打开设置"
             ModulePrefs.apiKey.isBlank() -> "请打开言外填写并保存 API Key"
             records.isEmpty() -> "未识别到消息 · $adapterStatus"
             messages.isEmpty() -> "本屏无可分析文字，非纯文本及超过 1000 字符的消息已跳过"
@@ -227,7 +267,7 @@ object MessageSniffer {
         }
         val displayStatus = if (unsupported > 0) "$status；$unsupported 条气泡布局暂不支持绘制" else status
         report(displayStatus)
-        panel.showStatus("Jev · $displayStatus", if (ModulePrefs.enabled && ModulePrefs.showBadge) messages else emptyList())
+        panel.showStatus("Jev · $displayStatus", messages, talker)
     }
 
     private fun report(status: String) {

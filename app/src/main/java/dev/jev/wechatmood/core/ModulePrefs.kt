@@ -6,14 +6,13 @@ import android.os.SystemClock
 
 object ModulePrefs {
     const val FILE_NAME = "wechatmood_config"
-    const val KEY_ENABLED = "enabled"
     const val KEY_EXPLORE = "explore_mode"
-    const val KEY_SHOW_BADGE = "show_badge"
     const val KEY_API_KEY = "api_key"
     const val KEY_API_BASE = "api_base"
     const val KEY_API_PROVIDER = "api_provider"
     const val KEY_API_MODEL = "api_model"
     private var context: Context? = null
+    @Volatile private var conversations: ConversationSwitches? = null
     private val session = SettingsSession()
     private var lastRead = -1000L
     @Volatile var lastBridgeError: String? = null
@@ -41,6 +40,12 @@ object ModulePrefs {
     fun init(context: Context) {
         val app = context.applicationContext ?: context
         this.context = app
+        if (app.packageName == "com.tencent.mm" && conversations == null) {
+            val local = app.getSharedPreferences("yanwai_conversations", Context.MODE_PRIVATE)
+            conversations = ConversationSwitches(local.getStringSet("enabled_chats", emptySet()).orEmpty()) {
+                local.edit().putStringSet("enabled_chats", it).commit()
+            }
+        }
         // Register before reading so a save racing with initial loading cannot be missed.
         runCatching { SettingsSync.register(app, ::receiveSettings) }
             .onFailure { MoodLog.e("SYNC_REGISTER_FAILED", it) }
@@ -52,7 +57,7 @@ object ModulePrefs {
         val snapshot = SettingsSync.decode(bundle)
         if (snapshot == null) { MoodLog.w("SYNC_INVALID 广播配置不完整"); return }
         MoodLog.protect(snapshot.api.apiKey)
-        MoodLog.i("SYNC_RECEIVED revision=${snapshot.revision} enabled=${snapshot.enabled} badge=${snapshot.showBadge}；广播送达不代表设置服务可访问")
+        MoodLog.i("SYNC_RECEIVED revision=${snapshot.revision}；广播送达不代表设置服务可访问")
         if (!session.accept(snapshot, fromProvider = false)) reload(force = true)
     }
     @Synchronized fun reload(force: Boolean = false) {
@@ -69,25 +74,14 @@ object ModulePrefs {
     }
     // No verified snapshot means disabled; a lost connection preserves the last explicit choice.
     val bridgeAvailable get() = session.current != null
-    val enabled get() = session.current?.enabled == true
     val exploreMode get() = session.current?.exploreMode == true
-    val showBadge get() = session.current?.showBadge == true
     val apiKey get() = session.current?.api?.apiKey.orEmpty()
     fun apiSettings(): ApiSettings = session.current?.api ?: ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")
-    val canAnalyze get() = session.current?.canAnalyze == true
-    @Synchronized fun setSwitch(key: String, value: Boolean): Boolean = runCatching {
-        require(key == KEY_ENABLED || key == KEY_SHOW_BADGE)
-        val result = context?.contentResolver?.call(SettingsProvider.URI, "set_switch", key,
-            Bundle().apply { putBoolean("value", value) }) ?: error("设置服务无响应或不可见；开关没有确认保存")
-        val snapshot = requireNotNull(SettingsSync.decode(result)) { "保存回执不完整" }
-        MoodLog.protect(snapshot.api.apiKey)
-        check(result.containsKey(key) && result.getBoolean(key) == value) { "保存回读与请求不一致" }
-        session.accept(snapshot)
-        connected()
-        MoodLog.i("SWITCH_SAVED key=$key value=$value revision=${snapshot.revision}")
-        lastRead = SystemClock.elapsedRealtime()
-        result.getBoolean(key) == value
-    }.onFailure { failure("BRIDGE_SAVE_FAILED", it) }.getOrDefault(false)
+    fun isChatEnabled(talker: String?) = conversations?.isEnabled(talker) == true
+    fun canAnalyze(talker: String?) = isChatEnabled(talker) && session.current?.canAnalyze == true
+    fun setChatEnabled(talker: String?, value: Boolean): Boolean = runCatching {
+        conversations?.setEnabled(talker, value) == true
+    }.onFailure { MoodLog.e("CHAT_SWITCH_SAVE_FAILED 本地会话开关保存失败", it) }.getOrDefault(false)
     @Synchronized fun report(status: String) {
         val now = SystemClock.elapsedRealtime()
         val includeLog = now - lastReportAt >= 15_000L

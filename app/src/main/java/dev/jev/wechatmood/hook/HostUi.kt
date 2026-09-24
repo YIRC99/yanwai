@@ -24,6 +24,7 @@ class HostUi(private val activity: Activity) {
     private var syncing = false
     private var status = ""
     private var messages = emptyList<AnalysisInput>()
+    private var talker: String? = null
     private var dialog: AlertDialog? = null
     private var title: TextView? = null
     private var oldTitleWidth = Int.MAX_VALUE
@@ -33,16 +34,19 @@ class HostUi(private val activity: Activity) {
     private var settingsHost: View? = null
     private var settingsParams: ViewGroup.LayoutParams? = null
 
-    fun showStatus(value: String, current: List<AnalysisInput>) {
+    fun showStatus(value: String, current: List<AnalysisInput>, currentTalker: String? = null) {
         restoreSettings()
+        if (talker != currentTalker) dialog?.dismiss()
+        talker = currentTalker
         status = value
         messages = current
         ensureControl()
         syncing = true
         control?.apply {
             visibility = View.VISIBLE
-            isChecked = ModulePrefs.showBadge
-            contentDescription = "绘制分析结果；$value；长按打开分析与设置"
+            isChecked = ModulePrefs.isChatEnabled(talker)
+            isEnabled = talker != null
+            contentDescription = "当前聊天分析开关，本地记住选择；$value；长按打开分析与设置"
         }
         syncing = false
     }
@@ -59,20 +63,20 @@ class HostUi(private val activity: Activity) {
         removeControl()
         if (header == null) return
         val toggle = Switch(activity).apply {
-            text = "绘制"
+            text = "分析"
             textSize = 12f
             switchPadding = dp(3)
             minHeight = dp(48)
             setPadding(dp(4), 0, dp(4), 0)
             setOnCheckedChangeListener { _, checked ->
                 if (!syncing) {
-                    if (!ModulePrefs.setSwitch(ModulePrefs.KEY_SHOW_BADGE, checked)) {
+                    if (!MessageSniffer.setChatEnabled(talker, checked)) {
                         syncing = true
-                        isChecked = ModulePrefs.showBadge
+                        isChecked = ModulePrefs.isChatEnabled(talker)
                         syncing = false
-                        Diagnostics.showFailure(activity, "开关未确认保存", ModulePrefs.lastBridgeError ?: "BRIDGE_SAVE_FAILED")
+                        Diagnostics.showFailure(activity, "开关未保存", "当前聊天已变化或本地保存失败，请重新进入聊天后重试。")
                     }
-                    if (!ModulePrefs.showBadge) BubbleDecorator.clearAll()
+                    if (!ModulePrefs.isChatEnabled(talker)) BubbleDecorator.clearAll()
                     MessageSniffer.refresh()
                 }
             }
@@ -103,14 +107,15 @@ class HostUi(private val activity: Activity) {
 
     private fun showActions() {
         if (dialog?.isShowing == true) return
+        val selectedTalker = talker
+        val selectedMessages = messages
         dialog = AlertDialog.Builder(activity).setTitle("言外 · $status")
             .setItems(arrayOf("分析本屏", "助手设置", "导出运行日志")) { _, which ->
                 when (which) {
-                    0 -> if (ModulePrefs.setSwitch(ModulePrefs.KEY_ENABLED, true) &&
-                        ModulePrefs.setSwitch(ModulePrefs.KEY_SHOW_BADGE, true)) {
-                        messages.forEach { SignalAnalyzer.retryFailure(it.key) }
+                    0 -> if (MessageSniffer.setChatEnabled(selectedTalker, true)) {
+                        selectedMessages.forEach { SignalAnalyzer.retryFailure(it.key) }
                         MessageSniffer.refresh()
-                    } else Diagnostics.showFailure(activity, "分析开关未确认保存", ModulePrefs.lastBridgeError ?: "BRIDGE_SAVE_FAILED")
+                    } else Diagnostics.showFailure(activity, "分析开关未保存", "当前聊天未识别、已变化或本地保存失败，请重新进入聊天后重试。")
                     1 -> openSettings()
                     2 -> Diagnostics.show(activity)
                 }
@@ -119,6 +124,9 @@ class HostUi(private val activity: Activity) {
     }
 
     fun showSettings() {
+        talker = null
+        messages = emptyList()
+        dialog?.dismiss()
         removeControl()
         if (settingsWrapper != null) return
         val host = content.getChildAt(0) ?: return
@@ -157,7 +165,7 @@ class HostUi(private val activity: Activity) {
             Diagnostics.showFailure(activity, "无法从微信打开言外", "SETTINGS_ACTIVITY_OPEN_FAILED：${it.javaClass.simpleName} ${it.message}")
         }
     }
-    fun hide() { removeControl(); restoreSettings(); dialog?.dismiss(); messages = emptyList() }
+    fun hide() { removeControl(); restoreSettings(); dialog?.dismiss(); messages = emptyList(); talker = null }
     fun dispose() = hide()
     private fun removeControl() {
         control?.let { (it.parent as? ViewGroup)?.removeView(it) }

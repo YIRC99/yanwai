@@ -5,8 +5,8 @@ import org.junit.Test
 
 class SetupOverviewTest {
     private fun state(key: Boolean = true, dirty: Boolean = false, probe: ProbeState = ProbeState.UNTESTED,
-        seen: Long = 0, enabled: Boolean = true, badge: Boolean = true) =
-        SetupPresenter.resolve(key, dirty, probe, enabled, badge, seen, 1_000_000)
+        seen: Long = 0) =
+        SetupPresenter.resolve(key, dirty, probe, seen, 1_000_000)
 
     @Test fun `first use points to credentials instead of updates`() {
         assertEquals(SetupAction.CONFIGURE, state(key = false).action)
@@ -34,8 +34,9 @@ class SetupOverviewTest {
         assertEquals(StatusTone.ERROR, value.tone)
         assertEquals(SetupAction.TEST, value.action)
     }
-    @Test fun `paused analysis and hidden results remain distinct`() {
-        assertEquals("分析已暂停", state(probe = ProbeState.PASSED, seen = 999_999, enabled = false).title)
-        assertEquals("分析结果已隐藏", state(probe = ProbeState.PASSED, seen = 999_999, badge = false).title)
+    @Test fun `ready state directs users to the per chat analysis switch`() {
+        val value = state(probe = ProbeState.PASSED, seen = 999_999)
+        assertTrue(value.description.contains("右上角「分析」"))
+        assertTrue(value.description.contains("默认关闭"))
     }
 }

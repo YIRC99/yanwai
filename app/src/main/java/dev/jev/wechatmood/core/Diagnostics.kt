@@ -37,7 +37,7 @@ object Diagnostics {
     fun collect(context: Context): String = MoodLog.sanitize(buildString {
         appendLine("言外运行诊断 ${Date()}")
         appendLine(environment(context))
-        appendLine("verifiedSettings=${ModulePrefs.bridgeAvailable} enabled=${ModulePrefs.enabled} badge=${ModulePrefs.showBadge}")
+        appendLine("verifiedSettings=${ModulePrefs.bridgeAvailable} analysisControl=per_conversation_local")
         appendLine("bridgeError=${ModulePrefs.lastBridgeError ?: "无已记录错误"}")
         appendLine("--- 当前进程日志（有容量上限，包含重启前保留记录） ---")
         appendLine(MoodLog.read().ifBlank { "尚无记录" })
@@ -45,7 +45,7 @@ object Diagnostics {
             val prefs = context.getSharedPreferences(SettingsProvider.RUNTIME_FILE, 0)
             val last = prefs.getLong("host_log_at", 0L)
             appendLine("--- 微信最近上报日志（缓存，不代表当前连接正常） ---")
-            if (last == 0L) appendLine("未收到微信日志。请在微信内长按绘制开关或言外设置入口，选择导出运行日志；也可导出 LSP 日志。")
+            if (last == 0L) appendLine("未收到微信日志。请在微信内长按分析开关或言外设置入口，选择导出运行日志；也可导出 LSP 日志。")
             else {
                 appendLine("上报时间=${Date(last)}")
                 appendLine(prefs.getString("host_log", ""))

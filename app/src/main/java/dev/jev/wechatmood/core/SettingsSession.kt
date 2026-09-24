@@ -1,9 +1,9 @@
 package dev.jev.wechatmood.core
 
 // Memory only: credentials are not copied into WeChat's files or backups.
-class RuntimeSettings(val revision: Long, val enabled: Boolean, val showBadge: Boolean,
+class RuntimeSettings(val revision: Long,
     val exploreMode: Boolean, val api: ApiSettings, val generation: String) {
-    val canAnalyze get() = enabled && api.isConfigured
+    val canAnalyze get() = api.isConfigured
 }
 
 class SettingsSession {
@@ -15,7 +15,7 @@ class SettingsSession {
 
     /** False asks the caller to verify a changed installation through the Provider. */
     @Synchronized fun accept(snapshot: RuntimeSettings?, fromProvider: Boolean = true): Boolean {
-        // Transport failure is not a settings change. An explicit disable or empty key is.
+        // Transport failure is not a settings change. An explicit empty key is.
         if (snapshot == null) return true
         if (!fromProvider && snapshot.generation in retiredGenerations) return true
         if (!fromProvider && pendingVerification) return false

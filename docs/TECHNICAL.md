@@ -1,5 +1,11 @@
 # 分析机制与实现说明
 
+## 会话开关
+
+- 微信右上角「分析」同时控制当前会话的请求和结果显示。联系人、群聊默认关闭，只存显式开启的会话；旧全局开关不再读取。
+- `ConversationSwitches` 在内存读取状态，修改后写入微信私有 SharedPreferences；只保存 `field_talker` 的 SHA-256，关闭时移除记录，不保存昵称、聊天正文或 API Key。微信重启后重载，清除微信数据后重置。
+- 会话识别独立于可分析文字，自己的消息及非文本消息也可提供会话标识；空会话尝试当前 ChatFooter 的标识或独立 ChattingUI 的参数，不使用 LauncherUI 可能过期的参数。无法确认或出现冲突时关闭并禁用开关，点击时再次核对当前会话，避免串用上一个聊天的状态。
+
 ## 分析范围
 
 - 分析目标只接受微信消息对象 `field_type == 1`、`field_isSend == 0` 的非空文字。无法确认类型或会话的行跳过，不再按最长 TextView 猜正文。
@@ -23,8 +29,8 @@
 - 使用直接 `IXposedHookLoadPackage` 入口，`app/src/main/assets/xposed_init` 纳入 Git，不依赖生成入口的 `initZygote` 前置状态。
 - 同时监听 Application.attach 和前台 Activity，入口写入 LSPosed 日志，初始化后回传独立 APP。
 - 旧 ListView 读取可见行的数据对象；新版通过 DexKit 定位 `MvvmChattingItem` 的绑定方法并读取真实消息对象。新版绑定特征和消息字段核对了 [WeKit 的消息 View 监听](https://github.com/Ujhhgtg/WeKit/blob/master/app/src/main/java/dev/ujhhgtg/wekit/features/api/ui/WeChatMessageViewApi.kt)及其消息模型。
-- SettingsProvider 只接受本应用和微信 UID，向微信内运行的模块提供开关与 API 配置，不提供聊天内容。首次打开 APP 时向微信授予此 URI 的读取权限，处理 Android 11+ 的包可见性；[Android 官方说明](https://developer.android.com/training/package-visibility/automatic)。
-- 1.1.1 将最近一次可信配置保留在微信内存中，Provider 短暂不可用不清空设置。保存后通过定向且受发送者签名权限保护的广播同步，版本与配置代际防止旧消息恢复已关闭的分析或旧 Key；首次读取失败仍停用。具体边界与 WeKit 对照见[后台运行说明](BACKGROUND.md)。
+- SettingsProvider 只接受本应用和微信 UID，向微信内运行的模块提供诊断选项与 API 配置，不提供聊天内容。首次打开 APP 时向微信授予此 URI 的读取权限，处理 Android 11+ 的包可见性；[Android 官方说明](https://developer.android.com/training/package-visibility/automatic)。
+- 1.1.1 将最近一次可信配置保留在微信内存中，Provider 短暂不可用不清空设置。保存后通过定向且受发送者签名权限保护的广播同步，版本与配置代际防止旧消息恢复过期配置或旧 Key；首次读取失败仍停用。具体边界与 WeKit 对照见[后台运行说明](BACKGROUND.md)。
 - 后台最多两条分析流水线，每条最多两轮 HTTP 请求，单轮最长 30 秒。每轮前检查目标仍可见且分析开启；离开或关闭后不继续第二轮，已发送的请求不主动取消。第二轮失败不缓存半成品，显示原因并允许当前可见消息 30 秒后重试。聊天原文和结果不持久化。
 - 页面检测只在微信 Activity 前台期间运行；离开时停止回调并撤下开关与分析卡。
 

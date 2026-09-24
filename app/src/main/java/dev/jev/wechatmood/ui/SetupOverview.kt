@@ -8,8 +8,8 @@ data class SetupOverview(val title: String, val description: String, val action:
     val hostLabel: String, val hostTone: StatusTone)
 
 object SetupPresenter {
-    fun resolve(hasKey: Boolean, dirty: Boolean, probe: ProbeState, enabled: Boolean,
-        showBadge: Boolean, lastSeen: Long, now: Long): SetupOverview {
+    fun resolve(hasKey: Boolean, dirty: Boolean, probe: ProbeState,
+        lastSeen: Long, now: Long): SetupOverview {
         val host = when {
             lastSeen <= 0 -> "尚无运行记录" to StatusTone.WARNING
             now - lastSeen in 0..300_000 -> "最近有运行记录" to StatusTone.SUCCESS
@@ -30,11 +30,9 @@ object SetupPresenter {
             !hasKey -> view("先连接你的模型", "选择服务渠道，填入对应的 API Key。言外会用一条示例消息检测连接。", SetupAction.CONFIGURE, "开始配置模型", StatusTone.WARNING)
             probe == ProbeState.CHECKING -> view("正在检测模型连接", "正在使用示例消息检测，不会读取你的微信聊天。", SetupAction.TEST, "正在检测…", StatusTone.NEUTRAL)
             probe == ProbeState.FAILED -> view("模型连接需要处理", "下方已显示失败原因。检查渠道、Key 或网络后，可以重新检测。", SetupAction.TEST, "查看失败原因", StatusTone.ERROR)
-            !enabled -> view("分析已暂停", "不会发起新的自动分析。想继续使用时，打开下方「启用分析」。", SetupAction.OPEN_WECHAT, "打开微信", StatusTone.NEUTRAL)
-            !showBadge -> view("分析结果已隐藏", "显示开关已关闭。打开下方「在聊天中显示结果」，恢复气泡下的提示。", SetupAction.OPEN_WECHAT, "打开微信", StatusTone.NEUTRAL)
             probe != ProbeState.PASSED -> view("配置已保存，检测一下", "保存不代表连接成功。先检测模型，再回微信查看实际效果。", SetupAction.TEST, "检测模型连接", StatusTone.NEUTRAL)
             lastSeen <= 0 -> view("模型已连接，去启用微信模块", "还没有收到微信运行记录。按步骤在 LSPosed 中启用，再重启微信。", SetupAction.GUIDE, "查看微信启用步骤", StatusTone.WARNING)
-            else -> view("回到微信，试试聊天", "模型本次检测通过。打开有对方文字消息的聊天查看结果，运行记录不代表微信当前在线。", SetupAction.OPEN_WECHAT, "打开微信", StatusTone.SUCCESS)
+            else -> view("回到微信，试试聊天", "每个聊天默认关闭，打开右上角「分析」后会记住选择。模型本次检测通过，运行记录不代表微信当前在线。", SetupAction.OPEN_WECHAT, "打开微信", StatusTone.SUCCESS)
         }
     }
 }

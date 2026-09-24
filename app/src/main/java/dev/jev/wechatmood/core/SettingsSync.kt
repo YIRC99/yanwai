@@ -33,12 +33,11 @@ object SettingsSync {
     }
 
     fun decode(bundle: Bundle): RuntimeSettings? = runCatching {
-        require(listOf(ModulePrefs.KEY_ENABLED, ModulePrefs.KEY_SHOW_BADGE, ModulePrefs.KEY_EXPLORE,
+        require(listOf(ModulePrefs.KEY_EXPLORE,
             ModulePrefs.KEY_API_BASE, ModulePrefs.KEY_API_KEY).all(bundle::containsKey))
         val generation = bundle.getString(SettingsProvider.KEY_GENERATION).orEmpty()
         require(generation.isNotBlank())
         RuntimeSettings(bundle.getLong(SettingsProvider.KEY_REVISION, 0L),
-            bundle.getBoolean(ModulePrefs.KEY_ENABLED), bundle.getBoolean(ModulePrefs.KEY_SHOW_BADGE),
             bundle.getBoolean(ModulePrefs.KEY_EXPLORE), ApiSettings.fromInput(
                 bundle.getString(ModulePrefs.KEY_API_BASE).orEmpty(), bundle.getString(ModulePrefs.KEY_API_KEY).orEmpty(),
                 bundle.getString(ModulePrefs.KEY_API_PROVIDER), bundle.getString(ModulePrefs.KEY_API_MODEL).orEmpty()), generation)

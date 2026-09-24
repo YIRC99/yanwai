@@ -24,18 +24,6 @@ class SettingsProvider : ContentProvider() {
             throw SecurityException("Caller is not allowed: uid=$caller")
         }
         return when (method) {
-            "set_switch" -> {
-                require(arg == ModulePrefs.KEY_ENABLED || arg == ModulePrefs.KEY_SHOW_BADGE)
-                require(extras?.containsKey("value") == true)
-                // Publishing must run as this app, not the incoming WeChat Binder identity.
-                val identity = Binder.clearCallingIdentity()
-                try {
-                    MoodLog.i("PROVIDER_SWITCH uid=$caller key=$arg value=${extras.getBoolean("value")}")
-                    check(save(ctx) { putBoolean(arg, extras.getBoolean("value")) }) { "设置写入存储失败" }
-                }
-                finally { Binder.restoreCallingIdentity(identity) }
-                call("config", null, null)
-            }
             "config" -> snapshot(ctx)
             "report" -> {
                 ctx.getSharedPreferences(RUNTIME_FILE, 0).edit()
@@ -70,8 +58,6 @@ class SettingsProvider : ContentProvider() {
             return Bundle().apply {
                 putString(KEY_GENERATION, generation)
                 putLong(KEY_REVISION, prefs.getLong(KEY_REVISION, 0L))
-                putBoolean(ModulePrefs.KEY_ENABLED, prefs.getBoolean(ModulePrefs.KEY_ENABLED, true))
-                putBoolean(ModulePrefs.KEY_SHOW_BADGE, prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true))
                 putBoolean(ModulePrefs.KEY_EXPLORE, prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false))
                 putString(ModulePrefs.KEY_API_BASE, prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))
                 putString(ModulePrefs.KEY_API_KEY, prefs.getString(ModulePrefs.KEY_API_KEY, ""))

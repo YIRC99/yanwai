@@ -25,7 +25,7 @@ object BubbleDecorator {
     private val unsupported = mutableSetOf<String>()
 
     fun show(row: View, message: AnalysisInput?): Boolean {
-        if (message == null || !ModulePrefs.enabled || !ModulePrefs.showBadge) { clear(row); return false }
+        if (message == null || !ModulePrefs.isChatEnabled(message.talker)) { clear(row); return false }
         val key = message.key
         var state = cards[row]
         if (state != null && (state.key != key || state.view.parent !== state.parent)) {
@@ -38,7 +38,7 @@ object BubbleDecorator {
         }
         val value = MoodStore.get(key)?.detail ?: SignalAnalyzer.failure(key)?.let {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
-        } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze) "正在分析…" else "模型未配置"
+        } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message.talker)) "正在分析…" else "模型未配置"
         if (state.view.text.toString() != value) state.view.text = value
         return true
     }
