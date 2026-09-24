@@ -2,6 +2,8 @@ package dev.jev.wechatmood
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
@@ -12,15 +14,22 @@ import androidx.core.view.WindowInsetsCompat
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.ApiSettings
+import dev.jev.wechatmood.core.ApiProfiles
+import dev.jev.wechatmood.core.JevProvider
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.SettingsProvider
 import dev.jev.wechatmood.databinding.ActivityMainBinding
 import kotlinx.coroutines.*
+import androidx.core.widget.doAfterTextChanged
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var syncingSwitches = false
+    private var selectedProvider = JevProvider.TYPESAFE
+    // No data class: accidental logging must not print a key. Drafts never cross channels.
+    private class ApiDraft(val endpoint: String, val key: String, val model: String)
+    private val drafts = mutableMapOf<JevProvider, ApiDraft>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,8 +50,23 @@ class MainActivity : AppCompatActivity() {
         }.onFailure { MoodLog.w("微信设置连接授权失败：${it.javaClass.simpleName}") }
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
         ModulePrefs.init(this)
-        binding.inputApiBase.setText(prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))
-        binding.inputApiKey.setText(prefs.getString(ModulePrefs.KEY_API_KEY, ""))
+        val savedEndpoint = prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT).orEmpty()
+        selectedProvider = JevProvider.resolve(prefs.getString(ModulePrefs.KEY_API_PROVIDER, null), savedEndpoint)
+        drafts[selectedProvider] = ApiDraft(savedEndpoint, prefs.getString(ModulePrefs.KEY_API_KEY, "").orEmpty(),
+            prefs.getString(ModulePrefs.KEY_API_MODEL, "").orEmpty())
+        binding.inputProvider.setSimpleItems(JevProvider.entries.map { it.label }.toTypedArray())
+        showProvider()
+        binding.inputProvider.setOnItemClickListener { _, _, position, _ ->
+            drafts[selectedProvider] = ApiDraft(binding.inputApiBase.text.toString(), binding.inputApiKey.text.toString(),
+                binding.inputApiModel.text.toString())
+            selectedProvider = JevProvider.entries[position]
+            showProvider()
+        }
+        binding.buttonGetKey.setOnClickListener { selectedProvider.keyUrl?.let(::openHelp) }
+        binding.buttonProviderDocs.setOnClickListener { openHelp(selectedProvider.docsUrl) }
+        listOf(binding.inputApiBase, binding.inputApiKey, binding.inputApiModel).forEach { field ->
+            field.doAfterTextChanged { binding.textTestResult.visibility = View.GONE }
+        }
         binding.buttonSaveApi.setOnClickListener {
             if (saveApiSettings()) Toast.makeText(this, "配置已保存，后续请求使用新配置", Toast.LENGTH_SHORT).show()
         }
@@ -74,29 +98,69 @@ class MainActivity : AppCompatActivity() {
         refresh()
     }
 
+    private fun showProvider() {
+        val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
+        val draft = drafts[selectedProvider] ?: ApiDraft(
+            prefs.getString("channel_${selectedProvider.id}_endpoint", selectedProvider.endpoint).orEmpty(),
+            prefs.getString("channel_${selectedProvider.id}_key", "").orEmpty(),
+            prefs.getString("channel_${selectedProvider.id}_model", selectedProvider.model).orEmpty())
+        val custom = selectedProvider == JevProvider.CUSTOM
+        binding.inputProvider.setText(selectedProvider.label, false)
+        binding.inputApiBase.setText(if (custom) draft.endpoint else selectedProvider.endpoint)
+        binding.inputApiModel.setText(if (custom) draft.model else selectedProvider.model)
+        binding.inputApiKey.setText(draft.key)
+        binding.layoutApiBase.isEnabled = custom
+        binding.layoutApiBase.helperText = if (custom) "请填写完整 Jev 兼容接口地址，不会自动补路径。" else "已按渠道匹配，无需手动修改。"
+        binding.layoutApiModel.visibility = if (custom) View.VISIBLE else View.GONE
+        binding.textProviderGuide.text = selectedProvider.guide
+        binding.buttonGetKey.visibility = if (selectedProvider.keyUrl == null) View.GONE else View.VISIBLE
+        binding.layoutApiBase.error = null
+        binding.layoutApiKey.error = null
+        binding.layoutApiModel.error = null
+        binding.textTestResult.visibility = View.GONE
+    }
+
+    private fun openHelp(url: String) {
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)) }
+        catch (_: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, "未找到浏览器，请先安装浏览器", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun saveApiSettings(): Boolean {
         binding.layoutApiBase.error = null
         binding.layoutApiKey.error = null
+        binding.layoutApiModel.error = null
         val endpoint = binding.inputApiBase.text?.toString().orEmpty()
         val key = binding.inputApiKey.text?.toString().orEmpty()
-        try { ApiSettings.fromInput(endpoint, "") } catch (e: IllegalArgumentException) {
+        val model = binding.inputApiModel.text?.toString().orEmpty()
+        try { ApiSettings.fromInput(endpoint, "", selectedProvider.id) } catch (e: IllegalArgumentException) {
             binding.layoutApiBase.error = e.message
             binding.inputApiBase.requestFocus()
             return false
         }
-        val settings = try { ApiSettings.fromInput(endpoint, key) } catch (e: IllegalArgumentException) {
+        try { ApiSettings.fromInput(endpoint, "", selectedProvider.id, model) } catch (e: IllegalArgumentException) {
+            binding.layoutApiModel.error = e.message
+            binding.inputApiModel.requestFocus()
+            return false
+        }
+        val settings = try { ApiSettings.fromInput(endpoint, key, selectedProvider.id, model) } catch (e: IllegalArgumentException) {
             binding.layoutApiKey.error = e.message
             binding.inputApiKey.requestFocus()
             return false
         }
-        val saved = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE).edit()
-            .putString(ModulePrefs.KEY_API_BASE, settings.endpoint)
-            .putString(ModulePrefs.KEY_API_KEY, settings.apiKey).commit()
+        val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
+        val editor = prefs.edit()
+        ApiProfiles.valuesToSave(settings) { prefs.getString(it, null) }.forEach { (name, value) ->
+            editor.putString(name, value)
+        }
+        val saved = editor.commit()
         if (!saved) {
             Toast.makeText(this, "保存失败，请重试", Toast.LENGTH_SHORT).show()
             return false
         }
         binding.inputApiBase.setText(settings.endpoint)
+        binding.inputApiModel.setText(settings.model)
         binding.textTestResult.visibility = View.GONE
         ModulePrefs.reload(force = true)
         refresh()
@@ -111,9 +175,11 @@ class MainActivity : AppCompatActivity() {
         binding.switchEnabled.isChecked = prefs.getBoolean(ModulePrefs.KEY_ENABLED, true)
         binding.switchBadge.isChecked = prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true)
         syncingSwitches = false
+        val savedProvider = JevProvider.resolve(prefs.getString(ModulePrefs.KEY_API_PROVIDER, null),
+            prefs.getString(ModulePrefs.KEY_API_BASE, "").orEmpty())
         binding.textModelStatus.text = if (prefs.getString(ModulePrefs.KEY_API_KEY, "").isNullOrBlank())
             "言外 ${BuildConfig.VERSION_NAME} · 请填写 API Key" else
-            "言外 ${BuildConfig.VERSION_NAME} · 配置已保存，可检测连接"
+            "言外 ${BuildConfig.VERSION_NAME} · 已保存 ${savedProvider.label}，可检测连接"
         val wechat = runCatching {
             @Suppress("DEPRECATION")
             "微信 ${packageManager.getPackageInfo("com.tencent.mm", 0).versionName}"
@@ -135,6 +201,10 @@ class MainActivity : AppCompatActivity() {
         }
         binding.buttonTestModel.isEnabled = false
         binding.buttonSaveApi.isEnabled = false
+        binding.layoutProvider.isEnabled = false
+        binding.layoutApiBase.isEnabled = false
+        binding.layoutApiKey.isEnabled = false
+        binding.layoutApiModel.isEnabled = false
         binding.buttonTestModel.text = "正在检测…"
         binding.textTestResult.visibility = View.VISIBLE
         binding.textTestResult.text = "正在用一条示例消息检测，不读取你的聊天。"
@@ -143,7 +213,7 @@ class MainActivity : AppCompatActivity() {
                 val mood = SignalAnalyzer.requestMood("这还差不多。", listOf(
                     dev.jev.wechatmood.core.ContextMessage("对方", "你是不是忘了周末吃饭的事？"),
                     dev.jev.wechatmood.core.ContextMessage("我", "记得，这次我来安排，明天把餐厅和时间告诉你。")))
-                binding.textTestResult.text = "模型连接成功\n${mood.detail}"
+                binding.textTestResult.text = "${selectedProvider.label} 连接成功\n${mood.detail}"
                 MoodLog.i("模型连接检测成功")
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
@@ -152,6 +222,10 @@ class MainActivity : AppCompatActivity() {
             } finally {
                 binding.buttonTestModel.isEnabled = true
                 binding.buttonSaveApi.isEnabled = true
+                binding.layoutProvider.isEnabled = true
+                binding.layoutApiBase.isEnabled = selectedProvider == JevProvider.CUSTOM
+                binding.layoutApiKey.isEnabled = true
+                binding.layoutApiModel.isEnabled = true
                 binding.buttonTestModel.text = "重新检测模型连接"
                 refresh()
             }

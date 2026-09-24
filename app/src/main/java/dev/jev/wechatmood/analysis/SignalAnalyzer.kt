@@ -4,17 +4,11 @@ import dev.jev.wechatmood.core.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import java.util.concurrent.TimeUnit
 
 object SignalAnalyzer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val slots = Semaphore(2)
-    private val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()
+    private val client = JevHttpClient()
     private val failures = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val failureMessages = java.util.concurrent.ConcurrentHashMap<String, String>()
     fun failure(key: String): String? = failureMessages[key]
@@ -65,7 +59,7 @@ object SignalAnalyzer {
         val settings = ModulePrefs.apiSettings()
         check(settings.isConfigured) { "请先在言外设置中填写并保存 API Key" }
         try {
-            ChatAnalysis.analyze(input, ModulePrefs.apiModel, { exchange(it, settings) }) {
+            ChatAnalysis.analyze(input, settings.model, { client.exchange(it, settings) }) {
                 job.ensureActive()
                 shouldContinue()
             }
@@ -76,26 +70,4 @@ object SignalAnalyzer {
         }
     }
 
-    private fun exchange(payload: org.json.JSONObject, settings: ApiSettings): String {
-        val request = Request.Builder().url(settings.endpoint)
-            .header("Authorization", "Bearer ${settings.apiKey}")
-            .post(payload.toString()
-                .toRequestBody("application/json; charset=utf-8".toMediaType())).build()
-        try {
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val reason = when (response.code) {
-                        401, 403 -> "密钥无效或模型未授权"
-                        402 -> "模型账户额度不足"
-                        429 -> "请求过于频繁，请稍后重试"
-                        else -> "模型服务暂不可用"
-                    }
-                    throw IllegalStateException("$reason（HTTP ${response.code}）")
-                }
-                return response.body?.string().orEmpty()
-            }
-        } catch (e: java.io.IOException) {
-            throw IllegalStateException("连接超时或网络不可用，请稍后重试")
-        }
-    }
 }

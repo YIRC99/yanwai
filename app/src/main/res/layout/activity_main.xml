@@ -13,21 +13,50 @@
             <TextView android:id="@+id/textModelStatus" android:layout_width="match_parent"
                 android:layout_height="wrap_content" android:layout_marginTop="8dp"
                 android:text="请填写 API Key" android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutProvider"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="20dp" android:hint="模型渠道">
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/inputProvider"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <TextView android:id="@+id/textProviderGuide" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="12dp"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonGetKey"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="48dp" android:text="申请 API Key ↗" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/buttonProviderDocs"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:minHeight="48dp" android:text="查看接入文档 ↗" />
             <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiBase"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="20dp" android:hint="API 地址"
-                app:helperText="默认使用 Jev 官方接口，也可填写完整的自定义接口地址。">
+                android:layout_marginTop="12dp" android:hint="API 地址"
+                app:helperText="已按渠道匹配，无需手动修改。">
                 <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiBase"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:minHeight="56dp" android:inputType="textUri" android:maxLines="3"
+                    android:importantForAutofill="no" android:saveEnabled="false" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiModel"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="12dp" android:hint="模型名" android:visibility="gone"
+                app:helperText="按服务商文档填写，留空使用 jev-1.13.0。">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiModel"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:minHeight="56dp" android:inputType="textVisiblePassword" android:singleLine="true"
                     android:importantForAutofill="no" android:saveEnabled="false" />
             </com.google.android.material.textfield.TextInputLayout>
             <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiKey"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_marginTop="12dp" android:hint="API Key" app:endIconMode="password_toggle"
-                app:helperText="填写从 Jev 官网获取的 Key；自定义地址请使用对应服务的 Key。">
+                app:helperText="填写当前所选渠道申请的 Key。">
                 <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiKey"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:minHeight="56dp" android:inputType="textPassword" android:singleLine="true"

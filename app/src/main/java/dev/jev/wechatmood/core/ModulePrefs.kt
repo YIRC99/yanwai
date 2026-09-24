@@ -3,7 +3,6 @@ package dev.jev.wechatmood.core
 import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
-import dev.jev.wechatmood.BuildConfig
 
 object ModulePrefs {
     const val FILE_NAME = "wechatmood_config"
@@ -12,6 +11,8 @@ object ModulePrefs {
     const val KEY_SHOW_BADGE = "show_badge"
     const val KEY_API_KEY = "api_key"
     const val KEY_API_BASE = "api_base"
+    const val KEY_API_PROVIDER = "api_provider"
+    const val KEY_API_MODEL = "api_model"
     private var context: Context? = null
     @Volatile private var config: Bundle? = null
     private var lastRead = -1000L
@@ -32,9 +33,9 @@ object ModulePrefs {
     val apiKey get() = config?.getString(KEY_API_KEY).orEmpty()
     fun apiSettings(): ApiSettings {
         val snapshot = config
-        return ApiSettings.fromInput(snapshot?.getString(KEY_API_BASE).orEmpty(), snapshot?.getString(KEY_API_KEY).orEmpty())
+        return ApiSettings.fromInput(snapshot?.getString(KEY_API_BASE).orEmpty(), snapshot?.getString(KEY_API_KEY).orEmpty(),
+            snapshot?.getString(KEY_API_PROVIDER), snapshot?.getString(KEY_API_MODEL).orEmpty())
     }
-    val apiModel get() = BuildConfig.JEV_MODEL
     val canAnalyze get() = enabled && apiKey.isNotBlank()
     @Synchronized fun setSwitch(key: String, value: Boolean): Boolean = runCatching {
         require(key == KEY_ENABLED || key == KEY_SHOW_BADGE)

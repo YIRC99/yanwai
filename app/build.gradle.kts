@@ -11,9 +11,8 @@ android {
         applicationId = "dev.jev.wechatmood"
         minSdk = 28          // 与 WeKit 一致；Android 9+
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.0.0"
-        buildConfigField("String", "JEV_MODEL", "\"jev-1.13.0\"")
+        versionCode = 11
+        versionName = "1.1.0"
 
         // 依赖（androidx + DexKit）把方法数撑出了十几个 dex，入口类一度落在
         // classes11.dex 里。框架加载入口类走模块自己的 ClassLoader，理论上
@@ -104,4 +103,16 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+}
+
+// Live tests are opt-in, never part of a normal build and never store credentials in BuildConfig.
+tasks.withType<Test>().configureEach {
+    if (providers.gradleProperty("jevLiveTest").orNull == "true") {
+        include("**/LiveJevVerificationTest*")
+        outputs.upToDateWhen { false }
+        testLogging.showStandardStreams = true
+    } else {
+        exclude("**/LiveJevVerificationTest*")
+    }
 }

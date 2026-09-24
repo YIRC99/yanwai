@@ -1,3 +1,24 @@
+# 1.1.0 多渠道与 Key 申请指引（2026-09-24）
+
+- versionName=1.1.0、versionCode=11，保留 applicationId。设置页提供 Jev 官方、OpenRouter、Vercel AI Gateway、自定义 Jev 兼容接口，预设自动匹配接口与模型，自定义支持填写模型名。
+- 每个预设显示简短申请步骤、申请 Key 的网页入口和官方协议文档；Vercel 使用 AI Gateway 专用 Key，并注明账户绑卡验证。页面只打开官方网页，不替用户注册、充值或发送消息。更完整资料见 [渠道教程](API_PROVIDERS.md)。
+- 精确域名和已知路径用于旧配置迁移；陌生地址、特殊路径和自定义参数保持不变。各渠道单独保存 Key，首次切换前的旧活动配置在同次原子提交中保留。独立审查发现的旧 Key 丢失问题，已先复现两项失败用例，再修复并复查。
+- 同一条两轮分析使用同一份渠道、模型、地址与 Key 快照；只调整平台接入，不改情绪问题、候选模板、动作条件或概率校验。没有自动改用普通聊天模型。
+- 先观察旧 OpenRouter / Vercel 地址适配的两项测试失败，再实现兼容。最终 **80/80 离线测试通过**（无失败、错误或跳过），覆盖配置迁移、概率原样传递、HTTP 错误、HTTP 200 错误封装、禁止自动重定向和原分析回归。
+- 使用生产 `JevHttpClient`、`ChatAnalysis`、`JevProtocol` 和用户授权的 Key 进行显式真实验证。OpenRouter 三组虚构中文对话均完成两轮，共六次 HTTP 请求；每轮完整答案数量与所有概率/置信度通过应用校验。实际响应模型 `typesafe/jev-1.13-20260917`，三组耗时约 1484 / 769 / 717 ms，仅代表本机当次测量，不作为手机网络或长期性能承诺。
+- Vercel 兼容接口返回 HTTP 403、`customer_verification_required`；测试明确记录 BLOCKED / skipped，应用提示去 AI Gateway 控制台绑定信用卡。用户确认按文档接入即可，本轮不声称 Vercel 推理成功。TypeSafe 官方保留原协议，本轮未新增官方 Key 实测。在线验证与离线套件分开，普通构建不发送模型请求。
+- 完整无缓存构建：Debug、未签名 Release、lintDebug 均完成。Lint **0 errors、54 warnings**，包括硬编码文案、未使用资源和现有结构提示，未声称零警告。
+- 实际检查两份 APK：versionCode=11 / versionName=1.1.0，DEX 中含 `Jev 1.1.0` 和两个新渠道的正确接口，不含 `Jev 1.0.0`；仓库输入文件和两份 APK 均未匹配本轮两枚真实 Key。Key 未进入源码、BuildConfig 或命令行构建参数，测试仅由进程环境读取；本机临时加密凭证在测试后清理。
+- 未安装或启动手机应用，没有进行 UI 自动化；渠道切换、申请网页跳转、跨进程读取和微信气泡效果由用户实机验收。没有启动本项目后台服务；使用 no-daemon 与进程内 Kotlin 编译，结束时检查无遗留 Gradle / Kotlin 编译进程。本轮仅本地提交，不推送。
+
+最终构建命令：
+
+```powershell
+& ./tools/gradle.ps1 -GradleArgs @(':app:clean', ':app:testDebugUnitTest', ':app:assembleDebug', ':app:assembleRelease', ':app:lintDebug', '--no-build-cache', '-Pkotlin.incremental=false', '-Pkotlin.compiler.execution.strategy=in-process', '--no-daemon', '--max-workers=2')
+```
+
+安装试用使用 `app/build/outputs/apk/debug/app-debug.apk`。Release 包未签名，公开发布前仍需维护者固定签名。
+
 # 1.0.0 言外与用户 API 配置（2026-09-23）
 
 - 应用显示名为「言外」，versionName=1.0.0、versionCode=10，保留原 applicationId 以支持覆盖升级。
