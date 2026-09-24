@@ -13,20 +13,26 @@ import java.util.UUID
 
 /** Settings bridge restricted to this app and WeChat, where the model requests run. */
 class SettingsProvider : ContentProvider() {
-    override fun onCreate() = true
+    override fun onCreate(): Boolean { context?.let(MoodLog::init); return true }
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
         val ctx = requireNotNull(context)
         val caller = Binder.getCallingUid()
         val own = caller == Process.myUid()
         val wechat = ctx.packageManager.getPackagesForUid(caller)?.contains("com.tencent.mm") == true
-        if (!own && !wechat) throw SecurityException("Caller is not allowed")
+        if (!own && !wechat) {
+            MoodLog.w("PROVIDER_CALL_DENIED uid=$caller method=$method")
+            throw SecurityException("Caller is not allowed: uid=$caller")
+        }
         return when (method) {
             "set_switch" -> {
                 require(arg == ModulePrefs.KEY_ENABLED || arg == ModulePrefs.KEY_SHOW_BADGE)
                 require(extras?.containsKey("value") == true)
                 // Publishing must run as this app, not the incoming WeChat Binder identity.
                 val identity = Binder.clearCallingIdentity()
-                try { check(save(ctx) { putBoolean(arg, extras.getBoolean("value")) }) }
+                try {
+                    MoodLog.i("PROVIDER_SWITCH uid=$caller key=$arg value=${extras.getBoolean("value")}")
+                    check(save(ctx) { putBoolean(arg, extras.getBoolean("value")) }) { "设置写入存储失败" }
+                }
                 finally { Binder.restoreCallingIdentity(identity) }
                 call("config", null, null)
             }
@@ -34,7 +40,12 @@ class SettingsProvider : ContentProvider() {
             "report" -> {
                 ctx.getSharedPreferences(RUNTIME_FILE, 0).edit()
                     .putString("status", arg.orEmpty().take(200))
-                    .putLong("last_seen", System.currentTimeMillis()).apply()
+                    .putLong("last_seen", System.currentTimeMillis()).apply {
+                        extras?.getString("host_log")?.let {
+                            putString("host_log", MoodLog.sanitize(it).takeLast(48 * 1024))
+                            putLong("host_log_at", System.currentTimeMillis())
+                        }
+                    }.apply()
                 Bundle()
             }
             else -> throw IllegalArgumentException("Unknown method")
@@ -73,6 +84,7 @@ class SettingsProvider : ContentProvider() {
             val prefs = context.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
             val saved = prefs.edit().apply(edit)
                 .putLong(KEY_REVISION, prefs.getLong(KEY_REVISION, 0L) + 1L).commit()
+            MoodLog.i("SETTINGS_DISK_SAVE saved=$saved revision=${prefs.getLong(KEY_REVISION, 0L)}")
             if (saved) publish(context)
             return saved
         }
@@ -80,7 +92,7 @@ class SettingsProvider : ContentProvider() {
         fun publish(context: Context) {
             // A transport failure must not misreport a successful disk write as a failed save.
             runCatching { SettingsSync.publish(context, snapshot(context)) }
-                .onFailure { MoodLog.w("设置同步发送失败：${it.javaClass.simpleName}") }
+                .onFailure { MoodLog.e("SYNC_PUBLISH_FAILED 设置已落盘但同步失败", it) }
         }
     }
 }

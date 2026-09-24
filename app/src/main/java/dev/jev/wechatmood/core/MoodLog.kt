@@ -7,72 +7,46 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * 模块日志。
- *
- * 微信进程里的日志没法直接看（没有终端），所以除了 Logcat 还写一份到文件，
- * 设置页读这个文件显示。探索模式的输出量很大，用固定上限的环形截断，
- * 不让它无限长。
- */
+/** Each process keeps its own journal; exporting in WeChat never needs the module bridge. */
 object MoodLog {
+    private const val TAG = "WeChatMood"
+    private var journal: DiagnosticJournal? = null
+    private var early = ""
+    private val secrets = mutableSetOf<String>()
+    private val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    var frameworkSink: ((String) -> Unit)? = null
 
-    private const val MAX_BYTES = 512 * 1024L
-    private const val LOGCAT_TAG = "WeChatMood"
+    @Synchronized fun protect(secret: String) { if (secret.isNotBlank()) secrets.add(secret) }
+    @Synchronized fun sanitize(text: String) = DiagnosticText.sanitize(text, secrets)
 
-    private var logFile: File? = null
-    private var ready = false
-
-    fun init(context: Context) {
-        if (ready) return
-        logFile = File(context.filesDir, "mood.log")
-        ready = true
+    @Synchronized fun init(context: Context) {
+        if (journal != null) return
+        journal = DiagnosticJournal(File(context.filesDir, "mood.log"))
+        if (early.isNotBlank()) journal?.append(early)
+        early = ""
+        i("PROCESS_START package=${context.packageName} uid=${android.os.Process.myUid()} pid=${android.os.Process.myPid()} module=${dev.jev.wechatmood.BuildConfig.VERSION_NAME} android=${android.os.Build.VERSION.RELEASE} sdk=${android.os.Build.VERSION.SDK_INT}")
     }
 
     fun i(message: String) = write("I", message)
-
     fun w(message: String) = write("W", message)
+    fun e(message: String, throwable: Throwable? = null) =
+        write("E", if (throwable == null) message else DiagnosticText.failure(message, throwable))
+    fun dump(title: String, body: String) = write("D", "===== $title =====\n$body\n===== /$title =====")
 
-    fun e(message: String, throwable: Throwable? = null) {
-        write("E", message + (throwable?.let { "\n  ${it.javaClass.name}: ${it.message}" } ?: ""))
-    }
-
-    /** 给探索模式用：直接落盘一大段多行文本，避免每行都加时间戳前缀。 */
-    fun dump(title: String, body: String) {
-        write("D", "===== $title =====\n$body\n===== /$title =====")
-    }
-
-    @Synchronized
-    private fun write(level: String, message: String) {
-        when (level) {
-            "I" -> Log.i(LOGCAT_TAG, message)
-            "W" -> Log.w(LOGCAT_TAG, message)
-            "E" -> Log.e(LOGCAT_TAG, message)
-            else -> Log.d(LOGCAT_TAG, message)
+    @Synchronized private fun write(level: String, message: String) {
+        val safe = sanitize(message).take(32 * 1024)
+        val line = "${format.format(Date())} [$level] $safe\n"
+        runCatching { Log.println(if (level == "E") Log.ERROR else if (level == "W") Log.WARN else Log.INFO, TAG, safe) }
+        journal?.append(line) ?: run { early = (early + line).takeLast(128 * 1024) }
+        val lifecycleEvent = listOf("PROCESS_START", "ENVIRONMENT", "BRIDGE_RECOVERED", "SYNC_RECEIVED", "SWITCH_SAVED")
+            .any(message::startsWith)
+        if (level == "E" || level == "W" || lifecycleEvent) {
+            runCatching { frameworkSink?.invoke("$TAG $line") }
         }
-        val f = logFile ?: return
-        runCatching {
-            val stamp = timeFormat.format(Date())
-            f.appendText("$stamp [$level] $message\n")
-            rotateIfNeeded(f)
-        }.onFailure { Log.e(LOGCAT_TAG, "写日志失败", it) }
     }
 
-    /** 超过上限就丢掉前半段，保留最近的内容。 */
-    private fun rotateIfNeeded(f: File) {
-        if (f.length() <= MAX_BYTES) return
-        val text = f.readText()
-        val keep = text.substring(text.length / 2)
-        f.writeText("[日志超过上限，前半段已丢弃]\n$keep")
-    }
-
-    fun read(): String {
-        val f = logFile ?: return ""
-        return runCatching { if (f.exists()) f.readText() else "" }.getOrDefault("")
-    }
-
-    fun clear() {
-        runCatching { logFile?.writeText("") }
-    }
-
-    private val timeFormat = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+    @Synchronized fun read(): String = sanitize(buildString {
+        journal?.diskFailure?.let { appendLine("[LOG_DISK_FAILURE] $it；以下保留内存日志，请在关闭微信前导出。") }
+        append(journal?.read() ?: early)
+    })
 }

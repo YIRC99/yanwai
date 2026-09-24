@@ -1,7 +1,5 @@
 package dev.jev.wechatmood
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -18,6 +16,7 @@ import dev.jev.wechatmood.core.ApiSettings
 import dev.jev.wechatmood.core.ApiProfiles
 import dev.jev.wechatmood.core.JevProvider
 import dev.jev.wechatmood.core.MoodLog
+import dev.jev.wechatmood.core.Diagnostics
 import dev.jev.wechatmood.core.SettingsProvider
 import dev.jev.wechatmood.databinding.ActivityMainBinding
 import dev.jev.wechatmood.updates.UpdateNotice
@@ -46,12 +45,16 @@ class MainActivity : AppCompatActivity() {
         }
         ViewCompat.requestApplyInsets(binding.root)
         MoodLog.init(this)
+        MoodLog.i("ENVIRONMENT\n${Diagnostics.environment(this)}")
         // Makes the settings provider visible to WeChat on Android 11+.
         // The provider validates the caller UID before sharing settings with WeChat.
         runCatching {
             grantUriPermission("com.tencent.mm", SettingsProvider.URI, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }.onFailure { MoodLog.w("微信设置连接授权失败：${it.javaClass.simpleName}") }
+        }.onSuccess { MoodLog.i("BRIDGE_VISIBILITY_GRANTED 微信读取授权已授予") }
+            .onFailure { MoodLog.e("BRIDGE_VISIBILITY_GRANT_FAILED", it) }
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
+        prefs.all.filterKeys { it == ModulePrefs.KEY_API_KEY || it.endsWith("_key") }
+            .values.filterIsInstance<String>().forEach(MoodLog::protect)
         ModulePrefs.init(this)
         SettingsProvider.publish(this)
         val savedEndpoint = prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT).orEmpty()
@@ -89,11 +92,8 @@ class MainActivity : AppCompatActivity() {
             binding.buttonDebug.text = if (open) "收起排查信息" else "展开排查信息"
         }
         binding.buttonRefreshLog.setOnClickListener { refresh() }
-        binding.buttonCopyLog.setOnClickListener {
-            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager)
-                .setPrimaryClip(ClipData.newPlainText("Jev 检测记录", MoodLog.read()))
-            Toast.makeText(this, "检测记录已复制", Toast.LENGTH_SHORT).show()
-        }
+        binding.buttonCopyLog.setOnClickListener { Diagnostics.copy(this) }
+        binding.buttonExportLog.setOnClickListener { Diagnostics.export(this) }
         binding.buttonTestModel.setOnClickListener { testModel() }
         updateNotice = UpdateNotice(this, binding, uiScope, ::openHelp)
     }
@@ -157,6 +157,7 @@ class MainActivity : AppCompatActivity() {
             binding.inputApiKey.requestFocus()
             return false
         }
+        MoodLog.protect(settings.apiKey)
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
         val values = ApiProfiles.valuesToSave(settings) { prefs.getString(it, null) }
         val saved = SettingsProvider.save(this) {
@@ -205,7 +206,7 @@ class MainActivity : AppCompatActivity() {
         val evidence = if (last == 0L) "尚未收到微信模块的运行记录" else
             "最近记录（${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(last))}）：\n${runtime.getString("status", "")}"
         binding.textFrameworkStatus.text = "$wechat\n$evidence"
-        binding.textLog.text = MoodLog.read().ifBlank { "暂无检测记录，可先检测模型连接。" }
+        binding.textLog.text = Diagnostics.collect(this)
     }
 
     private fun testModel() {

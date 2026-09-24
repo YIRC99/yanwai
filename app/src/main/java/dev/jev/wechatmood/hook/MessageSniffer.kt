@@ -109,7 +109,7 @@ object MessageSniffer {
                 main.post { active.get()?.let { refreshVisibleAdapters(it) } }
             }.onFailure {
                 adapterStatus = "新版聊天未适配（${it.javaClass.simpleName}），可重新进入聊天后查看"
-                MoodLog.e("新版聊天连接失败：${it.javaClass.simpleName}")
+                MoodLog.e("CHAT_BIND_FAILED 新版聊天连接失败", it)
             }
         }, "Jev-chat-hook").start()
     }

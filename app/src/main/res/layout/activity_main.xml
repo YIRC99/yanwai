@@ -123,14 +123,17 @@
                     android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:minHeight="56dp" android:text="记录微信适配信息" />
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:text="这里显示本 APP 的检测记录；微信内的详细日志由电脑读取。修改适配开关后需重启微信。"
+                    android:text="导出包含本应用日志和微信最近上报记录。若未收到微信日志，请在微信内长按绘制开关或言外设置入口直接导出，不需要跳转设置页。日志不主动记录聊天正文；分享前可查看内容。修改适配开关后需重启微信。"
                     android:textAppearance="?attr/textAppearanceBodySmall" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/buttonRefreshLog"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="match_parent" android:layout_height="wrap_content" android:text="刷新状态与记录" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/buttonCopyLog"
                     style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent" android:layout_height="wrap_content" android:text="复制检测记录" />
+                    android:layout_width="match_parent" android:layout_height="wrap_content" android:text="复制运行日志" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonExportLog"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" android:text="导出运行日志文件" />
                 <TextView android:id="@+id/textLog" android:layout_width="match_parent"
                     android:layout_height="wrap_content" android:textIsSelectable="true"
                     android:textAppearance="?attr/textAppearanceBodySmall" />

@@ -13,6 +13,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
+import dev.jev.wechatmood.core.Diagnostics
 import dev.jev.wechatmood.hook.MessageSniffer
 
 /** Direct package entry, independent of the optional initZygote callback. */
@@ -22,6 +23,7 @@ class HookEntry : IXposedHookLoadPackage {
 
     override fun handleLoadPackage(param: XC_LoadPackage.LoadPackageParam) {
         if (param.packageName != "com.tencent.mm" || param.processName != "com.tencent.mm") return
+        MoodLog.frameworkSink = { XposedBridge.log(it) }
         XposedBridge.log("WeChatMood ${BuildConfig.VERSION_NAME}: entered WeChat main process")
         XposedHelpers.findAndHookMethod(Application::class.java, "attach", Context::class.java,
             object : XC_MethodHook() {
@@ -43,7 +45,7 @@ class HookEntry : IXposedHookLoadPackage {
                         announced = true
                         Toast.makeText(activity, "言外已加载 · 仅分析纯文本", Toast.LENGTH_LONG).show()
                     }
-                }.onFailure { MoodLog.e("连接微信页面失败：${it.javaClass.simpleName}") }
+                }.onFailure { MoodLog.e("HOST_RESUME_FAILED", it) }
             }
         })
         XposedBridge.hookAllMethods(Instrumentation::class.java, "callActivityOnPause", object : XC_MethodHook() {
@@ -57,6 +59,7 @@ class HookEntry : IXposedHookLoadPackage {
         if (installed) return
         runCatching {
             MoodLog.init(context)
+            MoodLog.i("ENVIRONMENT\n${Diagnostics.environment(context)}")
             ModulePrefs.init(context)
             MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
             ModulePrefs.report("模块 ${BuildConfig.VERSION_NAME} 已加载，等待打开聊天")
@@ -64,7 +67,7 @@ class HookEntry : IXposedHookLoadPackage {
             installed = true
         }.onFailure {
             XposedBridge.log("WeChatMood initialization failed: ${it.javaClass.name}")
-            MoodLog.e("模块初始化失败：${it.javaClass.simpleName}")
+            MoodLog.e("HOOK_INIT_FAILED", it)
         }
     }
 }

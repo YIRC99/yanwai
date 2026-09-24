@@ -6,7 +6,7 @@
 
 在微信文字气泡下，结合前文展示情绪概率、可能的潜台词与一句沟通建议。
 
-![Version](https://img.shields.io/badge/version-1.1.2-2C7A73)
+![Version](https://img.shields.io/badge/version-1.1.3-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)
@@ -44,7 +44,7 @@
   </tr>
 </table>
 
-以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.1.2**，支持多渠道接入、Key 申请指引、GitHub 更新提醒，并保留划掉最近任务后的配置修复；截图中的旧版本文字保留原样。
+以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.1.3**，新增微信内直接导出运行日志和设置失败的具体提示，保留多渠道接入、Key 申请指引、GitHub 更新提醒及划卡后的配置修复；截图中的旧版本文字保留原样。
 
 ## 开始使用
 
@@ -148,6 +148,7 @@
 - [分析机制与实现说明](docs/TECHNICAL.md)
 - [聊天模板与动作库](docs/CHAT_TEMPLATES.md)
 - [版本验证记录](docs/VERIFY.md)
+- [运行日志导出与开关保存失败排查](docs/DIAGNOSTICS.md)
 - [气泡内绘制的适配风险](docs/INLINE_RENDERING_RISK.md)
 
 ## 致谢

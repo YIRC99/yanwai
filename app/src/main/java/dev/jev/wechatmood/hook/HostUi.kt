@@ -12,10 +12,11 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
-import android.widget.Toast
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.AnalysisInput
+import dev.jev.wechatmood.core.Diagnostics
+import dev.jev.wechatmood.core.MoodLog
 
 /** Add controls to the existing header; never replace the chat's content or action bar. */
 class HostUi(private val activity: Activity) {
@@ -69,7 +70,7 @@ class HostUi(private val activity: Activity) {
                         syncing = true
                         isChecked = ModulePrefs.showBadge
                         syncing = false
-                        Toast.makeText(activity, "设置未保存，请先打开助手设置", Toast.LENGTH_SHORT).show()
+                        Diagnostics.showFailure(activity, "开关未确认保存", ModulePrefs.lastBridgeError ?: "BRIDGE_SAVE_FAILED")
                     }
                     if (!ModulePrefs.showBadge) BubbleDecorator.clearAll()
                     MessageSniffer.refresh()
@@ -102,16 +103,18 @@ class HostUi(private val activity: Activity) {
 
     private fun showActions() {
         if (dialog?.isShowing == true) return
-        dialog = AlertDialog.Builder(activity).setTitle("言外")
-            .setMessage("$status\n展示情绪概率、可能的潜台词和一句沟通建议。参考之前最多 10 条双方消息，超过 1000 字符的文字跳过。模型判断仅供参考。")
-            .setPositiveButton("分析本屏") { _, _ ->
-                if (ModulePrefs.setSwitch(ModulePrefs.KEY_ENABLED, true)) {
-                    ModulePrefs.setSwitch(ModulePrefs.KEY_SHOW_BADGE, true)
-                    messages.forEach { SignalAnalyzer.retryFailure(it.key) }
-                    MessageSniffer.refresh()
-                } else openSettings()
+        dialog = AlertDialog.Builder(activity).setTitle("言外 · $status")
+            .setItems(arrayOf("分析本屏", "助手设置", "导出运行日志")) { _, which ->
+                when (which) {
+                    0 -> if (ModulePrefs.setSwitch(ModulePrefs.KEY_ENABLED, true) &&
+                        ModulePrefs.setSwitch(ModulePrefs.KEY_SHOW_BADGE, true)) {
+                        messages.forEach { SignalAnalyzer.retryFailure(it.key) }
+                        MessageSniffer.refresh()
+                    } else Diagnostics.showFailure(activity, "分析开关未确认保存", ModulePrefs.lastBridgeError ?: "BRIDGE_SAVE_FAILED")
+                    1 -> openSettings()
+                    2 -> Diagnostics.show(activity)
+                }
             }
-            .setNeutralButton("助手设置") { _, _ -> openSettings() }
             .setNegativeButton("关闭", null).create().also { it.show() }
     }
 
@@ -127,11 +130,12 @@ class HostUi(private val activity: Activity) {
         content.addView(wrapper, ViewGroup.LayoutParams(-1, -1))
         wrapper.addView(host, LinearLayout.LayoutParams(-1, 0, 1f))
         wrapper.addView(TextView(activity).apply {
-            text = "言外  ›\n已加载 · 仅分析纯文本"
+            text = "言外  ›\n已加载 · 长按导出运行日志"
             textSize = 14f
             minHeight = dp(52)
             setPadding(dp(16), dp(10), dp(16), dp(10))
             setOnClickListener { openSettings() }
+            setOnLongClickListener { Diagnostics.show(activity); true }
             setOnApplyWindowInsetsListener { view, insets ->
                 @Suppress("DEPRECATION")
                 val bottom = if (android.os.Build.VERSION.SDK_INT >= 30)
@@ -147,7 +151,11 @@ class HostUi(private val activity: Activity) {
     private fun openSettings() {
         runCatching {
             activity.startActivity(Intent().setComponent(ComponentName("dev.jev.wechatmood", "dev.jev.wechatmood.MainActivity")))
-        }.onFailure { Toast.makeText(activity, "请从桌面打开言外", Toast.LENGTH_SHORT).show() }
+            MoodLog.i("SETTINGS_ACTIVITY_OPEN 请求已发送")
+        }.onFailure {
+            MoodLog.e("SETTINGS_ACTIVITY_OPEN_FAILED", it)
+            Diagnostics.showFailure(activity, "无法从微信打开言外", "SETTINGS_ACTIVITY_OPEN_FAILED：${it.javaClass.simpleName} ${it.message}")
+        }
     }
     fun hide() { removeControl(); restoreSettings(); dialog?.dismiss(); messages = emptyList() }
     fun dispose() = hide()
