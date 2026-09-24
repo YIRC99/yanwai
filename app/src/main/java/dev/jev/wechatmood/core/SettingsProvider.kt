@@ -2,11 +2,14 @@ package dev.jev.wechatmood.core
 
 import android.content.ContentProvider
 import android.content.ContentValues
+import android.content.Context
+import android.content.SharedPreferences
 import android.database.Cursor
 import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
 import android.os.Process
+import java.util.UUID
 
 /** Settings bridge restricted to this app and WeChat, where the model requests run. */
 class SettingsProvider : ContentProvider() {
@@ -21,22 +24,13 @@ class SettingsProvider : ContentProvider() {
             "set_switch" -> {
                 require(arg == ModulePrefs.KEY_ENABLED || arg == ModulePrefs.KEY_SHOW_BADGE)
                 require(extras?.containsKey("value") == true)
-                check(ctx.getSharedPreferences(ModulePrefs.FILE_NAME, 0).edit()
-                    .putBoolean(arg, extras.getBoolean("value")).commit())
+                // Publishing must run as this app, not the incoming WeChat Binder identity.
+                val identity = Binder.clearCallingIdentity()
+                try { check(save(ctx) { putBoolean(arg, extras.getBoolean("value")) }) }
+                finally { Binder.restoreCallingIdentity(identity) }
                 call("config", null, null)
             }
-            "config" -> {
-                val prefs = ctx.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
-                Bundle().apply {
-                    putBoolean(ModulePrefs.KEY_ENABLED, prefs.getBoolean(ModulePrefs.KEY_ENABLED, true))
-                    putBoolean(ModulePrefs.KEY_SHOW_BADGE, prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true))
-                    putBoolean(ModulePrefs.KEY_EXPLORE, prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false))
-                    putString(ModulePrefs.KEY_API_BASE, prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))
-                    putString(ModulePrefs.KEY_API_KEY, prefs.getString(ModulePrefs.KEY_API_KEY, ""))
-                    putString(ModulePrefs.KEY_API_PROVIDER, prefs.getString(ModulePrefs.KEY_API_PROVIDER, null))
-                    putString(ModulePrefs.KEY_API_MODEL, prefs.getString(ModulePrefs.KEY_API_MODEL, ""))
-                }
-            }
+            "config" -> snapshot(ctx)
             "report" -> {
                 ctx.getSharedPreferences(RUNTIME_FILE, 0).edit()
                     .putString("status", arg.orEmpty().take(200))
@@ -54,5 +48,39 @@ class SettingsProvider : ContentProvider() {
     companion object {
         val URI: Uri = Uri.parse("content://dev.jev.wechatmood.settings")
         const val RUNTIME_FILE = "wechat_runtime"
+        const val KEY_REVISION = "settings_revision"
+        const val KEY_GENERATION = "settings_generation"
+
+        @Synchronized fun snapshot(context: Context): Bundle {
+            val prefs = context.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
+            val generation = prefs.getString(KEY_GENERATION, null) ?: UUID.randomUUID().toString().also {
+                check(prefs.edit().putString(KEY_GENERATION, it).commit())
+            }
+            return Bundle().apply {
+                putString(KEY_GENERATION, generation)
+                putLong(KEY_REVISION, prefs.getLong(KEY_REVISION, 0L))
+                putBoolean(ModulePrefs.KEY_ENABLED, prefs.getBoolean(ModulePrefs.KEY_ENABLED, true))
+                putBoolean(ModulePrefs.KEY_SHOW_BADGE, prefs.getBoolean(ModulePrefs.KEY_SHOW_BADGE, true))
+                putBoolean(ModulePrefs.KEY_EXPLORE, prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false))
+                putString(ModulePrefs.KEY_API_BASE, prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))
+                putString(ModulePrefs.KEY_API_KEY, prefs.getString(ModulePrefs.KEY_API_KEY, ""))
+                putString(ModulePrefs.KEY_API_PROVIDER, prefs.getString(ModulePrefs.KEY_API_PROVIDER, null))
+                putString(ModulePrefs.KEY_API_MODEL, prefs.getString(ModulePrefs.KEY_API_MODEL, ""))
+            }
+        }
+
+        @Synchronized fun save(context: Context, edit: SharedPreferences.Editor.() -> Unit): Boolean {
+            val prefs = context.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
+            val saved = prefs.edit().apply(edit)
+                .putLong(KEY_REVISION, prefs.getLong(KEY_REVISION, 0L) + 1L).commit()
+            if (saved) publish(context)
+            return saved
+        }
+
+        fun publish(context: Context) {
+            // A transport failure must not misreport a successful disk write as a failed save.
+            runCatching { SettingsSync.publish(context, snapshot(context)) }
+                .onFailure { MoodLog.w("设置同步发送失败：${it.javaClass.simpleName}") }
+        }
     }
 }

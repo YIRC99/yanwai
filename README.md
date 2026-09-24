@@ -6,7 +6,7 @@
 
 在微信文字气泡下，结合前文展示情绪概率、可能的潜台词与一句沟通建议。
 
-![Version](https://img.shields.io/badge/version-1.1.0-2C7A73)
+![Version](https://img.shields.io/badge/version-1.1.1-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)
@@ -44,7 +44,7 @@
   </tr>
 </table>
 
-以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.1.0**，新增多渠道接入和 Key 申请指引；截图中的旧版本文字保留原样。
+以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.1.1**，支持多渠道接入、Key 申请指引，并修复设置连接中断时丢失已加载配置的问题；截图中的旧版本文字保留原样。
 
 ## 开始使用
 
@@ -64,6 +64,8 @@
 5. 打开聊天，查看对方文字气泡下的分析卡。
 
 源码构建出的试用包位于 `app/build/outputs/apk/debug/app-debug.apk`，构建步骤见下文。
+
+微信已加载设置后，可以划掉最近任务中的「言外」，当前微信进程会保留设置。微信自身重启后仍需重新读取设置，若连接失败请打开一次言外。各手机划卡效果待实机确认，机制与验收步骤见[后台运行说明](docs/BACKGROUND.md)。
 
 ### 常用操作
 

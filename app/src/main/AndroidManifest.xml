@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <permission android:name="dev.jev.wechatmood.permission.SYNC_SETTINGS" android:protectionLevel="signature" />
+    <uses-permission android:name="dev.jev.wechatmood.permission.SYNC_SETTINGS" />
     <queries><package android:name="com.tencent.mm" /></queries>
 
     <!-- 只在微信进程内加载本模块 -->

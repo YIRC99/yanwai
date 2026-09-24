@@ -23,6 +23,7 @@
 - 同时监听 Application.attach 和前台 Activity，入口写入 LSPosed 日志，初始化后回传独立 APP。
 - 旧 ListView 读取可见行的数据对象；新版通过 DexKit 定位 `MvvmChattingItem` 的绑定方法并读取真实消息对象。新版绑定特征和消息字段核对了 [WeKit 的消息 View 监听](https://github.com/Ujhhgtg/WeKit/blob/master/app/src/main/java/dev/ujhhgtg/wekit/features/api/ui/WeChatMessageViewApi.kt)及其消息模型。
 - SettingsProvider 只接受本应用和微信 UID，向微信内运行的模块提供开关与 API 配置，不提供聊天内容。首次打开 APP 时向微信授予此 URI 的读取权限，处理 Android 11+ 的包可见性；[Android 官方说明](https://developer.android.com/training/package-visibility/automatic)。
+- 1.1.1 将最近一次可信配置保留在微信内存中，Provider 短暂不可用不清空设置。保存后通过定向且受发送者签名权限保护的广播同步，版本与配置代际防止旧消息恢复已关闭的分析或旧 Key；首次读取失败仍停用。具体边界与 WeKit 对照见[后台运行说明](BACKGROUND.md)。
 - 后台最多两条分析流水线，每条最多两轮 HTTP 请求，单轮最长 30 秒。每轮前检查目标仍可见且分析开启；离开或关闭后不继续第二轮，已发送的请求不主动取消。第二轮失败不缓存半成品，显示原因并允许当前可见消息 30 秒后重试。聊天原文和结果不持久化。
 - 页面检测只在微信 Activity 前台期间运行；离开时停止回调并撤下开关与分析卡。
 
@@ -30,6 +31,6 @@
 adb logcat -s WeChatMood
 ```
 
-如果没有「已加载」提示，也没有设置入口，先查看 LSPosed 是否出现 `WeChatMood 1.1.0: entered WeChat main process`。卡片首行也显示实际运行代码的版本；只更新 APK 不会替换微信进程已加载的模块，需彻底重启微信。
+如果没有「已加载」提示，也没有设置入口，先查看 LSPosed 是否出现 `WeChatMood 1.1.1: entered WeChat main process`。卡片首行也显示实际运行代码的版本；只更新 APK 不会替换微信进程已加载的模块，需彻底重启微信。
 
-上次实机微信版本为 8.0.71。0.4.0 已实机确认标题栏开关、气泡下方分析卡、关闭绘制恢复布局。0.5.2 的文案与建议效果由用户在微信中验收；1.1.0 已验证 OpenRouter 的真实模型分析，新的渠道选择、申请链接与跨进程保存仍需用户实机验收。验证记录见 [docs/VERIFY.md](VERIFY.md)。
+上次实机微信版本为 8.0.71。0.4.0 已实机确认标题栏开关、气泡下方分析卡、关闭绘制恢复布局。0.5.2 的文案与建议效果由用户在微信中验收；1.1.0 已验证 OpenRouter 的真实模型分析，新的渠道选择、申请链接与跨进程保存仍需用户实机验收。1.1.1 的划卡恢复、广播同步和重启首次读取也待实机验收。验证记录见 [docs/VERIFY.md](VERIFY.md)。

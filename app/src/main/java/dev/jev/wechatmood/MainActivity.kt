@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
         }.onFailure { MoodLog.w("微信设置连接授权失败：${it.javaClass.simpleName}") }
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
         ModulePrefs.init(this)
+        SettingsProvider.publish(this)
         val savedEndpoint = prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT).orEmpty()
         selectedProvider = JevProvider.resolve(prefs.getString(ModulePrefs.KEY_API_PROVIDER, null), savedEndpoint)
         drafts[selectedProvider] = ApiDraft(savedEndpoint, prefs.getString(ModulePrefs.KEY_API_KEY, "").orEmpty(),
@@ -94,7 +95,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun save(key: String, value: Boolean) {
-        getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE).edit().putBoolean(key, value).commit()
+        if (!SettingsProvider.save(this) { putBoolean(key, value) }) {
+            Toast.makeText(this, "保存失败，请重试", Toast.LENGTH_SHORT).show()
+        }
+        ModulePrefs.reload(force = true)
         refresh()
     }
 
@@ -150,11 +154,10 @@ class MainActivity : AppCompatActivity() {
             return false
         }
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
-        val editor = prefs.edit()
-        ApiProfiles.valuesToSave(settings) { prefs.getString(it, null) }.forEach { (name, value) ->
-            editor.putString(name, value)
+        val values = ApiProfiles.valuesToSave(settings) { prefs.getString(it, null) }
+        val saved = SettingsProvider.save(this) {
+            values.forEach { (name, value) -> putString(name, value) }
         }
-        val saved = editor.commit()
         if (!saved) {
             Toast.makeText(this, "保存失败，请重试", Toast.LENGTH_SHORT).show()
             return false

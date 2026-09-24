@@ -11,8 +11,8 @@ android {
         applicationId = "dev.jev.wechatmood"
         minSdk = 28          // 与 WeKit 一致；Android 9+
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.1.0"
+        versionCode = 12
+        versionName = "1.1.1"
 
         // 依赖（androidx + DexKit）把方法数撑出了十几个 dex，入口类一度落在
         // classes11.dex 里。框架加载入口类走模块自己的 ClassLoader，理论上

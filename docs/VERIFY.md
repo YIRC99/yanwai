@@ -1,3 +1,15 @@
+# 1.1.1 划掉最近任务后的配置恢复（2026-09-24）
+
+- versionName=1.1.1、versionCode=12。用户确认操作是从最近任务划掉言外。旧代码在 Provider 读取失败时清空配置的路径已确认；尚未捕获手机划卡瞬间的系统原因，不把推断写成实机复现结论。
+- 对照 WeKit 源码后，保留宿主内存中的可信配置，保存时用受签名权限保护的定向广播同步；首次无配置仍停用。revision 防止迟到消息覆盖新设置，generation 处理清除数据后的版本重置，Provider 读取与广播处理串行，待验证期间不允许广播恢复旧 Key。没有新增前台保活服务。来源和边界见 [BACKGROUND.md](BACKGROUND.md)。
+- 新增 8 项设置状态测试，覆盖首次失败、连续断连、关闭、清空 Key、旧广播、恢复连接、清除数据及待验证时旧广播。补充待验证旧广播用例后先确认旧实现断言失败，再修复；最终完整离线单测 **88/88 通过**，0 failures / 0 errors。
+- `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintDebug` 成功。Lint **0 errors、53 warnings**；使用进程内 Kotlin 编译与 no-daemon。首轮 lint 曾指出旧 Android 广播注册分支缺少导出标记，改为 ContextCompat 带显式导出和发送者权限后通过。
+- 独立静态复查发现的配置重置与旧在途读取问题均已修复并复查。实际检查 Debug 与未签名 Release APK 均为 versionCode=12 / versionName=1.1.1，Debug APK 包含同步权限声明。
+- 仅只读检查已连接设备状态（当时安装的是 1.0.0）；未安装或启动手机应用、未停止微信、未读取聊天内容、未调用真实模型。划卡后新消息分析、关闭/清空 Key 后停止、广播权限及重启首次读取由用户实机验收。
+- 构建已退出，检查未遗留本项目服务、Gradle 或 Kotlin 编译进程。仅本地提交，不推送。
+
+---
+
 # 1.1.0 多渠道与 Key 申请指引（2026-09-24）
 
 - versionName=1.1.0、versionCode=11，保留 applicationId。设置页提供 Jev 官方、OpenRouter、Vercel AI Gateway、自定义 Jev 兼容接口，预设自动匹配接口与模型，自定义支持填写模型名。

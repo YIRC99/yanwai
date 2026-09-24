@@ -14,34 +14,43 @@ object ModulePrefs {
     const val KEY_API_PROVIDER = "api_provider"
     const val KEY_API_MODEL = "api_model"
     private var context: Context? = null
-    @Volatile private var config: Bundle? = null
+    private val session = SettingsSession()
     private var lastRead = -1000L
-    fun init(context: Context) { this.context = context.applicationContext ?: context; reload(force = true) }
+    fun init(context: Context) {
+        val app = context.applicationContext ?: context
+        this.context = app
+        // Register before reading so a save racing with initial loading cannot be missed.
+        runCatching { SettingsSync.register(app, ::receiveSettings) }
+            .onFailure { MoodLog.w("设置同步注册失败：${it.javaClass.simpleName}") }
+        reload(force = true)
+    }
+    // Serialize broadcasts with complete Provider reads, not only snapshot assignment:
+    // an old in-flight read must finish before a reset broadcast invalidates credentials.
+    @Synchronized private fun receiveSettings(bundle: Bundle) {
+        if (!session.accept(SettingsSync.decode(bundle), fromProvider = false)) reload(force = true)
+    }
     @Synchronized fun reload(force: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastRead < 1000) return
         lastRead = now
-        config = runCatching {
-            context?.contentResolver?.call(SettingsProvider.URI, "config", null, null)
+        val snapshot = runCatching {
+            context?.contentResolver?.call(SettingsProvider.URI, "config", null, null)?.let(SettingsSync::decode)
         }.getOrNull()
+        session.accept(snapshot)
     }
-    // If the bridge is unavailable, fail closed so a disabled switch cannot silently become enabled.
-    val bridgeAvailable get() = config != null
-    val enabled get() = config?.getBoolean(KEY_ENABLED, true) == true
-    val exploreMode get() = config?.getBoolean(KEY_EXPLORE, false) == true
-    val showBadge get() = config?.getBoolean(KEY_SHOW_BADGE, true) == true
-    val apiKey get() = config?.getString(KEY_API_KEY).orEmpty()
-    fun apiSettings(): ApiSettings {
-        val snapshot = config
-        return ApiSettings.fromInput(snapshot?.getString(KEY_API_BASE).orEmpty(), snapshot?.getString(KEY_API_KEY).orEmpty(),
-            snapshot?.getString(KEY_API_PROVIDER), snapshot?.getString(KEY_API_MODEL).orEmpty())
-    }
-    val canAnalyze get() = enabled && apiKey.isNotBlank()
+    // No verified snapshot means disabled; a lost connection preserves the last explicit choice.
+    val bridgeAvailable get() = session.current != null
+    val enabled get() = session.current?.enabled == true
+    val exploreMode get() = session.current?.exploreMode == true
+    val showBadge get() = session.current?.showBadge == true
+    val apiKey get() = session.current?.api?.apiKey.orEmpty()
+    fun apiSettings(): ApiSettings = session.current?.api ?: ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")
+    val canAnalyze get() = session.current?.canAnalyze == true
     @Synchronized fun setSwitch(key: String, value: Boolean): Boolean = runCatching {
         require(key == KEY_ENABLED || key == KEY_SHOW_BADGE)
         val result = context?.contentResolver?.call(SettingsProvider.URI, "set_switch", key,
             Bundle().apply { putBoolean("value", value) }) ?: return false
-        config = result
+        session.accept(SettingsSync.decode(result))
         lastRead = SystemClock.elapsedRealtime()
         result.getBoolean(key) == value
     }.getOrDefault(false)
