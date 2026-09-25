@@ -13,6 +13,10 @@ class ManualAnalysis {
 
     fun selectedInput(input: AnalysisInput): AnalysisInput? = identity(input)?.let(selected::get)
 
+    fun clearConversation(talker: String) {
+        selected.entries.removeAll { it.value.talker == talker }
+    }
+
     fun allows(input: AnalysisInput, chatEnabled: Boolean): Boolean =
         chatEnabled || selectedInput(input) != null
 

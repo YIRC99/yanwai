@@ -6,6 +6,27 @@ import org.junit.Test
 class ManualAnalysisTest {
     private val message = AnalysisInput("好的", "alice", messageId = 42)
 
+    @Test fun `closing chat switch clears all its manual choices and allows a fresh manual selection`() {
+        val manual = ManualAnalysis()
+        val second = message.copy(messageId = 43)
+        val group = message.copy(talker = "group@chatroom")
+        val chats = ConversationSwitches(emptySet()) { true }
+        listOf(message, second, group).forEach { assertTrue(manual.select(it)) }
+        assertTrue(chats.setEnabled(message.talker, true))
+        assertTrue(manual.allows(message, chats.isEnabled(message.talker)))
+        assertTrue(chats.setEnabled(message.talker, false))
+        manual.clearConversation(message.talker)
+
+        assertFalse(manual.allows(message, chats.isEnabled(message.talker)))
+        assertFalse(manual.allows(second, false))
+        assertNull(manual.selectedInput(message))
+        assertTrue(manual.allows(group, false))
+        assertTrue(manual.select(message))
+        assertTrue(manual.allows(message, false))
+        assertFalse(manual.allows(second, false))
+        assertFalse(chats.isEnabled(message.talker))
+    }
+
     @Test fun `manual choice authorizes only selected message without saving chat opt in`() {
         val chats = ConversationSwitches(emptySet()) { error("Manual analysis must not save switches") }
         val manual = ManualAnalysis()

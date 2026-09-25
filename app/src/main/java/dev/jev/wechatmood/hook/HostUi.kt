@@ -75,7 +75,7 @@ class HostUi(private val activity: Activity) {
                         isChecked = ModulePrefs.isChatEnabled(talker)
                         syncing = false
                         Diagnostics.showFailure(activity, "开关未保存", "当前聊天已变化或本地保存失败，请重新进入聊天后重试。")
-                    }
+                    } else if (!checked) BubbleDecorator.clearAll()
                     MessageSniffer.refresh()
                 }
             }

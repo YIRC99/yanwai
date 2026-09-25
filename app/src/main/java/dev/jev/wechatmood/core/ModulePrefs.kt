@@ -85,7 +85,10 @@ object ModulePrefs {
     fun canAnalyze(input: AnalysisInput): Boolean = shouldDisplay(input) && session.current?.canAnalyze == true
     fun selectMessage(input: AnalysisInput): Boolean = manualAnalysis.select(input)
     fun setChatEnabled(talker: String?, value: Boolean): Boolean = runCatching {
-        conversations?.setEnabled(talker, value) == true
+        val saved = conversations?.setEnabled(talker, value) == true
+        // Only an explicit, successfully saved switch-off resets this chat's manual choices.
+        if (saved && !value && talker != null) manualAnalysis.clearConversation(talker)
+        saved
     }.onFailure { MoodLog.e("CHAT_SWITCH_SAVE_FAILED 本地会话开关保存失败", it) }.getOrDefault(false)
     @Synchronized fun report(status: String) {
         val now = SystemClock.elapsedRealtime()
