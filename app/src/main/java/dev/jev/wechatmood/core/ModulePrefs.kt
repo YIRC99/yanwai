@@ -61,6 +61,7 @@ object ModulePrefs {
         // Invalidate a changed installation immediately, without waiting for Provider I/O.
         bridge.receive(snapshot)
         MoodLog.protect(snapshot.api.apiKey)
+        MoodLog.protect(snapshot.reply.apiKey)
         MoodLog.i("SYNC_RECEIVED revision=${snapshot.revision}；广播送达不代表设置服务可访问")
     }
     fun requestReload(force: Boolean = false) = bridge.requestReload(force)
@@ -70,10 +71,12 @@ object ModulePrefs {
         val result = requireNotNull(context).contentResolver.call(SettingsProvider.URI, "config", null, null)
             ?: error("设置服务无响应或不可见；检查隐藏应用列表规则及微信分身所在空间")
         requireNotNull(SettingsSync.decode(result)) { "设置服务返回的配置不完整" }
-            .also { MoodLog.protect(it.api.apiKey); connected() }
+            .also { MoodLog.protect(it.api.apiKey); MoodLog.protect(it.reply.apiKey); connected() }
     }.onFailure { failure("BRIDGE_READ_FAILED", it) }.getOrNull()
     // No verified snapshot means disabled; a lost connection preserves the last explicit choice.
     val bridgeAvailable get() = session.current != null
+    fun replySettings() = session.current?.reply ?: dev.jev.wechatmood.reply.ReplySettings.empty()
+    val replyConsent get() = session.current?.replyConsent == true
     val exploreMode get() = session.current?.exploreMode == true
     val apiKey get() = session.current?.api?.apiKey.orEmpty()
     fun apiSettings(): ApiSettings = session.current?.api ?: ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")

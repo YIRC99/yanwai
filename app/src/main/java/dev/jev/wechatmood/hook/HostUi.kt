@@ -20,6 +20,7 @@ import dev.jev.wechatmood.core.MoodLog
 
 /** Add controls to the existing header; never replace the chat's content or action bar. */
 class HostUi(private val activity: Activity) {
+    private val replyUi = ReplyHostUi(activity)
     private var control: Switch? = null
     private var syncing = false
     private var status = ""
@@ -38,6 +39,7 @@ class HostUi(private val activity: Activity) {
         restoreSettings()
         if (talker != currentTalker) dialog?.dismiss()
         talker = currentTalker
+        replyUi.update(currentTalker)
         status = value
         messages = current
         ensureControl()
@@ -123,6 +125,7 @@ class HostUi(private val activity: Activity) {
     }
 
     fun showSettings() {
+        replyUi.hide()
         talker = null
         messages = emptyList()
         dialog?.dismiss()
@@ -164,8 +167,9 @@ class HostUi(private val activity: Activity) {
             Diagnostics.showFailure(activity, "无法从微信打开言外", "SETTINGS_ACTIVITY_OPEN_FAILED：${it.javaClass.simpleName} ${it.message}")
         }
     }
-    fun hide() { removeControl(); restoreSettings(); dialog?.dismiss(); messages = emptyList(); talker = null }
-    fun dispose() = hide()
+    fun suggestReply(focusMessageId: Long? = null) = replyUi.open(focusMessageId)
+    fun hide() { replyUi.hide(); removeControl(); restoreSettings(); dialog?.dismiss(); messages = emptyList(); talker = null }
+    fun dispose() { hide(); replyUi.dispose() }
     private fun removeControl() {
         control?.let { (it.parent as? ViewGroup)?.removeView(it) }
         control = null

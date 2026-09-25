@@ -4,6 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SettingsSessionTest {
+    @Test fun `reply only setup remains available independently of Jev and revoke persists`() {
+        val reply = dev.jev.wechatmood.reply.ReplySettings.fromInput("https://example.com", "reply-key", "m")
+        val session = SettingsSession()
+        session.accept(RuntimeSettings(1, false, ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, ""), "a", reply, true))
+        assertFalse(session.current!!.canAnalyze)
+        assertTrue(session.current!!.reply.isConfigured)
+        assertTrue(session.current!!.replyConsent)
+        session.accept(RuntimeSettings(2, false, ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "jev-key"), "a", reply, false))
+        session.accept(null)
+        assertTrue(session.current!!.canAnalyze)
+        assertFalse(session.current!!.replyConsent)
+        assertEquals("reply-key", session.current!!.reply.apiKey)
+    }
     private fun settings(revision: Long, key: String = "test-key", generation: String = "install-a") =
         RuntimeSettings(revision, false, ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, key), generation)
 

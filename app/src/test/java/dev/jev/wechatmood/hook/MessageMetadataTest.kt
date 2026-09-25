@@ -21,6 +21,24 @@ class MessageMetadataTest {
         @JvmField val field_talker: String? = "friend",
     )
     class Inherited : Fields(field_content = "12:30")
+    class Timed : Fields() {
+        @JvmField val field_createTime = 1700000000000L
+        @JvmField val field_msgId = 42L
+    }
+    @Test fun `reply metadata reads host timestamps and message identity`() {
+        val message = MessageMetadata.read(Timed())!!
+        assertEquals(1700000000000L, message.createdAt)
+        assertEquals(42L, message.messageId)
+        assertEquals(0L, MessageMetadata.read(Fields())!!.createdAt)
+    }
+    @Test fun `long incoming text remains a reply target without enabling Jev analysis`() {
+        val message = MessageMetadata(1, 0, "长".repeat(3000), "friend", 42)
+        assertNull(message.incomingText())
+        assertTrue(message.isReplyTarget())
+        assertFalse(message.copy(isSend = 1).isReplyTarget())
+        assertFalse(message.copy(type = 3).isReplyTarget())
+        assertFalse(message.copy(messageId = 0).isReplyTarget())
+    }
 
     @Test fun `read inherited message fields and preserve time-like text`() {
         assertEquals("12:30", MessageMetadata.read(Inherited())?.incomingText())

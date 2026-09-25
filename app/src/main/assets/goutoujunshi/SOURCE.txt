@@ -1,0 +1,5 @@
+goutoujunshi
+https://github.com/shengjidaguai-china/goutoujunshi
+Commit: 6db7354a4002dc7c448a9c87ffdad8132570c9d3
+Copyright (c) 2026 powerycy
+MIT License. Original knowledge files preserved; Yanwai adapts the reply workflow.

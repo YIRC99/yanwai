@@ -40,6 +40,12 @@ object SettingsSync {
         RuntimeSettings(bundle.getLong(SettingsProvider.KEY_REVISION, 0L),
             bundle.getBoolean(ModulePrefs.KEY_EXPLORE), ApiSettings.fromInput(
                 bundle.getString(ModulePrefs.KEY_API_BASE).orEmpty(), bundle.getString(ModulePrefs.KEY_API_KEY).orEmpty(),
-                bundle.getString(ModulePrefs.KEY_API_PROVIDER), bundle.getString(ModulePrefs.KEY_API_MODEL).orEmpty()), generation)
+                bundle.getString(ModulePrefs.KEY_API_PROVIDER), bundle.getString(ModulePrefs.KEY_API_MODEL).orEmpty()), generation,
+            runCatching { dev.jev.wechatmood.reply.ReplySettings.fromInput(
+                bundle.getString(dev.jev.wechatmood.reply.ReplySettings.KEY_ENDPOINT).orEmpty(),
+                bundle.getString(dev.jev.wechatmood.reply.ReplySettings.KEY_API_KEY).orEmpty(),
+                bundle.getString(dev.jev.wechatmood.reply.ReplySettings.KEY_MODEL).orEmpty()) }
+                .getOrElse { dev.jev.wechatmood.reply.ReplySettings.empty() },
+            bundle.getBoolean(dev.jev.wechatmood.reply.ReplySettings.KEY_CONSENT, false))
     }.getOrNull()
 }

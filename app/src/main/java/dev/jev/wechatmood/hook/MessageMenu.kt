@@ -26,7 +26,8 @@ import java.util.WeakHashMap
 /** Adds one action to the host menu without replacing the bubble's long-click listener. */
 object MessageMenu {
     private const val ITEM_ID = 0x4a455601
-    private data class Target(val view: WeakReference<View>, val input: AnalysisInput)
+    private const val REPLY_ITEM_ID = 0x4a455602
+    private data class Target(val view: WeakReference<View>, val input: AnalysisInput? = null, val reply: MessageMetadata? = null)
     // Bind callbacks to the actual menu item, not a global last-pressed message.
     private val targets = Collections.synchronizedMap(WeakHashMap<MenuItem, Target>())
 
@@ -61,12 +62,14 @@ object MessageMenu {
             for (method in handlers) hooks += XposedBridge.hookMethod(method, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val item = param.args[0] as? MenuItem ?: return
-                    if (item.itemId != ITEM_ID) return
+                    if (item.itemId != ITEM_ID && item.itemId != REPLY_ITEM_ID) return
                     val target = targets.remove(item) ?: return
                     param.result = null
                     runCatching {
                         val view = target.view.get() ?: return@runCatching
-                        if (!MessageSniffer.analyzeMessage(view, target.input)) {
+                        val accepted = if (item.itemId == REPLY_ITEM_ID) target.reply?.let { MessageSniffer.suggestReply(view, it) } == true
+                            else target.input?.let { MessageSniffer.analyzeMessage(view, it) } == true
+                        if (!accepted) {
                             Toast.makeText(view.context, "消息已变化，请重新长按需要分析的文字", Toast.LENGTH_SHORT).show()
                         }
                     }.onFailure { MoodLog.e("MESSAGE_MENU_ACTION_FAILED 单条分析启动失败", it) }
@@ -78,10 +81,11 @@ object MessageMenu {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     runCatching {
                         val view = param.args[1] as? View ?: return@runCatching
-                        val input = MessageSniffer.inputForView(view) ?: return@runCatching
-                        if (ManualAnalysis.identity(input) == null) return@runCatching
+                        val input = MessageSniffer.inputForView(view)?.takeIf { ManualAnalysis.identity(it) != null }
+                        val replyTarget = MessageSniffer.replyTargetForView(view)
+                        if (input == null && replyTarget == null) return@runCatching
                         val menu = param.args[0] ?: return@runCatching
-                        if (menu is Menu && menu.findItem(ITEM_ID) != null) return@runCatching
+                        if (menu is Menu && (menu.findItem(ITEM_ID) != null || menu.findItem(REPLY_ITEM_ID) != null)) return@runCatching
                         val add = menu.javaClass.methods.singleOrNull {
                             it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType,
                                 CharSequence::class.java, Drawable::class.java)) &&
@@ -91,9 +95,15 @@ object MessageMenu {
                         val icon = IntentIcon(view.resources.displayMetrics.density,
                             view.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                                 android.content.res.Configuration.UI_MODE_NIGHT_YES)
-                        val item = add.invoke(menu, ITEM_ID, "翻译意图", icon) as? MenuItem
-                            ?: error("消息菜单未返回新增选项")
-                        targets[item] = Target(WeakReference(view), input)
+                        if (input != null) {
+                            val item = add.invoke(menu, ITEM_ID, "翻译意图", icon) as? MenuItem
+                                ?: error("消息菜单未返回新增选项")
+                            targets[item] = Target(WeakReference(view), input)
+                        }
+                        if (replyTarget != null) {
+                            val reply = add.invoke(menu, REPLY_ITEM_ID, "帮我回", icon) as? MenuItem
+                            if (reply != null) targets[reply] = Target(WeakReference(view), reply = replyTarget)
+                        }
                     }.onFailure { MoodLog.e("MESSAGE_MENU_BUILD_FAILED 无法添加翻译意图菜单", it) }
                 }
             })

@@ -38,6 +38,7 @@ object Diagnostics {
         appendLine("言外运行诊断 ${Date()}")
         appendLine(environment(context))
         appendLine("verifiedSettings=${ModulePrefs.bridgeAvailable} analysisControl=per_conversation_local")
+        appendLine("replyConfigured=${ModulePrefs.replySettings().isConfigured} replyConsent=${ModulePrefs.replyConsent}")
         appendLine("bridgeError=${ModulePrefs.lastBridgeError ?: "无已记录错误"}")
         appendLine("--- 当前进程日志（有容量上限，包含重启前保留记录） ---")
         appendLine(MoodLog.read().ifBlank { "尚无记录" })

@@ -63,6 +63,11 @@ class SettingsProvider : ContentProvider() {
                 putString(ModulePrefs.KEY_API_KEY, prefs.getString(ModulePrefs.KEY_API_KEY, ""))
                 putString(ModulePrefs.KEY_API_PROVIDER, prefs.getString(ModulePrefs.KEY_API_PROVIDER, null))
                 putString(ModulePrefs.KEY_API_MODEL, prefs.getString(ModulePrefs.KEY_API_MODEL, ""))
+                listOf(dev.jev.wechatmood.reply.ReplySettings.KEY_ENDPOINT,
+                    dev.jev.wechatmood.reply.ReplySettings.KEY_API_KEY,
+                    dev.jev.wechatmood.reply.ReplySettings.KEY_MODEL).forEach { putString(it, prefs.getString(it, "")) }
+                putBoolean(dev.jev.wechatmood.reply.ReplySettings.KEY_CONSENT,
+                    prefs.getBoolean(dev.jev.wechatmood.reply.ReplySettings.KEY_CONSENT, false))
             }
         }
 

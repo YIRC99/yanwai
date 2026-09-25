@@ -15,6 +15,7 @@ import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.AnalysisInput
 import dev.jev.wechatmood.core.ManualAnalysis
+import dev.jev.wechatmood.reply.ReplyContext
 import org.luckypray.dexkit.DexKitBridge
 import java.lang.ref.WeakReference
 import java.lang.reflect.Field
@@ -24,7 +25,8 @@ import java.util.WeakHashMap
 /** Analyze visible targets with a bounded preceding window from the loaded adapter, never the database. */
 object MessageSniffer {
     private val main = Handler(Looper.getMainLooper())
-    private data class BoundMessage(val talker: String, val input: AnalysisInput?)
+    private data class BoundMessage(val talker: String, val input: AnalysisInput?,
+        val adapter: WeakReference<Any>? = null, val position: Int = -1, val metadata: MessageMetadata? = null)
     private val bindings = Collections.synchronizedMap(WeakHashMap<View, BoundMessage>())
     private var active = WeakReference<Activity>(null)
     private var installed = false
@@ -105,7 +107,7 @@ object MessageSniffer {
                                             ?: return@runCatching null
                                         BoundMessage(current.talker, MessageContext.collect(current, position) { index ->
                                             MessageMetadata.read(getItem.invoke(adapter, index))
-                                        })
+                                        }, WeakReference(adapter), position, current)
                                     }.getOrNull()
                                 }
                                 if (message != null) bindings[row] = message
@@ -181,6 +183,103 @@ object MessageSniffer {
         return true
     }
 
+    fun replyTargetForView(view: View): MessageMetadata? {
+        val activity = active.get() ?: return null
+        val scope = chatNodes(activity.window.decorView)
+        val current = records(scope)
+        val talker = conversation(activity, scope, current) ?: return null
+        val ancestors = generateSequence(view) { it.parent as? View }.toSet()
+        return current.filter { it.first in ancestors }.mapNotNull { it.second.metadata }
+            .filter { it.talker == talker && it.isReplyTarget() }.distinct().singleOrNull()
+    }
+
+    fun suggestReply(view: View, expected: MessageMetadata): Boolean {
+        val target = replyTargetForView(view) ?: return false
+        if (target != expected) return false
+        return ui?.suggestReply(target.messageId) == true
+    }
+
+    fun currentReplyTalker(): String? {
+        val activity = active.get() ?: return null
+        val scope = chatNodes(activity.window.decorView)
+        return if (scope.isEmpty()) null else conversation(activity, scope, records(scope))
+    }
+
+    /** Captures a bounded window from the active loaded adapter at user click time. */
+    fun replyContext(requireBottom: Boolean = true): ReplyContext {
+        val activity = active.get() ?: error("请先打开聊天")
+        val scope = chatNodes(activity.window.decorView)
+        val rows = records(scope)
+        val talker = conversation(activity, scope, rows) ?: error("暂未识别当前聊天，请重新进入后重试")
+        val list = scope.filterIsInstance<ListView>().firstOrNull { view ->
+            (0 until view.childCount).any { MessageMetadata.read(runCatching { view.getItemAtPosition(view.firstVisiblePosition + it) }.getOrNull())?.talker == talker }
+        }
+        val adapter: Any
+        val read: (Int) -> MessageMetadata?
+        val count: Int
+        val scrollingView: View
+        if (list != null) {
+            adapter = list.adapter
+            count = list.count
+            read = { index -> MessageMetadata.read(runCatching { list.getItemAtPosition(index) }.getOrNull()) }
+            scrollingView = list
+        } else {
+            val bound = rows.map { it.second }.filter { it.talker == talker && it.adapter?.get() != null }.maxByOrNull { it.position }
+                ?: error("当前聊天列表暂不支持回复上下文，请重新进入聊天后重试")
+            adapter = bound.adapter!!.get() ?: error("聊天列表已变化，请重试")
+            val counter = adapter.javaClass.methods.firstOrNull {
+                it.parameterCount == 0 && it.name in setOf("getItemCount", "getCount") && it.returnType == Int::class.javaPrimitiveType
+            } ?: error("无法确认聊天记录范围，请重新进入聊天后重试")
+            count = counter.invoke(adapter) as Int
+            val getItem = adapter.javaClass.getMethod("getItem", Int::class.javaPrimitiveType)
+            read = { index -> MessageMetadata.read(runCatching { getItem.invoke(adapter, index) }.getOrNull()) }
+            val row = rows.firstOrNull { it.second.adapter?.get() === adapter }?.first ?: error("聊天已变化")
+            scrollingView = generateSequence(row.parent as? View) { it.parent as? View }.firstOrNull { view ->
+                generateSequence(view.javaClass as Class<*>) { it.superclass }.any { it.name.endsWith(".RecyclerView") }
+            } ?: error("未识别聊天滚动区域")
+        }
+        if (requireBottom && scrollingView.canScrollVertically(1)) error("请先回到聊天底部，再生成这次的回复")
+        val messages = mutableListOf<MessageMetadata>()
+        var textCount = 0
+        for (index in (count - 1) downTo (count - 400).coerceAtLeast(0)) {
+            val record = read(index) ?: continue
+            if (record.talker != talker) continue
+            messages += record
+            if (record.type == 1 && ++textCount >= ReplyContext.MAX_MESSAGES) break
+        }
+        val result = ReplyContext.collect(talker, messages.asReversed())
+        check(result.messages.isNotEmpty()) { "当前没有可用的文字消息，暂时无法生成回复" }
+        return result.copy(trimmed = result.trimmed || messages.size < count)
+    }
+
+    /** Cheap live boundary check, without re-reading 100 messages on every scan. */
+    fun replyBoundary(): Long? {
+        val activity = active.get() ?: return null
+        val scope = chatNodes(activity.window.decorView)
+        val rows = records(scope)
+        val talker = conversation(activity, scope, rows) ?: return null
+        for (list in scope.filterIsInstance<ListView>()) {
+            for (index in list.count - 1 downTo (list.count - 20).coerceAtLeast(0)) {
+                val record = MessageMetadata.read(runCatching { list.getItemAtPosition(index) }.getOrNull())
+                if (record?.talker == talker && record.messageId > 0) return record.messageId
+            }
+        }
+        val adapter = rows.map { it.second }.firstNotNullOfOrNull {
+            it.adapter?.get()?.takeIf { _ -> it.talker == talker }
+        } ?: return null
+        return runCatching {
+            val counter = adapter.javaClass.methods.firstOrNull {
+                it.parameterCount == 0 && it.name in setOf("getItemCount", "getCount") && it.returnType == Int::class.javaPrimitiveType
+            } ?: return@runCatching null
+            val count = counter.invoke(adapter) as Int
+            val getter = adapter.javaClass.getMethod("getItem", Int::class.javaPrimitiveType)
+            (count - 1 downTo (count - 20).coerceAtLeast(0)).firstNotNullOfOrNull { index ->
+                MessageMetadata.read(runCatching { getter.invoke(adapter, index) }.getOrNull())
+                    ?.takeIf { it.talker == talker && it.messageId > 0 }?.messageId
+            }
+        }.getOrNull()
+    }
+
     // Re-read the visible conversation at tap time, including during rapid chat navigation.
     fun setChatEnabled(talker: String?, enabled: Boolean): Boolean = runCatching {
         if (talker == null) return@runCatching false
@@ -223,7 +322,7 @@ object MessageSniffer {
                 MessageMetadata.read(item)?.let { current ->
                     records += row to BoundMessage(current.talker, MessageContext.collect(current, position) { previous ->
                         MessageMetadata.read(list.getItemAtPosition(previous))
-                    })
+                    }, metadata = current)
                 }
             }
         }

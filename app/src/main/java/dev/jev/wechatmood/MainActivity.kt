@@ -57,6 +57,16 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.toolbar.title = getString(R.string.app_title_version, BuildConfig.VERSION_NAME)
+        dev.jev.wechatmood.ui.ReplySettingsUi(this, binding.replySettings, uiScope, ::openHelp)
+        binding.modelTabs.addOnButtonCheckedListener { _, id, checked ->
+            if (checked) {
+                binding.emotionPanel.visibility = if (id == R.id.tabEmotion) View.VISIBLE else View.GONE
+                binding.replySettings.root.visibility = if (id == R.id.tabReply) View.VISIBLE else View.GONE
+                binding.pageScroll.scrollTo(0, 0)
+            }
+        }
+        if (savedInstanceState?.getBoolean("reply_tab") == true || intent.getBooleanExtra("reply_tab", false))
+            binding.modelTabs.check(R.id.tabReply)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -403,5 +413,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("reply_tab", binding.modelTabs.checkedButtonId == R.id.tabReply)
+        super.onSaveInstanceState(outState)
+    }
     override fun onDestroy() { uiScope.cancel(); super.onDestroy() }
 }
