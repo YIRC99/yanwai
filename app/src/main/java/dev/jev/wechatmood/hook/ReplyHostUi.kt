@@ -8,17 +8,16 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
-import android.graphics.Color
-import android.graphics.Rect
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
+import android.text.InputFilter
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import androidx.core.widget.doAfterTextChanged
 import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
@@ -30,39 +29,34 @@ import java.lang.ref.WeakReference
 class ReplyHostUi(private val activity: Activity) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val session = ReplySession()
+    private val history = ReplyHistory.process
+    private val plusEntry = ReplyPlusEntry(activity) { open() }
     private var job: Job? = null
     private var talker: String? = null
-    private var toolbar: LinearLayout? = null
-    private var undoButton: TextView? = null
     private var dialog: Dialog? = null
     private var snapshot: ReplyContext? = null
     private var pendingDraft: DraftReplacement? = null
-    private var draftView = WeakReference<EditText>(null)
-    private var paddedList: View? = null
-    private var originalPadding: IntArray? = null
+    private var undoView = WeakReference<EditText>(null)
     private var newMessageNotice: TextView? = null
     private var currentSuggestion: ReplySuggestion? = null
-    private var focusId: Long? = null
-    private val dark get() = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-    private val surface get() = Color.parseColor(if (dark) "#17201E" else "#F3F6F4")
-    private val ink get() = Color.parseColor(if (dark) "#E1EEE6" else "#182B24")
-    private val muted get() = Color.parseColor(if (dark) "#A7BBB4" else "#53675F")
-    private val accent get() = Color.parseColor(if (dark) "#8CD7C0" else "#20685C")
+    private var invalidateRequest: (() -> Unit)? = null
 
     fun update(currentTalker: String?) {
         if (talker != currentTalker) { hide(); talker = currentTalker }
         if (currentTalker == null) return
-        ensureToolbar()
+        runCatching { plusEntry.update(footer()) }.onFailure { MoodLog.w("REPLY_PLUS_UPDATE_FAILED ${it.javaClass.simpleName}") }
         if (dialog?.isShowing == true) {
-            if (!ModulePrefs.replyConsent || !ModulePrefs.replySettings().isConfigured) { dialog?.dismiss(); return }
-            val latest = MessageSniffer.replyBoundary()
-            val captured = snapshot
-            if (captured != null && latest != null && latest != captured.latestLoadedId && latest !in captured.messages.map { it.id }) {
-                newMessageNotice?.visibility = View.VISIBLE
+            if ((!ModulePrefs.replyConsent || !ModulePrefs.replySettings().isConfigured) && job?.isActive == true) {
+                job?.cancel(); session.cancel(); invalidateRequest?.invoke()
             }
+            updateNotice()
         }
     }
-
+    private fun updateNotice() {
+        val captured = snapshot ?: return
+        val latest = MessageSniffer.replyBoundary() ?: return
+        newMessageNotice?.visibility = if (latest != captured.latestLoadedId && captured.messages.none { it.id == latest }) View.VISIBLE else View.GONE
+    }
     private fun footer(): View? = views(activity.window.decorView).singleOrNull {
         it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" && it.isShown
     }
@@ -70,208 +64,232 @@ class ReplyHostUi(private val activity: Activity) {
         views(root).filterIsInstance<EditText>().filter { it.isShown && it.isEnabled }.singleOrNull()
     }
 
-    private fun ensureToolbar() {
-        val footer = footer() ?: return
-        val root = activity.window.decorView as? FrameLayout ?: return
-        val rect = Rect()
-        if (!footer.getGlobalVisibleRect(rect)) return
-        val rootPosition = IntArray(2).also(root::getLocationOnScreen)
-        val footerPosition = IntArray(2).also(footer::getLocationOnScreen)
-        val bar = toolbar ?: LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), 0, dp(8), 0); setBackgroundColor(surface)
-            addView(label("言外", 12f, muted), LinearLayout.LayoutParams(0, -2, 1f))
-            undoButton = action("撤销填入") { undoDraft() }.also {
-                it.visibility = View.GONE; addView(it, LinearLayout.LayoutParams(-2, dp(48)))
-            }
-            addView(action("帮我回") { open() }, LinearLayout.LayoutParams(-2, dp(48)))
-            root.addView(this, FrameLayout.LayoutParams(-1, dp(48)))
-            toolbar = this
-        }
-        bar.layoutParams = (bar.layoutParams as FrameLayout.LayoutParams).apply {
-            width = rect.width(); height = dp(48); gravity = Gravity.TOP or Gravity.LEFT
-            leftMargin = footerPosition[0] - rootPosition[0]
-            topMargin = (footerPosition[1] - rootPosition[1] - dp(48)).coerceAtLeast(0)
-        }
-        val chatRoot = generateSequence(footer.parent as? View) { it.parent as? View }
-            .firstOrNull { it.javaClass.name.endsWith(".ChattingUILayout") } ?: return
-        val list = views(chatRoot).firstOrNull { it is ListView || isRecycler(it) }
-        if (list != null && paddedList !== list) {
-            restorePadding()
-            val atBottom = !list.canScrollVertically(1)
-            paddedList = list
-            originalPadding = intArrayOf(list.paddingLeft, list.paddingTop, list.paddingRight, list.paddingBottom)
-            list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight, list.paddingBottom + dp(48))
-            if (atBottom) list.post {
-                if (paddedList === list && MessageSniffer.currentReplyTalker() == talker) {
-                    if (list is ListView) list.setSelection((list.count - 1).coerceAtLeast(0))
-                    else runCatching { list.javaClass.getMethod("scrollBy", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).invoke(list, 0, dp(48)) }
-                }
-            }
-        }
-    }
-
     fun open(focusMessageId: Long? = null): Boolean {
-        if (MessageSniffer.currentReplyTalker() != talker || talker == null) return false
+        val selectedTalker = talker ?: return false
+        if (MessageSniffer.currentReplyTalker() != selectedTalker) return false
         if (dialog?.isShowing == true) return true
-        if (!ModulePrefs.replyConsent || !ModulePrefs.replySettings().isConfigured) {
-            AlertDialog.Builder(activity).setTitle("先连接回复模型")
-                .setMessage("在言外「回复建议」中填写 OpenAI 兼容接口，并开启「允许手动生成回复建议」。所选聊天、发送人、时间和草稿会发给你配置的模型。")
-                .setPositiveButton("去配置") { _, _ -> openSettings() }.setNegativeButton("稍后", null).show()
-            return true
+        val remembered = history.recall(selectedTalker, focusMessageId)
+        if (remembered == null && !canGenerate()) { configure(); return true }
+        // Reopening saved content must not depend on scrolling to the latest message or text input mode.
+        val captured = remembered?.context ?: runCatching { MessageSniffer.replyContext() }.getOrElse {
+            toast(it.message ?: "读取聊天失败"); return true
         }
-        val captured = runCatching { MessageSniffer.replyContext() }.getOrElse { toast(it.message ?: "读取聊天失败"); return true }
-        if (captured.talker != talker) return false
-        val input = editor() ?: run { toast("请切换到文字输入，再点帮我回"); return true }
-        focusId = focusMessageId
-        snapshot = captured
-        currentSuggestion = null
-        val draft = input.text.toString()
-        draftView = WeakReference(input)
-        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.hideSoftInputFromWindow(input.windowToken, 0)
+        if (captured.talker != selectedTalker) return false
+        val initialEditor = editor()
+        if (remembered == null && initialEditor == null) { toast("请先切换到文字输入"); return true }
+        var baselineDraft = initialEditor?.text?.toString().orEmpty()
+        var draftView = WeakReference(initialEditor)
+        val focusId = remembered?.focusMessageId ?: focusMessageId
+        snapshot = captured; currentSuggestion = remembered?.suggestion
+        initialEditor?.let { (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(it.windowToken, 0) }
+        val theme = ReplyTheme(activity)
+        fun dp(value: Int) = theme.dp(value)
+        fun action(text: String, primary: Boolean = false, quiet: Boolean = false, click: () -> Unit = {}) =
+            theme.action(text, primary, quiet) {
+                runCatching(click).onFailure { MoodLog.w("REPLY_UI_FAILED ${it.javaClass.simpleName}"); toast("操作失败，请重试") }
+            }
+        fun gap(size: Int) = View(activity).apply { layoutParams = LinearLayout.LayoutParams(1, dp(size)) }
+        fun line() = View(activity).apply { setBackgroundColor(theme.border) }
         val window = Dialog(activity)
         dialog = window
         val body = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(12), dp(20), dp(12)); setBackgroundColor(surface)
+            orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(10), dp(18), dp(12))
+            background = theme.shape(theme.surface, 24); elevation = dp(12).toFloat(); isFocusableInTouchMode = true
         }
+        body.addView(View(activity).apply { background = theme.shape(theme.border, 2) },
+            LinearLayout.LayoutParams(dp(32), dp(4)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(6) })
         val heading = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
-        heading.addView(label("这次怎么回", 21f).apply { setTypeface(typeface, Typeface.BOLD) }, LinearLayout.LayoutParams(0, -2, 1f))
-        heading.addView(action("关闭") { window.dismiss() })
+        val title = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(theme.label("帮我回", 20f, bold = true))
+            addView(theme.label("言外 ${BuildConfig.VERSION_NAME} · 狗头军师", 11f, theme.muted))
+        }
+        heading.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        heading.addView(action("关闭", quiet = true) { window.dismiss() }, LinearLayout.LayoutParams(dp(56), dp(48)))
         body.addView(heading)
-        body.addView(label("言外 ${BuildConfig.VERSION_NAME} · 回复逻辑来自狗头军师", 12f, muted))
-        val range = action(rangeText(captured)) { showEvidence(snapshot ?: captured) }
-        body.addView(range)
-        val stale = action("有新消息，点此更新建议") { }
-        stale.visibility = View.GONE
-        newMessageNotice = stale
-        body.addView(stale)
-        val scroll = ScrollView(activity).apply { isFillViewport = true }
-        val results = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        val state = label("正在结合聊天和知识资料想一句合适的回复…", 14f, muted).apply {
+        val scroll = ScrollView(activity).apply { isFillViewport = false; clipToPadding = false }
+        val results = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(12)) }
+        val metadata = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
+        val state = theme.label(if (remembered == null) "准备生成" else "上次建议", 12f, theme.muted).apply {
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        val answer = label("", 20f).apply { setTextIsSelectable(true); setPadding(0, dp(16), 0, dp(12)) }
-        val reason = label("", 14f, muted).apply { visibility = View.GONE }
-        val explanation = action("为什么这样回") { reason.visibility = if (reason.visibility == View.VISIBLE) View.GONE else View.VISIBLE }
-        explanation.visibility = View.GONE
-        val instruction = EditText(activity).apply {
-            hint = "补充想法，例如：想拒绝，但别太冷淡"; textSize = 14f; setTextColor(ink); setHintTextColor(muted)
-            maxLines = 3; minHeight = dp(48); setPadding(dp(8), dp(8), dp(8), dp(8))
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            filters = arrayOf(android.text.InputFilter.LengthFilter(2000)); isSaveEnabled = false
+        metadata.addView(state, LinearLayout.LayoutParams(0, -2, 1f))
+        val range = action(rangeText(captured), quiet = true) { snapshot?.let(::showEvidence) }
+        metadata.addView(range); results.addView(metadata)
+        val stale = action("有新消息 · 更新建议")
+        stale.visibility = View.GONE; newMessageNotice = stale
+        results.addView(stale, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(8) })
+        val progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true; visibility = View.GONE; indeterminateTintList = ColorStateList.valueOf(theme.accent)
         }
-        listOf(state, answer, explanation, reason, instruction).forEach(results::addView)
-        val actions = LinearLayout(activity)
-        val another = action("换一句") { }
-        val shorter = action("更简短") { }
-        val supplement = action("按想法重写") { }
-        listOf(another, shorter, supplement).forEach { actions.addView(it, LinearLayout.LayoutParams(0, dp(48), 1f)) }
-        results.addView(actions)
-        scroll.addView(results)
-        body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        val use = action("填入输入框") { }
-        use.background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(accent) }
-        use.setTextColor(if (dark) Color.parseColor("#12362D") else Color.parseColor("#F3F6F4"))
-        val copy = action("复制回复") {
+        results.addView(progress, LinearLayout.LayoutParams(-1, dp(3)).apply { bottomMargin = dp(6) })
+        val replyCard = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = theme.shape(theme.card, 16, theme.border); elevation = dp(2).toFloat()
+        }
+        replyCard.addView(theme.label("建议回复", 12f, theme.accent, true))
+        val answer = theme.label(remembered?.suggestion?.text ?: "正在想一句合适的回复…", 18f).apply {
+            setTextIsSelectable(true); setPadding(0, dp(8), 0, dp(8))
+        }
+        replyCard.addView(answer)
+        val reasonBlock = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        reasonBlock.addView(line(), LinearLayout.LayoutParams(-1, dp(1).coerceAtLeast(1)).apply { topMargin = dp(4); bottomMargin = dp(10) })
+        reasonBlock.addView(theme.label("为什么这样回", 12f, theme.muted, true))
+        val reason = theme.label(remembered?.suggestion?.reason.orEmpty(), 13f, theme.muted).apply { setPadding(0, dp(4), 0, 0) }
+        reasonBlock.addView(reason); reasonBlock.visibility = if (reason.text.isBlank()) View.GONE else View.VISIBLE
+        replyCard.addView(reasonBlock)
+        results.addView(replyCard, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(2); rightMargin = dp(2) })
+        results.addView(gap(10))
+        val another = action("换一句")
+        val shorter = action("更简短")
+        val rewrites = LinearLayout(activity)
+        rewrites.addView(another, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
+        rewrites.addView(shorter, LinearLayout.LayoutParams(0, dp(48), 1f)); results.addView(rewrites)
+        val instruction = EditText(activity).apply {
+            hint = "例如：委婉拒绝，留个下次见面的机会"
+            textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
+            gravity = Gravity.TOP or Gravity.START; minLines = 2; maxLines = 4
+            setPadding(dp(12), dp(12), dp(12), dp(12)); background = theme.shape(theme.card, 12, theme.border)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            filters = arrayOf(InputFilter.LengthFilter(2000)); isSaveEnabled = false
+            setText(remembered?.direction.orEmpty())
+            setOnFocusChangeListener { _, focused -> background = theme.shape(theme.card, 12, if (focused) theme.accent else theme.border) }
+        }
+        val notesHeading = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
+        notesHeading.addView(theme.label("补充想法", 13f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+        val supplement = action("按想法重写", quiet = true)
+        notesHeading.addView(supplement)
+        results.addView(gap(4)); results.addView(notesHeading); results.addView(instruction, LinearLayout.LayoutParams(-1, -2))
+        scroll.addView(results); body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        body.addView(line(), LinearLayout.LayoutParams(-1, dp(1).coerceAtLeast(1)))
+        val undo = action("撤销上次填入", quiet = true)
+        undo.visibility = if (pendingDraft == null) View.GONE else View.VISIBLE; body.addView(undo)
+        val use = action("填入输入框", primary = true)
+        val copy = action("复制") {
             currentSuggestion?.let { suggestion ->
                 (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(ClipData.newPlainText("言外回复建议", suggestion.text))
-                toast("已复制，你可以修改后再发送")
+                toast("已复制")
             }
         }
-        body.addView(use, LinearLayout.LayoutParams(-1, dp(48)))
-        body.addView(copy)
+        val footerActions = LinearLayout(activity).apply { setPadding(0, dp(10), 0, 0) }
+        footerActions.addView(copy, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(10) })
+        footerActions.addView(use, LinearLayout.LayoutParams(0, dp(48), 2f)); body.addView(footerActions)
+        body.addView(theme.label("填入后由你发送", 11f, theme.muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(7), 0, 0) })
+        var busy = false
+        fun controls(generating: Boolean) {
+            busy = generating; progress.visibility = if (generating) View.VISIBLE else View.GONE
+            another.isEnabled = !generating; shorter.isEnabled = !generating && currentSuggestion != null
+            supplement.isEnabled = !generating && instruction.text.toString().isNotBlank()
+            instruction.isEnabled = !generating; stale.isEnabled = !generating
+            copy.isEnabled = currentSuggestion != null; use.isEnabled = currentSuggestion != null
+        }
+        instruction.doAfterTextChanged { supplement.isEnabled = !busy && it.toString().isNotBlank() }
+        invalidateRequest = { state.text = "请重新配置回复模型"; controls(false) }
+        fun remember() {
+            val successful = currentSuggestion ?: return
+            val evidence = snapshot ?: return
+            history.remember(RememberedReply(evidence, successful, instruction.text.toString(), focusId))
+        }
         fun generate(direction: String = "") {
-            if (!ModulePrefs.replyConsent || MessageSniffer.currentReplyTalker() != captured.talker) {
-                window.dismiss(); return
-            }
+            if (MessageSniffer.currentReplyTalker() != selectedTalker) { window.dismiss(); return }
+            if (!canGenerate()) { configure(); return }
+            val current = runCatching { MessageSniffer.replyContext() }.getOrElse { toast(it.message ?: "读取聊天失败"); return }
+            if (current.talker != selectedTalker) { window.dismiss(); return }
+            val input = editor() ?: run { toast("请先切换到文字输入"); return }
+            baselineDraft = input.text.toString(); draftView = WeakReference(input)
             job?.cancel()
-            val current = snapshot ?: return
             val config = ModulePrefs.replySettings()
             val ticket = session.begin(current.talker, current.fingerprint)
             val previous = currentSuggestion?.text.orEmpty()
-            currentSuggestion = null
-            answer.text = ""; reason.visibility = View.GONE; explanation.visibility = View.GONE
-            state.text = "正在生成，可随时关闭。不会自动发送。"
-            use.isEnabled = false; copy.isEnabled = false
-            listOf(another, shorter, supplement).forEach { it.isEnabled = false }
+            state.text = "正在生成…"; state.setTextColor(theme.muted)
+            if (currentSuggestion == null) answer.text = "正在想一句合适的回复…"
+            controls(true)
             job = scope.launch {
                 try {
                     val knowledge = withContext(Dispatchers.IO) { ReplyKnowledge.load(activity) }
-                    val result = ReplyHttpClient().generate(config, current, draft, direction, knowledge, previous, focusId)
+                    val suggestion = ReplyHttpClient().generate(config, current, baselineDraft, direction, knowledge, previous, focusId)
                     val activeConfig = ModulePrefs.replySettings()
                     if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || window !== dialog || !ModulePrefs.replyConsent) return@launch
                     if (activeConfig.endpoint != config.endpoint || activeConfig.model != config.model || activeConfig.apiKey != config.apiKey) {
-                        state.text = "回复配置已变化，请重新生成"; return@launch
+                        state.text = "配置已改变，请重试"; return@launch
                     }
-                    currentSuggestion = result
-                    answer.text = result.text; reason.text = result.reason
-                    explanation.visibility = if (result.reason.isBlank()) View.GONE else View.VISIBLE
-                    state.text = "建议回复 · 可修改后发送"
-                    use.isEnabled = true; copy.isEnabled = true
-                    another.text = "换一句"
+                    currentSuggestion = suggestion; snapshot = current
+                    answer.text = suggestion.text; reason.text = suggestion.reason
+                    reasonBlock.visibility = if (suggestion.reason.isBlank()) View.GONE else View.VISIBLE
+                    range.text = rangeText(current); state.text = "已生成"; another.text = "换一句"
+                    remember(); updateNotice()
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) {
                     if (session.accepts(ticket, MessageSniffer.currentReplyTalker()) && window === dialog) {
-                        state.text = e.message ?: "生成失败，请重试"; another.text = "重试"
+                        state.text = "生成失败"; state.setTextColor(theme.error); another.text = "重试"
+                        if (currentSuggestion == null) answer.text = e.message ?: "暂时无法生成，请重试"
+                        else toast(e.message ?: "生成失败，已保留上次建议")
                     }
                 } finally {
-                    if (session.accepts(ticket, talker)) listOf(another, shorter, supplement).forEach { it.isEnabled = true }
+                    if (session.accepts(ticket, talker) && window === dialog) controls(false)
                 }
             }
         }
         another.setOnClickListener { generate(instruction.text.toString().ifBlank { "换一种自然表达，不要重复上一条建议" }) }
         shorter.setOnClickListener { generate(instruction.text.toString() + "\n保持原意，更简短一点") }
-        supplement.setOnClickListener { generate(instruction.text.toString()) }
-        stale.setOnClickListener {
-            runCatching { MessageSniffer.replyContext() }.onSuccess {
-                if (it.talker == talker) {
-                    snapshot = it; range.text = rangeText(it); stale.visibility = View.GONE
-                    generate(instruction.text.toString())
-                }
-            }.onFailure { toast(it.message ?: "请回到聊天底部重试") }
+        supplement.setOnClickListener { if (instruction.text.toString().isNotBlank()) generate(instruction.text.toString()) }
+        stale.setOnClickListener { generate(instruction.text.toString()) }
+        undo.setOnClickListener {
+            undoDraft()?.let { original -> baselineDraft = original; draftView = WeakReference(editor()) }
+            undo.visibility = View.GONE
         }
         use.setOnClickListener {
             val suggestion = currentSuggestion ?: return@setOnClickListener
-            val editor = editor()
-            if (MessageSniffer.currentReplyTalker() != captured.talker || editor == null || editor !== draftView.get()) {
-                toast("聊天或输入框已变化，请重新生成"); window.dismiss(); return@setOnClickListener
+            val input = editor()
+            if (MessageSniffer.currentReplyTalker() != selectedTalker || input == null || input !== draftView.get()) {
+                toast("输入框已变化，请复制建议，或重新打开后填入"); return@setOnClickListener
             }
-            if (editor.text.toString() != draft) {
-                toast("草稿已经修改，请复制建议或重新打开，避免覆盖新内容"); return@setOnClickListener
-            }
-            pendingDraft = DraftReplacement(draft, suggestion.text)
-            editor.setText(suggestion.text); editor.setSelection(editor.text.length)
-            undoButton?.visibility = View.VISIBLE
-            window.dismiss(); editor.requestFocus()
+            if (input.text.toString() != baselineDraft) { toast("草稿已修改，请复制建议，避免覆盖新内容"); return@setOnClickListener }
+            // Reopening and filling the same suggestion must not replace the original undo record.
+            if (input.text.toString() == suggestion.text) { window.dismiss(); return@setOnClickListener }
+            pendingDraft = DraftReplacement(baselineDraft, suggestion.text); undoView = WeakReference(input)
+            input.setText(suggestion.text); input.setSelection(input.text.length)
+            window.dismiss(); input.requestFocus()
         }
+        controls(false)
         window.setContentView(body)
         window.setOnDismissListener {
-            job?.cancel(); session.cancel()
-            if (dialog === window) { dialog = null; newMessageNotice = null; snapshot = null; currentSuggestion = null }
+            if (dialog !== window) return@setOnDismissListener
+            remember(); job?.cancel(); session.cancel()
+            if (dialog === window) { dialog = null; newMessageNotice = null; snapshot = null; currentSuggestion = null; invalidateRequest = null }
         }
         window.window?.apply {
-            setBackgroundDrawableResource(android.R.color.transparent)
-            setGravity(Gravity.BOTTOM)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            setBackgroundDrawableResource(android.R.color.transparent); setGravity(Gravity.BOTTOM)
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND); setDimAmount(0.32f)
         }
         window.show()
-        window.window?.setLayout(-1, (activity.resources.displayMetrics.heightPixels * 0.66).toInt())
-        generate()
+        val available = activity.window.decorView.height.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
+        window.window?.setLayout(-1, minOf(dp(600), (available * 0.78f).toInt()))
+        body.requestFocus(); updateNotice()
+        if (remembered == null) generate()
         return true
     }
-
-    private fun undoDraft() {
+    private fun canGenerate() = ModulePrefs.replyConsent && ModulePrefs.replySettings().isConfigured
+    private fun configure() {
+        AlertDialog.Builder(activity).setTitle("先连接回复模型")
+            .setMessage("打开言外「回复建议」，配置模型并允许手动生成。")
+            .setPositiveButton("去配置") { _, _ -> openSettings() }.setNegativeButton("稍后", null).show()
+    }
+    private fun undoDraft(): String? {
         val input = editor()
-        if (input == null || input !== draftView.get() || MessageSniffer.currentReplyTalker() != talker) return
+        if (input == null || input !== undoView.get() || MessageSniffer.currentReplyTalker() != talker) return null
         val original = pendingDraft?.undo(input.text.toString())
         if (original == null) toast("内容已被修改或发送，不再覆盖")
         else { input.setText(original); input.setSelection(input.text.length); toast("已恢复原稿") }
-        pendingDraft = null; undoButton?.visibility = View.GONE
+        pendingDraft = null; undoView.clear()
+        return original
     }
-    private fun rangeText(context: ReplyContext): String = "参考 ${context.messages.size} 条文字 · 查看范围" + if (context.trimmed) "（部分截取）" else ""
+    private fun rangeText(context: ReplyContext) = "${context.messages.size} 条上下文  ›"
     private fun showEvidence(context: ReplyContext) {
-        val info = "仅含页面已加载片段；跳过 ${context.omittedMedia} 条非文字消息。\n\n" +
+        val info = "页面已加载片段${if (context.trimmed) "（部分截取）" else ""} · 跳过 ${context.omittedMedia} 条非文字\n\n" +
             context.messages.joinToString("\n\n") { "${it.speaker} · ${ReplyProtocol.formatTime(it.time)}\n${it.text}" }
         AlertDialog.Builder(activity).setTitle("本次参考的聊天").setMessage(info).setPositiveButton("关闭", null).show()
     }
@@ -281,22 +299,9 @@ class ReplyHostUi(private val activity: Activity) {
     }.onFailure { toast("请从桌面打开言外，进入回复建议") }
     fun hide() {
         dialog?.dismiss(); job?.cancel(); session.cancel()
-        toolbar?.let { (it.parent as? ViewGroup)?.removeView(it) }; toolbar = null
-        restorePadding(); pendingDraft = null; draftView.clear(); undoButton = null; talker = null
+        plusEntry.clear(); pendingDraft = null; undoView.clear(); talker = null
     }
     fun dispose() { hide(); scope.cancel() }
-    private fun restorePadding() {
-        originalPadding?.let { p -> paddedList?.setPadding(p[0], p[1], p[2], p[3]) }
-        paddedList = null; originalPadding = null
-    }
-    private fun label(value: String, size: Float, color: Int = ink) = TextView(activity).apply {
-        text = value; textSize = size; setTextColor(color); setLineSpacing(dp(3).toFloat(), 1f)
-    }
-    private fun action(value: String, onClick: () -> Unit) = label(value, 14f, accent).apply {
-        gravity = Gravity.CENTER; minHeight = dp(48); setPadding(dp(8), dp(4), dp(8), dp(4))
-        isClickable = true; isFocusable = true; contentDescription = value
-        setOnClickListener { runCatching(onClick).onFailure { MoodLog.w("REPLY_UI_FAILED ${it.javaClass.simpleName}"); toast("操作失败，请重新打开重试") } }
-    }
     private fun views(root: View): List<View> = buildList {
         fun visit(v: View, depth: Int) {
             if (depth > 40 || size > 4000 || v.visibility != View.VISIBLE) return
@@ -304,7 +309,5 @@ class ReplyHostUi(private val activity: Activity) {
         }
         visit(root, 0)
     }
-    private fun isRecycler(view: View) = generateSequence(view.javaClass as Class<*>) { it.superclass }.any { it.name.endsWith(".RecyclerView") }
-    private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
-    private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).toInt()
+    private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
 }

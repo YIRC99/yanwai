@@ -111,14 +111,15 @@ class HostUi(private val activity: Activity) {
         val selectedTalker = talker
         val selectedMessages = messages
         dialog = AlertDialog.Builder(activity).setTitle("言外 · $status")
-            .setItems(arrayOf("分析本屏", "助手设置", "导出运行日志")) { _, which ->
+            .setItems(arrayOf("帮我回 / 上次建议", "分析本屏", "助手设置", "导出运行日志")) { _, which ->
                 when (which) {
-                    0 -> if (MessageSniffer.setChatEnabled(selectedTalker, true)) {
+                    0 -> replyUi.open()
+                    1 -> if (MessageSniffer.setChatEnabled(selectedTalker, true)) {
                         selectedMessages.forEach { SignalAnalyzer.retryFailure(it.key) }
                         MessageSniffer.refresh()
                     } else Diagnostics.showFailure(activity, "分析开关未保存", "当前聊天未识别、已变化或本地保存失败，请重新进入聊天后重试。")
-                    1 -> openSettings()
-                    2 -> Diagnostics.show(activity)
+                    2 -> openSettings()
+                    3 -> Diagnostics.show(activity)
                 }
             }
             .setNegativeButton("关闭", null).create().also { it.show() }

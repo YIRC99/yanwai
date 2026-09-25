@@ -14,7 +14,7 @@
                 android:textSize="26sp" android:textColor="@color/text_primary" android:layout_marginTop="10dp"
                 android:fontFamily="sans-serif-medium" android:accessibilityHeading="true" />
             <TextView style="@style/Yanwai.Body" android:layout_marginTop="8dp"
-                android:text="在聊天输入框上方点「帮我回」，结合整段聊天给一句自然的建议。填入后，你可以修改，再自己发送。" />
+                android:text="在微信聊天「＋」面板点「帮我回」，结合整段聊天给出建议。关闭后重开可查看上次内容，填入后自己发送。" />
             <TextView android:id="@+id/replyStatus" style="@style/Yanwai.Badge"
                 android:layout_marginTop="16dp" android:text="尚未配置" />
         </LinearLayout>
