@@ -7,6 +7,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReplyHttpCancellationTest {
+    @Test fun `leaving settings cancels pending model discovery and ignores late failure`() = runBlocking {
+        lateinit var pending: PendingCall
+        val client = ReplyModelsClient(Call.Factory { PendingCall(it).also { call -> pending = call } })
+        val job = launch(Dispatchers.Unconfined) {
+            client.list(ReplySettings.fromInput("https://example.invalid/v1", "fake-key", ""))
+            fail("Cancelled model discovery must not finish")
+        }
+        assertTrue(pending.isExecuted())
+        job.cancelAndJoin()
+        assertTrue(pending.isCanceled())
+        pending.callback.onFailure(pending, java.io.IOException("late failure"))
+        assertTrue(job.isCancelled)
+    }
+
     @Test fun `closing reply cancels network and ignores late failure`() = runBlocking {
         lateinit var pending: PendingCall
         val client = ReplyHttpClient(Call.Factory { PendingCall(it).also { call -> pending = call } })
