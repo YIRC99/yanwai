@@ -31,6 +31,16 @@ class ReplyProtocolTest {
         assertThrows(IllegalStateException::class.java) { ReplyProtocol.parse("{\"choices\":[]}") }
     }
 
+    @Test fun `model sees whether evidence was expanded or limited to loaded page`() {
+        for (source in ReplyContextSource.entries) {
+            val payload = ReplyProtocol.payload(settings, context.copy(source = source), "", "", "")
+            val evidence = JSONObject(payload.getJSONArray("messages").getJSONObject(1).getString("content"))
+            assertEquals(source.name, evidence.getString("context_source"))
+            assertEquals(source == ReplyContextSource.LOADED_PAGE, evidence.getBoolean("page_only"))
+            assertFalse(evidence.getBoolean("media_included"))
+        }
+    }
+
     @Test fun `http detects business errors and never returns raw sensitive service body`() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody(envelope("{\"reply\":\"好的\",\"reason\":\"确认\"}")))

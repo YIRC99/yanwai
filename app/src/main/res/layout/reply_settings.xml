@@ -82,7 +82,7 @@
         android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone"
         android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
     <TextView style="@style/Yanwai.Body" android:layout_marginTop="16dp"
-        android:text="默认参考最近最多 100 条已加载消息，文字总长最多 48,000 字符。不会读取完整聊天数据库；媒体内容不参与理解。实际参考范围会在回复面板里展示。" />
+        android:text="生成时读取当前聊天的最近最多 100 条本机文字记录，总长最多 48,000 字符。历史不可用时仅使用页面消息并明确提示；面板可查看来源、时间及原文。图片、语音等不参与理解。" />
     <TextView style="@style/Yanwai.Section" android:text="回复逻辑来自狗头军师" />
     <TextView style="@style/Yanwai.Body" android:text="基于开源项目 goutoujunshi 的回复流程与知识资料，覆盖恋爱、暧昧、关系沟通等场景。原始知识完整随应用打包，由你配置的 LLM 生成回复，言外负责聊天上下文和交互适配。" />
     <com.google.android.material.button.MaterialButton android:id="@+id/knowledgeSource"

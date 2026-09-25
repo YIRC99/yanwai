@@ -27,7 +27,11 @@
 
 ## 上下文与知识
 
-聊天来自当前页面已加载的 adapter，不读取完整数据库。向前最多检查 400 个已加载位置，选择最近最多 100 条双方纯文字，文字总量最多 48,000 UTF-16 单位。群聊保留成员标识；私聊标为「我 / 对方」。时间来自 `field_createTime`，缺失显示未知，不猜测。图片、语音、引用卡片等非纯文本不理解，报告跳过数量。不会继承 Jev 的单条 1000 字限制。
+主动生成先从当前页面取得同一聊天的文字锚点，再在 IO 线程复用微信已打开的 WCDB `EnMicroMsg.db`，核对锚点的 ID、时间、发送人及正文，然后按 `talker` 参数查询 `message` 表最近 101 条合格文字（多一条用于判断截取），按时间和 ID 排序后保留最近最多 100 条，文字总量最多 48,000 UTF-16 单位。不依赖手动向上滚动，不遍历联系人，不打开数据库文件、不读取密钥、不写入或关闭微信数据库；不读取已清理或仅存在另一台设备上的记录。
+
+兼容 `com.tencent.wcdb.compat.SQLiteDatabase` 和旧版 `com.tencent.wcdb.database.SQLiteDatabase` 的查询入口，只保留最多四个主库弱引用。表结构及新旧入口依据 [WeKit 数据服务](https://github.com/Ujhhgtg/WeKit/blob/bdc7f18033d87a2f6307d2caedfdc6502986a401/app/src/main/java/dev/ujhhgtg/wekit/features/api/core/WeDatabaseApi.kt)、[查询监听](https://github.com/Ujhhgtg/WeKit/blob/bdc7f18033d87a2f6307d2caedfdc6502986a401/app/src/main/java/dev/ujhhgtg/wekit/features/api/core/WeDatabaseListenerApi.kt)；反射方法签名核对了 [腾讯 WCDB 兼容接口](https://github.com/Tencent/wcdb/blob/39dd797099d41cf1953d5668acd8cb608016c599/src/java/compat/src/main/java/com/tencent/wcdb/compat/SQLiteDatabase.java)。这里是独立实现的只读窄接口，并未接入上游批量修改、发送或导出能力；具体微信版本仍需实机确认。
+
+数据库不可用或锚点不匹配时，退回页面最多 400 个已加载位置里的文字，并显式提示「仅参考页面消息」，模型也收到来源与不完整标记。参考入口展示实际条数、来源、时间范围和原文；历史成功也只代表本机的近期文字，不声称完整聊天。群聊保留成员标识，私聊标为「我 / 对方」。时间缺失显示未知；图片、语音及引用卡片不参与理解。历史查询不统计全部媒体总数，页面回退才报告其已扫描片段的非文字跳过数。不会继承 Jev 的单条 1000 字限制。
 
 回复逻辑与原始知识来自 [狗头军师 goutoujunshi](https://github.com/shengjidaguai-china/goutoujunshi)，固定提交 `6db7354a4002dc7c448a9c87ffdad8132570c9d3`。`app/src/main/assets/goutoujunshi/` 保存原始 SKILL、全部 43 份参考 Markdown、MIT LICENSE 和来源记录，合计 44 份规则/知识文档。完整资料随每次回复请求送入模型，适合长上下文模型，费用与等待时间取决于所选服务商。用户可在设置页阅读归属和完整许可证。
 
@@ -38,6 +42,7 @@
 - `ReplySettings` 独立配置，通过现有受限 Provider 和签名广播传入微信，只在内存保留副本。
 - `ReplyProvider / ReplyProfiles` 提供预设、分账户持久化及旧配置迁移；`ReplyModelsClient` 使用同一 Base URL 下的 `GET /models`、Bearer 鉴权、40 秒总超时、1 MiB 响应上限，禁止重定向转发 Key。过滤明确的非文本模型；未知模型保留给用户检测，不宣称列表中的模型均兼容。
 - `ReplyContext` 控制消息数量、总长度、身份及时间；`ReplySession` 阻止取消或替换后的回调落地。
+- `ReplyDatabaseHistory / ReplyHistoryReader` 负责宿主查询句柄、同聊天锚点核对、参数化限量查询和透明回退。只有用户生成/重写时查询，重开缓存和定时 UI 检查不查库。查询完成、上传之前再次核对会话、许可、配置及请求状态；取消后不上传结果，游标始终关闭，微信数据库所有权不变。日志仅记录来源、条数及截取标志。
 - `ReplyHistory` 为有界进程缓存，仅在生成成功或关闭已成功建议时保存；与取消请求、关闭视图分离。
 - `ReplyProtocol / ReplyHttpClient` 负责提示、响应校验、受限读取、HTTP 超时与取消，不输出密钥或服务商原始错误正文。
 - `ReplyHostUi / ReplyTheme` 使用有显式背景、描边、反馈态的宿主原生控件，模块资源只通过模块 Context 读取知识资产。不会在微信 UI 中引用模块资源 ID。`ReplyPlusEntry` 匹配 AppPanel → 单一 LinearLayout → MMFlipper 的结构，包裹原内容并给其剩余高度，保留原 LayoutParams 用于恢复；不依赖混淆资源 ID，不替换原生功能点击。
@@ -50,7 +55,7 @@
 1. 两个设置页分别配置、切换、保存；六家回复供应商与自定义分别记住 Key 和模型。升级旧配置后切换保存，再切回旧供应商，确认旧 Key/模型仍在。
 2. 在回复页获取模型、下拉选择/输入筛选、手动填写；更换 Key 清除旧列表，错误 Key/不支持列表时可修正并重试。GLM/豆包参考目录明确区别于实时列表，选定模型后再检测回复。
 3. 私聊和群聊点「＋」，确认顶部出现「帮我回」，原有照片/拍摄/文件及分页仍可用，键盘/表情切换正常；收起后聊天无横条或留白。若未出现，用长按「分析」的备用入口，并反馈实际面板布局。
-4. 连续收几条消息再生成，参考范围包含双方、时间、最新内容和长文本。长按入口不产生引用框。
+4. 重启微信后进入已有超过 100 条文字的私聊，不向上翻页，点「帮我回」或对旧建议点「换一句」；正常应显示「100 条 · 本机历史」（超长文本可能因总长度限制更少），时间范围应覆盖首屏之前的消息。短聊天应显示实际数量；读取失败必须显示页面来源及原因。私聊/群聊均核对双方、时间、最新内容和长文本，切换聊天不串内容。长按入口不产生引用框。
 5. 填入、手动修改、撤销填入、发送后撤销；原稿不被误覆盖。
 6. 生成时来新消息，只有点更新才重新请求；关闭或快速切换联系人不会串结果。
 7. 超时、错误 Key、短上下文模型、输出不合法时可重试；正常发送始终可用。

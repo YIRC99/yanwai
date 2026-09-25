@@ -22,7 +22,7 @@ import java.lang.reflect.Field
 import java.util.Collections
 import java.util.WeakHashMap
 
-/** Analyze visible targets with a bounded preceding window from the loaded adapter, never the database. */
+/** Jev uses loaded rows. Manual LLM replies capture live identity here, then read history separately. */
 object MessageSniffer {
     private val main = Handler(Looper.getMainLooper())
     private data class BoundMessage(val talker: String, val input: AnalysisInput?,

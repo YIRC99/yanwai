@@ -117,6 +117,10 @@ class ReplyHostUi(private val activity: Activity) {
         metadata.addView(state, LinearLayout.LayoutParams(0, -2, 1f))
         val range = action(rangeText(captured), quiet = true) { snapshot?.let(::showEvidence) }
         metadata.addView(range); results.addView(metadata)
+        val contextInfo = theme.label(contextSummary(captured), 11f, theme.muted).apply {
+            setPadding(0, 0, 0, dp(8))
+        }
+        results.addView(contextInfo)
         val stale = action("有新消息 · 更新建议")
         stale.visibility = View.GONE; newMessageNotice = stale
         results.addView(stale, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(8) })
@@ -195,20 +199,32 @@ class ReplyHostUi(private val activity: Activity) {
         fun generate(direction: String = "") {
             if (MessageSniffer.currentReplyTalker() != selectedTalker) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
-            val current = runCatching { MessageSniffer.replyContext() }.getOrElse { toast(it.message ?: "读取聊天失败"); return }
-            if (current.talker != selectedTalker) { window.dismiss(); return }
+            val loaded = runCatching { MessageSniffer.replyContext() }.getOrElse { toast(it.message ?: "读取聊天失败"); return }
+            if (loaded.talker != selectedTalker) { window.dismiss(); return }
             val input = editor() ?: run { toast("请先切换到文字输入"); return }
             baselineDraft = input.text.toString(); draftView = WeakReference(input)
             job?.cancel()
             val config = ModulePrefs.replySettings()
-            val ticket = session.begin(current.talker, current.fingerprint)
+            val ticket = session.begin(loaded.talker, loaded.fingerprint)
             val previous = currentSuggestion?.text.orEmpty()
-            state.text = "正在生成…"; state.setTextColor(theme.muted)
+            state.text = "正在读取历史…"; state.setTextColor(theme.muted)
             if (currentSuggestion == null) answer.text = "正在想一句合适的回复…"
             controls(true)
             job = scope.launch {
                 try {
+                    val current = ReplyDatabaseHistory.load(loaded)
                     val knowledge = withContext(Dispatchers.IO) { ReplyKnowledge.load(activity) }
+                    // History runs off the UI thread: recheck consent, conversation and settings before upload.
+                    ensureActive()
+                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || window !== dialog || !ModulePrefs.replyConsent) return@launch
+                    val beforeSend = ModulePrefs.replySettings()
+                    if (beforeSend.endpoint != config.endpoint || beforeSend.model != config.model || beforeSend.apiKey != config.apiKey) {
+                        state.text = "配置已改变，请重试"; return@launch
+                    }
+                    state.text = if (current.historyFailure == null) "正在生成…" else "生成中 · 仅页面消息"
+                    if (currentSuggestion == null) {
+                        snapshot = current; range.text = rangeText(current); contextInfo.text = contextSummary(current)
+                    }
                     val suggestion = ReplyHttpClient().generate(config, current, baselineDraft, direction, knowledge, previous, focusId)
                     val activeConfig = ModulePrefs.replySettings()
                     if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || window !== dialog || !ModulePrefs.replyConsent) return@launch
@@ -219,6 +235,7 @@ class ReplyHostUi(private val activity: Activity) {
                     answer.text = suggestion.text; reason.text = suggestion.reason
                     reasonBlock.visibility = if (suggestion.reason.isBlank()) View.GONE else View.VISIBLE
                     range.text = rangeText(current); state.text = "已生成"; another.text = "换一句"
+                    contextInfo.text = contextSummary(current)
                     remember(); updateNotice()
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) {
@@ -287,9 +304,18 @@ class ReplyHostUi(private val activity: Activity) {
         pendingDraft = null; undoView.clear()
         return original
     }
-    private fun rangeText(context: ReplyContext) = "${context.messages.size} 条上下文  ›"
+    private fun rangeText(context: ReplyContext) = "${context.messages.size} 条 · ${if (context.source == ReplyContextSource.LOCAL_HISTORY) "本机历史" else "页面消息"}  ›"
+    private fun contextSummary(context: ReplyContext): String {
+        val first = context.messages.firstOrNull()?.time ?: 0
+        val last = context.messages.lastOrNull()?.time ?: 0
+        fun time(value: Long) = if (value <= 0) "时间未知" else java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(value))
+        return "${time(first)} — ${time(last)} · 仅文字${if (context.trimmed) " · 已截取" else ""}" +
+            (context.historyFailure?.let { "\n$it" } ?: "")
+    }
     private fun showEvidence(context: ReplyContext) {
-        val info = "页面已加载片段${if (context.trimmed) "（部分截取）" else ""} · 跳过 ${context.omittedMedia} 条非文字\n\n" +
+        val source = if (context.source == ReplyContextSource.LOCAL_HISTORY) "本机聊天历史 · 最近最多 100 条文字（不包含图片、语音等）"
+            else "仅页面已加载片段 · 跳过 ${context.omittedMedia} 条非文字"
+        val info = "$source\n${contextSummary(context)}\n\n" +
             context.messages.joinToString("\n\n") { "${it.speaker} · ${ReplyProtocol.formatTime(it.time)}\n${it.text}" }
         AlertDialog.Builder(activity).setTitle("本次参考的聊天").setMessage(info).setPositiveButton("关闭", null).show()
     }

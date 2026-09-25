@@ -4,8 +4,10 @@ import dev.jev.wechatmood.hook.MessageMetadata
 import java.security.MessageDigest
 
 data class ReplyMessage(val id: Long, val speaker: String, val time: Long, val text: String)
+enum class ReplyContextSource { LOADED_PAGE, LOCAL_HISTORY }
 data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, val omittedMedia: Int = 0,
-    val trimmed: Boolean = false, val latestLoadedId: Long = messages.lastOrNull()?.id ?: 0) {
+    val trimmed: Boolean = false, val latestLoadedId: Long = messages.lastOrNull()?.id ?: 0,
+    val source: ReplyContextSource = ReplyContextSource.LOADED_PAGE, val historyFailure: String? = null) {
     val fingerprint: String get() {
         val text = messages.joinToString("\u0000") { "${it.id}:${it.speaker.length}:${it.speaker}:${it.time}:${it.text.length}:${it.text}" }
         return MessageDigest.getInstance("SHA-256").digest("$talker:$latestLoadedId:$text".toByteArray())
