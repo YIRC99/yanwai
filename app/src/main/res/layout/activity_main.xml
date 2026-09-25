@@ -47,7 +47,7 @@
 
             <TextView style="@style/Yanwai.Section" android:text="聊天分析" />
             <TextView style="@style/Yanwai.Caption"
-                android:text="联系人和群聊默认关闭。进入聊天后，打开右上角「分析」，本地会记住这个聊天的选择。关闭后隐藏结果，并停止新的分析请求。" />
+                android:text="联系人和群聊默认关闭。右上角「分析」控制自动分析，本地会记住选择。也可长按对方文字，选择「翻译意图」单独分析，结果显示在消息下方。关闭自动分析后，手动选中的结果仍保留。" />
 
             <TextView android:id="@+id/modelSection" style="@style/Yanwai.Section" android:text="模型连接" />
             <TextView android:id="@+id/textModelStatus" style="@style/Yanwai.Body" android:text="先选择渠道，再填写对应的 API Key。" />

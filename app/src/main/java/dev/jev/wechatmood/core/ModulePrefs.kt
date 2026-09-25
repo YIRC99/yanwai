@@ -13,6 +13,7 @@ object ModulePrefs {
     const val KEY_API_MODEL = "api_model"
     private var context: Context? = null
     @Volatile private var conversations: ConversationSwitches? = null
+    private val manualAnalysis = ManualAnalysis()
     private val session = SettingsSession()
     private var lastRead = -1000L
     @Volatile var lastBridgeError: String? = null
@@ -79,6 +80,10 @@ object ModulePrefs {
     fun apiSettings(): ApiSettings = session.current?.api ?: ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")
     fun isChatEnabled(talker: String?) = conversations?.isEnabled(talker) == true
     fun canAnalyze(talker: String?) = isChatEnabled(talker) && session.current?.canAnalyze == true
+    fun analysisInput(input: AnalysisInput): AnalysisInput = manualAnalysis.selectedInput(input) ?: input
+    fun shouldDisplay(input: AnalysisInput): Boolean = manualAnalysis.allows(input, isChatEnabled(input.talker))
+    fun canAnalyze(input: AnalysisInput): Boolean = shouldDisplay(input) && session.current?.canAnalyze == true
+    fun selectMessage(input: AnalysisInput): Boolean = manualAnalysis.select(input)
     fun setChatEnabled(talker: String?, value: Boolean): Boolean = runCatching {
         conversations?.setEnabled(talker, value) == true
     }.onFailure { MoodLog.e("CHAT_SWITCH_SAVE_FAILED 本地会话开关保存失败", it) }.getOrDefault(false)

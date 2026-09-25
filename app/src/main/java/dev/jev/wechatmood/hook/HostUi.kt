@@ -76,7 +76,6 @@ class HostUi(private val activity: Activity) {
                         syncing = false
                         Diagnostics.showFailure(activity, "开关未保存", "当前聊天已变化或本地保存失败，请重新进入聊天后重试。")
                     }
-                    if (!ModulePrefs.isChatEnabled(talker)) BubbleDecorator.clearAll()
                     MessageSniffer.refresh()
                 }
             }

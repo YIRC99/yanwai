@@ -14,6 +14,7 @@ import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.AnalysisInput
+import dev.jev.wechatmood.core.ManualAnalysis
 import org.luckypray.dexkit.DexKitBridge
 import java.lang.ref.WeakReference
 import java.lang.reflect.Field
@@ -53,16 +54,22 @@ object MessageSniffer {
         Thread({
             runCatching {
                 System.loadLibrary("dexkit")
+                val menuPoints = mutableListOf<MessageMenu.HookPoints>()
                 val methods = paths.flatMap { path ->
                     DexKitBridge.create(path).use { bridge ->
-                        bridge.findMethod {
-                            matcher { usingStrings("MicroMsg.MvvmChattingItem", "[onBindView]") }
-                        }.mapNotNull { data ->
-                            runCatching { data.getMethodInstance(loader) }.getOrNull()
-                        }
+                        menuPoints += MessageMenu.locate(bridge, loader)
+                        runCatching {
+                            bridge.findMethod {
+                                matcher { usingStrings("MicroMsg.MvvmChattingItem", "[onBindView]") }
+                            }.mapNotNull { data ->
+                                runCatching { data.getMethodInstance(loader) }.getOrNull()
+                            }
+                        }.onFailure { MoodLog.e("CHAT_BIND_LOCATE_FAILED 新版聊天绑定定位失败", it) }
+                            .getOrDefault(emptyList())
                     }
                 }.filter { it.parameterCount >= 3 && it.parameterTypes[2] == Int::class.javaPrimitiveType }
                     .distinct()
+                MessageMenu.install(menuPoints)
                 check(methods.isNotEmpty()) { "未找到新版聊天绑定点" }
                 for (method in methods) {
                     val adapterFields = fields(method.declaringClass).filter { field ->
@@ -149,6 +156,28 @@ object MessageSniffer {
         if (active.get() != null) main.post(tick)
     }
 
+    /** Resolve the pressed bubble back to its live row; never infer a message from screen text. */
+    fun inputForView(view: View): AnalysisInput? {
+        val activity = active.get() ?: return null
+        if (!isVisible(view)) return null
+        val scope = chatNodes(activity.window.decorView)
+        if (view !in scope) return null
+        val current = records(scope)
+        val talker = conversation(activity, scope, current) ?: return null
+        val ancestors = generateSequence(view) { it.parent as? View }.toSet()
+        return current.filter { it.first in ancestors }.mapNotNull { it.second.input }
+            .filter { it.talker == talker }.distinctBy { it.key }.singleOrNull()
+    }
+
+    fun analyzeMessage(view: View, expected: AnalysisInput): Boolean {
+        val input = inputForView(view) ?: return false
+        val identity = ManualAnalysis.identity(input) ?: return false
+        if (identity != ManualAnalysis.identity(expected) || !ModulePrefs.selectMessage(input)) return false
+        SignalAnalyzer.retryFailure(ModulePrefs.analysisInput(input).key)
+        refresh()
+        return true
+    }
+
     // Re-read the visible conversation at tap time, including during rapid chat navigation.
     fun setChatEnabled(talker: String?, enabled: Boolean): Boolean = runCatching {
         if (talker == null) return@runCatching false
@@ -229,28 +258,28 @@ object MessageSniffer {
         val enabled = ModulePrefs.isChatEnabled(talker)
         val messages = records.sortedBy { (view, _) ->
             IntArray(2).also { view.getLocationOnScreen(it) }[1]
-        }.mapNotNull { (_, message) -> message.input?.takeIf { it.talker == talker } }.distinctBy { it.key }
-        visibleKeys = if (enabled) messages.map { it.key }.toSet() else emptySet()
-        if (ModulePrefs.canAnalyze(talker)) {
-            for (message in messages) {
-                val key = message.key
-                SignalAnalyzer.submit(message) { key in visibleKeys }
-            }
+        }.mapNotNull { (_, message) -> message.input?.takeIf { it.talker == talker } }
+            .map(ModulePrefs::analysisInput).distinctBy { it.key }
+        val selected = messages.filter(ModulePrefs::shouldDisplay)
+        visibleKeys = selected.map { it.key }.toSet()
+        for (message in selected) {
+            val key = message.key
+            SignalAnalyzer.submit(message) { key in visibleKeys }
         }
         BubbleDecorator.prune()
         var unsupported = 0
-        if (enabled) {
-            records.distinctBy { it.first }.forEach { (row, message) ->
-                runCatching {
-                    val input = message.input?.takeIf { it.talker == talker }
-                    if (!BubbleDecorator.show(row, input) && input != null) unsupported++
-                }
-                    .onFailure { BubbleDecorator.clear(row); MoodLog.w("气泡绘制失败：${it.javaClass.simpleName}") }
+        records.distinctBy { it.first }.forEach { (row, message) ->
+            runCatching {
+                val input = message.input?.takeIf { it.talker == talker }?.let(ModulePrefs::analysisInput)
+                    ?.takeIf(ModulePrefs::shouldDisplay)
+                if (!BubbleDecorator.show(row, input) && input != null) unsupported++
             }
-        } else BubbleDecorator.clearAll()
+                .onFailure { BubbleDecorator.clear(row); MoodLog.w("气泡绘制失败：${it.javaClass.simpleName}") }
+        }
         val status = when {
             talker == null -> "暂未识别当前聊天，收到消息后重试"
-            !enabled -> "此聊天分析已关闭，打开右上角开关即可记住"
+            !enabled -> if (selected.isEmpty()) "自动分析已关闭，可长按文字消息翻译意图"
+                else "自动分析已关闭 · 本屏 ${selected.size} 条手动分析"
             !ModulePrefs.bridgeAvailable -> "设置连接失败，点此打开助手后重试"
             ModulePrefs.apiKey.isBlank() -> "请打开言外填写并保存 API Key"
             records.isEmpty() -> "未识别到消息 · $adapterStatus"

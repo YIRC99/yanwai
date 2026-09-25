@@ -15,7 +15,7 @@ object SignalAnalyzer {
     fun retryFailure(key: String) { failures.remove(key); failureMessages.remove(key) }
 
     fun submit(input: AnalysisInput, stillVisible: () -> Boolean = { true }): String? {
-        if (!ModulePrefs.canAnalyze(input.talker)) return null
+        if (!ModulePrefs.canAnalyze(input)) return null
         if (MessagePolicy.textOrNull(input.text) == null) return null
         val key = input.key
         if (System.currentTimeMillis() - (failures[key] ?: 0L) < 30_000) return key
@@ -25,10 +25,10 @@ object SignalAnalyzer {
             try {
                 slots.withPermit {
                     ModulePrefs.reload()
-                    if (!ModulePrefs.canAnalyze(input.talker) || !stillVisible()) { MoodStore.release(key); return@withPermit }
+                    if (!ModulePrefs.canAnalyze(input) || !stillVisible()) { MoodStore.release(key); return@withPermit }
                     val mood = analyze(input) {
                         ModulePrefs.reload()
-                        ModulePrefs.canAnalyze(input.talker) && stillVisible()
+                        ModulePrefs.canAnalyze(input) && stillVisible()
                     }
                     MoodStore.complete(key, mood)
                     failures.remove(key)
