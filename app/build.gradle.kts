@@ -1,6 +1,12 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+}
+
+val appVersion = Properties().apply {
+    rootProject.file("version.properties").inputStream().use { load(it) }
 }
 
 android {
@@ -11,8 +17,8 @@ android {
         applicationId = "dev.jev.wechatmood"
         minSdk = 28          // 与 WeKit 一致；Android 9+
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.2.0"
+        versionCode = appVersion.getProperty("versionCode").toInt()
+        versionName = appVersion.getProperty("versionName")
 
         // 依赖（androidx + DexKit）把方法数撑出了十几个 dex，入口类一度落在
         // classes11.dex 里。框架加载入口类走模块自己的 ClassLoader，理论上

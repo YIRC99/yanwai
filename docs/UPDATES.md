@@ -13,12 +13,18 @@
 
 ## 以后怎样发布
 
-1. 修改 `app/build.gradle.kts`，递增 `versionCode` 和 `versionName`，例如 14 / `1.1.3`。
+1. 执行 `powershell -File tools/bump-version.ps1`，递增 `version.properties` 中的 `versionCode` 和 `versionName`。功能批次用 `-Part minor`；Gradle、标题和分析卡读取同一来源。
 2. 构建 APK，沿用之前公开安装包的签名。Android 覆盖安装需要包名及签名兼容，并使用更高的 versionCode；不要把未签名 Release 产物直接上传给用户。
 3. 在 [GitHub Releases](https://github.com/YIRC99/yanwai/releases) 创建正式 Release，tag 使用 `1.1.3` 或 `v1.1.3`，与 APK 的 versionName 对齐，附上 APK 和更新说明。
 4. 发布为正式版并设为 Latest。不要勾选 Pre-release；草稿、测试版、只有 Git tag、只有 push 提交均不会产生正式更新提醒。
 
 本实现仅支持三段数字正式版本号（可带 `v` 或 `V` 前缀），按数字比较，`1.10.0` 高于 `1.9.9`。不支持 `latest`、中文 tag 或带 beta 后缀的正式发布 tag。不要把旧版本重新标记为 Latest。
+
+## 本地提交也必须升版
+
+从 1.3.0 开始，每个本地提交（包括后续修复）都递增名称和数字版本，并一起暂存。当前批次尚未提交时可继续完善同一个版本。设置页最顶部显示「言外 v版本号」，用于确认实际安装包。
+
+首次克隆执行 `git config core.hooksPath .githooks`。提交钩子检查暂存区版本是否比 HEAD 的两个字段都更高，忘记升版、只改一个字段或漏暂存都会阻止提交。`tools/test-versioning.ps1` 在独立临时仓库验证这些规则。钩子需要 Git 和 PowerShell，属于本地约束，不会自动发布 Release。
 
 ## 实现与验证边界
 

@@ -28,7 +28,9 @@ data class Mood(
 object MoodStore {
 
     private val cache = ConcurrentHashMap<String, Mood>()
-    private val pending = ConcurrentHashMap.newKeySet<String>()
+    private val pending = mutableMapOf<String, Claim>()
+
+    class Claim internal constructor(val key: String)
 
     /** Length-prefix every field so different contexts or message identities never share a result. */
     fun keyOf(text: String, talker: String?, context: List<ContextMessage> = emptyList(),
@@ -47,25 +49,29 @@ object MoodStore {
 
     fun get(key: String): Mood? = cache[key]
 
-    /** 尝试认领一次分析任务；已经在跑或已完成返回 false。 */
-    fun claim(key: String): Boolean {
-        if (cache.containsKey(key)) return false
-        return pending.add(key)
+    /** 尝试认领一次分析任务；已经在跑或已完成返回 null。 */
+    @Synchronized fun acquire(key: String): Claim? {
+        if (cache.containsKey(key) || pending.containsKey(key)) return null
+        return Claim(key).also { pending[key] = it }
     }
 
-    fun complete(key: String, mood: Mood) {
-        cache[key] = mood
-        pending.remove(key)
+    @Synchronized fun complete(claim: Claim, mood: Mood): Boolean {
+        if (pending[claim.key] !== claim) return false
+        cache[claim.key] = mood
+        pending.remove(claim.key)
+        return true
     }
 
     /** 失败也要释放认领，否则这条消息永远不会重试。 */
-    fun release(key: String) {
-        pending.remove(key)
+    @Synchronized fun release(claim: Claim): Boolean {
+        if (pending[claim.key] !== claim) return false
+        pending.remove(claim.key)
+        return true
     }
 
     fun size(): Int = cache.size
 
-    fun clear() {
+    @Synchronized fun clear() {
         cache.clear()
         pending.clear()
     }

@@ -38,6 +38,7 @@ object MessageSniffer {
             if (activity.isFinishing || activity.isDestroyed) return
             runCatching { scan(activity) }.onFailure {
                 visibleKeys = emptySet()
+                SignalAnalyzer.cancelAll()
                 BubbleDecorator.clearAll()
                 report("读取当前页面失败：${it.javaClass.simpleName}")
                 ui?.showStatus("Jev · 页面读取失败，点击查看", emptyList())
@@ -133,6 +134,7 @@ object MessageSniffer {
 
     fun resume(activity: Activity) {
         main.removeCallbacks(tick)
+        SignalAnalyzer.cancelAll()
         BubbleDecorator.clearAll()
         ui?.dispose()
         ui = null
@@ -144,6 +146,7 @@ object MessageSniffer {
     fun pause(activity: Activity) {
         if (active.get() !== activity) return
         main.removeCallbacks(tick)
+        SignalAnalyzer.cancelAll()
         BubbleDecorator.clearAll()
         ui?.dispose()
         ui = null
@@ -184,7 +187,9 @@ object MessageSniffer {
         val activity = active.get() ?: return@runCatching false
         val scope = chatNodes(activity.window.decorView)
         if (scope.isEmpty() || conversation(activity, scope, records(scope)) != talker) return@runCatching false
-        ModulePrefs.setChatEnabled(talker, enabled)
+        val saved = ModulePrefs.setChatEnabled(talker, enabled)
+        if (saved && !enabled) SignalAnalyzer.cancelConversation(talker)
+        saved
     }.onFailure { MoodLog.e("CHAT_SWITCH_FAILED 无法确认当前会话", it) }.getOrDefault(false)
 
     private fun chatNodes(root: View): List<View> {
@@ -231,7 +236,7 @@ object MessageSniffer {
     }
 
     private fun scan(activity: Activity) {
-        ModulePrefs.reload()
+        ModulePrefs.requestReload()
         // Embedded ChattingUILayout is a sibling of LauncherUI's content frame.
         val root = activity.window.decorView as? ViewGroup ?: return
         val settings = activity.javaClass.name.let {
@@ -240,6 +245,7 @@ object MessageSniffer {
         val chatScope = chatNodes(root)
         val chat = chatScope.isNotEmpty()
         if (!settings && !chat) {
+            SignalAnalyzer.cancelAll()
             BubbleDecorator.clearAll()
             ui?.hide()
             visibleKeys = emptySet()
@@ -247,6 +253,7 @@ object MessageSniffer {
         }
         val panel = ui ?: HostUi(activity).also { ui = it }
         if (settings) {
+            SignalAnalyzer.cancelAll()
             BubbleDecorator.clearAll()
             visibleKeys = emptySet()
             panel.showSettings()
@@ -262,6 +269,7 @@ object MessageSniffer {
             .map(ModulePrefs::analysisInput).distinctBy { it.key }
         val selected = messages.filter(ModulePrefs::shouldDisplay)
         visibleKeys = selected.map { it.key }.toSet()
+        SignalAnalyzer.reconcile(visibleKeys)
         for (message in selected) {
             val key = message.key
             SignalAnalyzer.submit(message) { key in visibleKeys }

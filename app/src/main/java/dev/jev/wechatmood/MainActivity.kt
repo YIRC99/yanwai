@@ -41,8 +41,11 @@ class MainActivity : AppCompatActivity() {
     private var selectedProvider = JevProvider.TYPESAFE
     private var bindingInputs = false
     private var probeState = ProbeState.UNTESTED
+    private val refreshAfterSettings = Runnable { if (!isFinishing && !isDestroyed) refresh() }
     private val stateListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        runOnUiThread { if (!isFinishing && !isDestroyed) refresh() }
+        // Saving one profile updates several keys. Render once after the entire edit.
+        binding.root.removeCallbacks(refreshAfterSettings)
+        binding.root.post(refreshAfterSettings)
     }
     // No data class: accidental logging must not print a key. Drafts never cross channels.
     private class ApiDraft(val endpoint: String, val key: String, val model: String)
@@ -53,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.toolbar.title = getString(R.string.app_title_version, BuildConfig.VERSION_NAME)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -249,6 +253,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        binding.root.removeCallbacks(refreshAfterSettings)
         getSharedPreferences(SettingsProvider.RUNTIME_FILE, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(stateListener)
         getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(stateListener)
         super.onStop()

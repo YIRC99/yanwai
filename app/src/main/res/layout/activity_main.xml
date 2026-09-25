@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:background="@color/page_background" android:orientation="vertical">
-    <com.google.android.material.appbar.MaterialToolbar android:layout_width="match_parent"
+    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:minHeight="?attr/actionBarSize"
         app:title="@string/app_name" app:subtitle="闲聊潜台词助手" app:titleTextColor="@color/text_primary"
         app:subtitleTextColor="@color/text_secondary" android:background="@color/page_background" />

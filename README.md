@@ -6,7 +6,7 @@
 
 在微信文字气泡下，结合前文展示情绪概率、可能的潜台词与一句沟通建议。
 
-![Version](https://img.shields.io/badge/version-1.2.0-2C7A73)
+![Version](https://img.shields.io/badge/version-1.3.0-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)
@@ -44,7 +44,7 @@
   </tr>
 </table>
 
-以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.2.0**，设置页改为状态概览、下一步引导和分区配置，支持浅深色及明确的保存/检测反馈，并保留微信内日志导出、多渠道接入和更新提醒；底部可查看作者微信、免费说明与开源地址。截图中的旧版本文字保留原样。
+以上为作者提供的实机使用截图，拍摄于 **0.5.2**，点击可查看原图。当前版本为 **1.3.0**，顶部名称旁显示实际安装版本，并加入专属桌面图标。支持单条消息「翻译意图」、各聊天开关记忆、日志导出、多渠道接入和更新提醒。截图中的旧版本文字保留原样。
 
 ## 开始使用
 
@@ -118,6 +118,8 @@
 
 仓库也提供 Windows 快捷脚本 `tools/gradle.ps1`，目前使用作者本机的 `D:\DevEnv\Java\jdk21` 和 `D:\DevEnv\gradle` 路径，其他环境请修改路径或直接使用上面的 Gradle 命令。
 
+版本唯一来源为 `version.properties`，顶部名称和分析卡从 `BuildConfig` 读取。每次本地提交都要升版：执行 `powershell -File tools/bump-version.ps1`，并把版本文件与改动一起暂存。首次克隆执行 `git config core.hooksPath .githooks` 启用提交检查；功能批次可加 `-Part minor`。详见[版本维护](docs/UPDATES.md)。
+
 | 产物 | 路径 |
 | --- | --- |
 | 可安装的 Debug 试用包 | `app/build/outputs/apk/debug/app-debug.apk` |
@@ -135,7 +137,7 @@
 
 **关闭当前聊天的分析会停止请求吗？**
 
-会。主动关闭顶部开关会隐藏当前会话的全部结果，同时清除手动选择；排队任务和未发出的第二轮也会停止。已经发出的请求可能继续返回，但不会重新显示卡片。关闭后仍可重新长按某条消息，选择「翻译意图」单独分析。其他联系人和群聊不受影响。旧版两个全局开关不再生效，升级后所有未单独开启的会话默认关闭。
+会。主动关闭顶部开关会隐藏当前会话的全部结果，同时清除手动选择；排队任务和未发出的第二轮停止，正在进行的 HTTP 请求也会取消，晚到结果不再写入。取消不能保证服务商停止计算或退款。关闭后仍可重新长按某条消息，选择「翻译意图」单独分析。其他联系人和群聊不受影响。旧版两个全局开关不再生效，升级后所有未单独开启的会话默认关闭。
 
 **为什么有时只有情绪，没有潜台词和建议？**
 
@@ -148,6 +150,7 @@
 ## 进一步了解
 
 - [分析机制与实现说明](docs/TECHNICAL.md)
+- [1.3.0 架构检查与优化](docs/ARCHITECTURE.md)
 - [聊天模板与动作库](docs/CHAT_TEMPLATES.md)
 - [版本验证记录](docs/VERIFY.md)
 - [运行日志导出与开关保存失败排查](docs/DIAGNOSTICS.md)

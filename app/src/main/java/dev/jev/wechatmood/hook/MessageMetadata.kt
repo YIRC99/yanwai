@@ -19,18 +19,22 @@ data class MessageMetadata(val type: Int, val isSend: Int, val content: String, 
         else -> "对方"
     }
     companion object {
+        private val fieldCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Map<String, java.lang.reflect.Field?>>()
+
+        private fun fields(type: Class<*>): Map<String, java.lang.reflect.Field?> = fieldCache.getOrPut(type) {
+            listOf("field_type", "field_isSend", "field_content", "field_talker", "field_msgId").associateWith { name ->
+                generateSequence(type) { it.superclass }.takeWhile { it != Any::class.java }
+                    .firstNotNullOfOrNull { clazz ->
+                        runCatching { clazz.getDeclaredField(name).apply { isAccessible = true } }.getOrNull()
+                    }
+            }
+        }
+
         fun read(item: Any?): MessageMetadata? {
             if (item == null) return null
             return runCatching {
-                fun value(name: String): Any? {
-                    var clazz: Class<*>? = item.javaClass
-                    while (clazz != null && clazz != Any::class.java) {
-                        val field = runCatching { clazz!!.getDeclaredField(name) }.getOrNull()
-                        if (field != null) { field.isAccessible = true; return field.get(item) }
-                        clazz = clazz.superclass
-                    }
-                    return null
-                }
+                val accessors = fields(item.javaClass)
+                fun value(name: String): Any? = accessors[name]?.get(item)
                 MessageMetadata(value("field_type") as? Int ?: return null,
                     value("field_isSend") as? Int ?: return null,
                     value("field_content") as? String ?: "",
