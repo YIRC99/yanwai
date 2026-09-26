@@ -32,7 +32,8 @@ class ChatAnalysisTest {
                 response.toString()
             })
             assertEquals(1, calls)
-            assertEquals(2, result.detail.lines().size)
+            assertEquals(3, result.detail.lines().size)
+            assertTrue(result.detail.contains("提供前文 0 条"))
             assertTrue(result.detail.contains("情绪："))
             assertFalse(result.detail.contains("建议："))
         }

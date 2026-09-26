@@ -114,11 +114,16 @@ dependencies {
 
 // Live tests are opt-in, never part of a normal build and never store credentials in BuildConfig.
 tasks.withType<Test>().configureEach {
-    if (providers.gradleProperty("jevLiveTest").orNull == "true") {
+    if (providers.gradleProperty("jevQualityTest").orNull == "true") {
+        include("**/LiveJevQualityTest*")
+        outputs.upToDateWhen { false }
+        testLogging.showStandardStreams = true
+    } else if (providers.gradleProperty("jevLiveTest").orNull == "true") {
         include("**/LiveJevVerificationTest*")
         outputs.upToDateWhen { false }
         testLogging.showStandardStreams = true
     } else {
         exclude("**/LiveJevVerificationTest*")
+        exclude("**/LiveJevQualityTest*")
     }
 }

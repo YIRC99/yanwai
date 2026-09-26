@@ -34,14 +34,19 @@ object MoodStore {
 
     /** Length-prefix every field so different contexts or message identities never share a result. */
     fun keyOf(text: String, talker: String?, context: List<ContextMessage> = emptyList(),
-        messageId: Long = 0, speaker: String = "对方"): String {
+        messageId: Long = 0, speaker: String = "对方", createdAt: Long = 0,
+        coverage: ContextCoverage = ContextCoverage(), zoneId: String = java.util.TimeZone.getDefault().id): String {
         val source = buildString {
             fun field(value: String) { append(value.length).append(':').append(value) }
             field(talker.orEmpty())
             field(messageId.toString())
             field(speaker)
             field(text)
-            context.forEach { field(it.speaker); field(it.text) }
+            field("temporal-intent-v1")
+            field(createdAt.toString())
+            field(zoneId)
+            field(coverage.toString())
+            context.forEach { field(it.speaker); field(it.text); field(it.createdAt.toString()); field(it.messageId.toString()) }
         }
         return java.security.MessageDigest.getInstance("SHA-256")
             .digest(source.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }

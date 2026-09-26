@@ -1,0 +1,337 @@
+{
+  "description": "Additional synthetic holdout cases authored before evaluating the revised emotion criteria; not used for prompt tuning.",
+  "cases": [
+    {
+      "id": "holdout_01",
+      "group": "holdout_01",
+      "text": "今早想起来心里还是堵得慌。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "你昨天当众打断我，我觉得很委屈。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "hurt",
+        "sad",
+        "annoyed"
+      ],
+      "intents": [
+        "vent",
+        "share"
+      ],
+      "topic": [
+        "continuing",
+        "reopened"
+      ]
+    },
+    {
+      "id": "holdout_02",
+      "group": "holdout_02",
+      "text": "早，给你看我烤的面包，第一次就成功啦！",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "昨天这事让我很烦。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "happy"
+      ],
+      "intents": [
+        "share"
+      ],
+      "topic": [
+        "new"
+      ],
+      "forbidden_actions": [
+        "apologize"
+      ]
+    },
+    {
+      "id": "holdout_03",
+      "group": "holdout_03",
+      "text": "不是会议取消，是改到线上。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "会议是不是取消了？",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "clarify"
+      ]
+    },
+    {
+      "id": "holdout_04",
+      "group": "holdout_04",
+      "text": "有空把昨晚说的文件发过来就行。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "文件整理完发给你。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "request"
+      ]
+    },
+    {
+      "id": "holdout_05",
+      "group": "holdout_05",
+      "text": "刚才漏看了你的消息，抱歉。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "我发的地址你收到没？",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown",
+        "sad"
+      ],
+      "intents": [
+        "apologize"
+      ]
+    },
+    {
+      "id": "holdout_06",
+      "group": "holdout_06",
+      "text": "你想到我，我很感谢，但这次活动我就不参加了。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "周末活动一起参加吧。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "refuse"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "follow_new_topic"
+      ]
+    },
+    {
+      "id": "holdout_07",
+      "group": "holdout_07",
+      "text": "这周一直连轴转，今天实在撑不住了，想早点休息。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [],
+      "emotions": [
+        "tired"
+      ],
+      "intents": [
+        "busy",
+        "goodbye",
+        "share"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "follow_new_topic"
+      ]
+    },
+    {
+      "id": "holdout_08",
+      "group": "holdout_08",
+      "text": "报告还没出，心一直悬着，什么都干不进去。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [],
+      "emotions": [
+        "anxious"
+      ],
+      "intents": [
+        "vent",
+        "share"
+      ]
+    },
+    {
+      "id": "holdout_09",
+      "group": "holdout_09",
+      "text": "刚才那些问题我已经想通了，现在轻松多了。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "事情太多了，我有点焦虑。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "relieved",
+        "happy",
+        "calm"
+      ],
+      "intents": [
+        "share",
+        "confirm"
+      ]
+    },
+    {
+      "id": "holdout_10",
+      "group": "holdout_10",
+      "text": "先到这里吧，这件事我现在不想谈。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "我们再讨论下昨天那个问题？",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown",
+        "annoyed",
+        "hurt"
+      ],
+      "intents": [
+        "pause"
+      ],
+      "forbidden_actions": [
+        "clarify_concern",
+        "ask_detail",
+        "fulfill"
+      ]
+    },
+    {
+      "id": "holdout_11",
+      "group": "holdout_11",
+      "text": "收到，周二十点。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "周二十点在公司门口见。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm"
+      ],
+      "intents": [
+        "confirm"
+      ]
+    },
+    {
+      "id": "holdout_12",
+      "group": "holdout_12",
+      "text": "你这两种说法我没弄明白，到底按哪个来？",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "先按昨天的安排，新的安排也可以。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "confused"
+      ],
+      "intents": [
+        "question"
+      ]
+    },
+    {
+      "id": "holdout_13",
+      "group": "holdout_13",
+      "text": "快递又丢件了，这家店真让人生气！",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [],
+      "emotions": [
+        "annoyed"
+      ],
+      "intents": [
+        "vent"
+      ],
+      "forbidden_actions": [
+        "apologize",
+        "fulfill"
+      ]
+    },
+    {
+      "id": "holdout_14",
+      "group": "holdout_14",
+      "text": "好。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "confirm",
+        "unknown"
+      ],
+      "ambiguous": true,
+      "forbidden_actions": [
+        "apologize",
+        "fulfill"
+      ]
+    },
+    {
+      "id": "holdout_15",
+      "group": "holdout_15",
+      "text": "你帮我跑了这么远，真的谢谢你。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [],
+      "emotions": [
+        "happy",
+        "calm",
+        "relieved"
+      ],
+      "intents": [
+        "thank"
+      ]
+    },
+    {
+      "id": "holdout_16",
+      "group": "holdout_16",
+      "text": "没问题，我知道原因了，这件事就过去吧。",
+      "sent_at": "2026-09-26T01:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "对不起，刚才没告诉你，是因为临时换了会议室。",
+          "sent_at": "2026-09-25T13:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "relieved"
+      ],
+      "intents": [
+        "confirm"
+      ],
+      "forbidden_actions": [
+        "apologize",
+        "clarify_concern"
+      ]
+    }
+  ]
+}

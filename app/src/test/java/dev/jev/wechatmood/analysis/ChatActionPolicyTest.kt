@@ -95,12 +95,13 @@ class ChatActionPolicyTest {
         assertTrue(ChatActions.candidates(p).any { it.id == "acknowledge" })
     }
 
-    @Test fun `no interpretation candidates sends only a real action question`() {
+    @Test fun `direct question gets generic interpretation and independently verified action`() {
         val input = AnalysisInput("申请表在哪里下载", "friend")
         val p = profile(input.text, mapOf("scene" to "other", "progress" to "clarify",
             "speech_act" to "question", "commitment" to "none", "new_topic" to "no"))
         val body = JevProtocol.detailPayload(input, "test", p)
-        assertEquals(setOf("action"), body.getJSONObject("questions").keys().asSequence().toSet())
+        assertTrue(body.getJSONObject("questions").has("support_answer_question"))
+        assertTrue(body.getJSONObject("questions").getJSONObject("focus").getJSONObject("criteria").has("intent_question"))
         val result = JevProtocol.parseDetail(JevFixtures.reply(body, mapOf("action" to "answer_question")), p)
         assertTrue(result.detail.contains("建议：先回答"))
     }

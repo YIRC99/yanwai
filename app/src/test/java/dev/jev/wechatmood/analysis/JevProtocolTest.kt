@@ -15,7 +15,11 @@ class JevProtocolTest {
             when (it) { "happy" -> 0.2; "calm" -> 0.5; "annoyed" -> 0.3; else -> 0.0 }
         }, 0.2))
         val detail = JevProtocol.detailPayload(input, "test", profile)
-        val card = JevProtocol.parseDetail(JevFixtures.reply(detail, mapOf("focus" to "promise_action")), profile).detail
+        val response = JSONObject(JevFixtures.reply(detail, mapOf("focus" to "promise_action")))
+        response.getJSONObject("answers").put("emotion_review", JSONObject().put("type", "choice")
+            .put("choice", profile.emotion.choice).put("confidence", profile.emotion.confidence)
+            .put("probabilities", JSONObject(profile.emotion.probabilities)))
+        val card = JevProtocol.parseDetail(response.toString(), profile).detail
         assertEquals("Jev ${BuildConfig.VERSION_NAME}", card.lineSequence().first())
         assertTrue(card.contains("开心 20% · 平静 50% · 生气 30%"))
         listOf("参考原话", "好感线索", "互动线索", "闲聊解读", "模型推测", "先别急着猜").forEach {
@@ -36,7 +40,7 @@ class JevProtocolTest {
     @Test fun `first pass identifies scene emotion and progress and preserves source`() {
         val body = JevProtocol.payload(input.text, "test", input.context)
         assertEquals(setOf("scene", "emotion", "progress", "target", "speech_act", "advice_need",
-            "commitment", "own_fault", "new_topic"), body.getJSONObject("questions").keys().asSequence().toSet())
+            "commitment", "own_fault", "new_topic", "topic_relation", "emotion_shift"), body.getJSONObject("questions").keys().asSequence().toSet())
         assertEquals(input.text, body.getJSONObject("state").getString("message"))
         assertEquals("我想起来了", body.getJSONObject("state").getJSONArray("context").getJSONObject(0).getString("message"))
         assertEquals("对方", body.getJSONObject("state").getString("speaker"))
@@ -51,8 +55,8 @@ class JevProtocolTest {
         }
         val history = (0..19).map { ContextMessage("我", "前文$it") } + ContextMessage("我", "长".repeat(1001))
         val context = JevProtocol.payload("当前", "test", history).getJSONObject("state").getJSONArray("context")
-        assertEquals(9, context.length())
-        assertEquals("前文11", context.getJSONObject(0).getString("message"))
+        assertEquals(20, context.length())
+        assertEquals("前文0", context.getJSONObject(0).getString("message"))
     }
 
     @Test fun `detail round carries first pass estimates and only eligible cards`() {

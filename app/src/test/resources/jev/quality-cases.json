@@ -1,0 +1,827 @@
+{
+  "description": "Synthetic Chinese chat regression cases. Allowed labels are text-supported alternatives, not true mental states. Frozen before first live run.",
+  "cases": [
+    {
+      "id": "overnight_a",
+      "group": "overnight",
+      "text": "早呀！今天阳光真好，心情也好起来了！",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "你昨天一直不回我，我很生气。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "抱歉，昨晚加班没看手机。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "happy",
+        "relieved"
+      ],
+      "intents": [
+        "share"
+      ],
+      "forbidden_actions": [
+        "apologize"
+      ],
+      "topic": [
+        "new"
+      ]
+    },
+    {
+      "id": "overnight_b",
+      "group": "overnight",
+      "text": "昨天的事还没说清楚，我现在还是很生气。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "你昨天一直不回我，我很生气。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "抱歉，昨晚加班没看手机。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "annoyed",
+        "hurt"
+      ],
+      "intents": [
+        "vent"
+      ],
+      "topic": [
+        "reopened",
+        "continuing"
+      ]
+    },
+    {
+      "id": "historical_a",
+      "group": "historical",
+      "text": "别再找我了，我真的很生气。",
+      "sent_at": "2026-09-25T12:00:00Z",
+      "history": [],
+      "emotions": [
+        "annoyed",
+        "hurt"
+      ],
+      "intents": [
+        "pause",
+        "refuse"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "clarify_concern",
+        "follow_new_topic"
+      ]
+    },
+    {
+      "id": "historical_b",
+      "group": "historical",
+      "text": "昨天话说重了，对不起，我现在好多了，我们好好聊聊。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "你昨天一直不回我，我很生气。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "抱歉，昨晚加班没看手机。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "relieved",
+        "calm"
+      ],
+      "intents": [
+        "apologize",
+        "request"
+      ]
+    },
+    {
+      "id": "midnight_a",
+      "group": "midnight",
+      "text": "你还没解释清楚，我还是很生气！",
+      "sent_at": "2026-09-25T16:01:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "我很生气。",
+          "sent_at": "2026-09-25T15:59:00Z"
+        }
+      ],
+      "emotions": [
+        "annoyed"
+      ],
+      "intents": [
+        "vent"
+      ],
+      "topic": [
+        "continuing"
+      ]
+    },
+    {
+      "id": "midnight_b",
+      "group": "midnight",
+      "text": "不聊刚才的事啦，我中奖啦，太开心了！",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "你昨天一直不回我，我很生气。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "抱歉，昨晚加班没看手机。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "happy"
+      ],
+      "intents": [
+        "share"
+      ],
+      "topic": [
+        "new"
+      ],
+      "forbidden_actions": [
+        "apologize"
+      ]
+    },
+    {
+      "id": "short_a",
+      "group": "short",
+      "text": "嗯，七点见。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "今晚七点在餐厅见，可以吗？",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm"
+      ],
+      "intents": [
+        "confirm"
+      ]
+    },
+    {
+      "id": "short_b",
+      "group": "short",
+      "text": "嗯。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "你昨天一直不回我，我很生气。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "抱歉，昨晚加班没看手机。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "unknown",
+        "calm",
+        "hurt",
+        "annoyed"
+      ],
+      "intents": [
+        "unknown",
+        "confirm"
+      ],
+      "ambiguous": true
+    },
+    {
+      "id": "target_a",
+      "group": "target",
+      "text": "客户今天无缘无故骂了我一顿，真的好委屈。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "hurt",
+        "sad",
+        "annoyed"
+      ],
+      "intents": [
+        "vent"
+      ],
+      "forbidden_actions": [
+        "apologize",
+        "fulfill"
+      ]
+    },
+    {
+      "id": "target_b",
+      "group": "target",
+      "text": "你当着大家的面笑话我，我很难受。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "刚才确实是我拿你的失误开玩笑了。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "hurt",
+        "sad",
+        "annoyed"
+      ],
+      "intents": [
+        "vent"
+      ]
+    },
+    {
+      "id": "busy_a",
+      "group": "busy",
+      "text": "今天加班太累了，眼睛都睁不开了，我先睡了。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "tired"
+      ],
+      "intents": [
+        "goodbye",
+        "busy"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "follow_new_topic"
+      ]
+    },
+    {
+      "id": "busy_b",
+      "group": "busy",
+      "text": "我现在不想跟你聊，请先别给我发消息了。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "你昨天一直不回我，我很生气。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "抱歉，昨晚加班没看手机。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "annoyed",
+        "hurt",
+        "unknown",
+        "calm"
+      ],
+      "intents": [
+        "pause"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "clarify_concern",
+        "follow_new_topic",
+        "fulfill"
+      ]
+    },
+    {
+      "id": "refusal_a",
+      "group": "refusal",
+      "text": "谢谢邀请，不过我不想去，也不用再劝我了。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "周末一起爬山吗？",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "refuse"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "follow_new_topic",
+        "fulfill"
+      ]
+    },
+    {
+      "id": "refusal_b",
+      "group": "refusal",
+      "text": "今晚加班去不了，周六一起去可以吗？",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "今晚一起吃饭吗？",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm"
+      ],
+      "intents": [
+        "question",
+        "clarify"
+      ]
+    },
+    {
+      "id": "feelings_a",
+      "group": "feelings",
+      "text": "明天要面试了，怕答不上来，紧张得睡不着。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "anxious"
+      ],
+      "intents": [
+        "share",
+        "vent"
+      ]
+    },
+    {
+      "id": "feelings_b",
+      "group": "feelings",
+      "text": "面试终于通过了，太开心了！",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "happy",
+        "relieved"
+      ],
+      "intents": [
+        "share"
+      ]
+    },
+    {
+      "id": "split_a",
+      "group": "split",
+      "text": "是今晚真的要加班，不是不想跟你去。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "你是不是不想去了？",
+          "sent_at": "2026-09-25T23:58:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "不是不想去。",
+          "sent_at": "2026-09-25T23:59:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "clarify"
+      ]
+    },
+    {
+      "id": "split_b",
+      "group": "split",
+      "text": "不是不想去。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "你是不是不想去了？",
+          "sent_at": "2026-09-25T23:59:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "clarify"
+      ]
+    },
+    {
+      "id": "resolved_a",
+      "group": "resolved",
+      "text": "明白了，是我误会你了，这事已经说清了，不用再道歉。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "对不起，我解释一下：昨天是手机没电，不是故意不理你。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "relieved",
+        "calm"
+      ],
+      "intents": [
+        "confirm",
+        "apologize",
+        "clarify"
+      ],
+      "forbidden_actions": [
+        "apologize",
+        "clarify_concern"
+      ]
+    },
+    {
+      "id": "resolved_b",
+      "group": "resolved",
+      "text": "行吧。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "unknown",
+        "calm",
+        "annoyed"
+      ],
+      "intents": [
+        "unknown",
+        "confirm"
+      ],
+      "ambiguous": true,
+      "forbidden_actions": [
+        "apologize",
+        "fulfill"
+      ]
+    },
+    {
+      "id": "promise_a",
+      "group": "promise",
+      "text": "你昨天说今天把餐厅地址给我，地址发我一下吧。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "我明天把餐厅地址发给你。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm"
+      ],
+      "intents": [
+        "request"
+      ],
+      "topic": [
+        "reopened",
+        "continuing"
+      ]
+    },
+    {
+      "id": "promise_b",
+      "group": "promise",
+      "text": "你说的那件事有进展吗？",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "question"
+      ],
+      "forbidden_actions": [
+        "apologize"
+      ],
+      "topic": [
+        "reopened",
+        "continuing",
+        "unknown"
+      ]
+    },
+    {
+      "id": "missing_a",
+      "group": "missing",
+      "text": "刚才那个太离谱了。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "annoyed",
+        "confused",
+        "unknown"
+      ],
+      "intents": [
+        "vent",
+        "share"
+      ],
+      "omitted_media": 1,
+      "ambiguous": true,
+      "forbidden_actions": [
+        "apologize"
+      ]
+    },
+    {
+      "id": "missing_b",
+      "group": "missing",
+      "text": "昨天的烦心事过去啦，现在很开心。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "对方",
+          "message": "我心情不好。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "happy",
+        "relieved"
+      ],
+      "intents": [
+        "share"
+      ],
+      "unknown_time": true
+    },
+    {
+      "id": "speaker_a",
+      "group": "speaker",
+      "text": "我很开心呀。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "我现在有点生气。",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "happy"
+      ],
+      "intents": [
+        "share"
+      ],
+      "forbidden_actions": [
+        "apologize"
+      ]
+    },
+    {
+      "id": "speaker_b",
+      "group": "speaker",
+      "text": "还没忙完，等我有空再聊吧。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "你怎么还不回？",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "tired",
+        "unknown"
+      ],
+      "intents": [
+        "busy",
+        "pause"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "clarify_concern",
+        "follow_new_topic"
+      ]
+    },
+    {
+      "id": "clarify_a",
+      "group": "clarify",
+      "text": "我没听懂，你说的是周三还是周四？",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "confused"
+      ],
+      "intents": [
+        "question"
+      ]
+    },
+    {
+      "id": "clarify_b",
+      "group": "clarify",
+      "text": "我说的是周四，不是周三，你刚才听错了。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "那周三见？",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "unknown"
+      ],
+      "intents": [
+        "clarify"
+      ]
+    },
+    {
+      "id": "thanks_a",
+      "group": "thanks",
+      "text": "谢谢你特意来帮忙，今天多亏了你。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [],
+      "emotions": [
+        "happy",
+        "calm",
+        "relieved"
+      ],
+      "intents": [
+        "thank"
+      ]
+    },
+    {
+      "id": "thanks_b",
+      "group": "thanks",
+      "text": "对不起，刚才忘了通知你，是我疏忽了。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "怎么到了才说改时间了？",
+          "sent_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "emotions": [
+        "sad",
+        "calm",
+        "hurt",
+        "unknown"
+      ],
+      "intents": [
+        "apologize"
+      ]
+    },
+    {
+      "id": "long_a",
+      "group": "long",
+      "text": "我说的就是刚开始那个约定，请把地址发给我。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "我今晚把餐厅地址发给你。",
+          "sent_at": "2026-09-25T23:20:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第1项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第2项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第3项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第4项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第5项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第6项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第7项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第8项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第9项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第10项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第11项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        }
+      ],
+      "emotions": [
+        "calm"
+      ],
+      "intents": [
+        "request"
+      ],
+      "topic": [
+        "continuing",
+        "reopened"
+      ]
+    },
+    {
+      "id": "long_b",
+      "group": "long",
+      "text": "材料都核对好了，晚安，我去睡了。",
+      "sent_at": "2026-09-26T00:00:00Z",
+      "history": [
+        {
+          "speaker": "我",
+          "message": "刚才说的第1项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第2项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第3项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第4项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第5项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第6项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第7项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第8项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第9项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "对方",
+          "message": "刚才说的第10项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        },
+        {
+          "speaker": "我",
+          "message": "刚才说的第11项材料已经核对。",
+          "sent_at": "2026-09-25T23:30:00Z"
+        }
+      ],
+      "emotions": [
+        "calm",
+        "tired",
+        "relieved"
+      ],
+      "intents": [
+        "goodbye"
+      ],
+      "forbidden_actions": [
+        "ask_detail",
+        "follow_new_topic",
+        "clarify_concern"
+      ]
+    }
+  ]
+}

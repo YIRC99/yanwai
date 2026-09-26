@@ -16,15 +16,19 @@ object ChatAnalysis {
     private inline fun perform(input: AnalysisInput, model: String, exchange: (JSONObject) -> String,
         shouldContinue: () -> Boolean): Mood {
         checkActive(shouldContinue())
-        val profile = JevProtocol.parseProfile(exchange(JevProtocol.payload(input.text, model, input.context, input.speaker)))
+        val snapshot = input.copy(context = input.context.toList())
+        val profile = JevProtocol.parseProfile(exchange(JevProtocol.payload(snapshot, model)))
         checkActive(shouldContinue())
         if (ChatTemplates.candidates(profile).isEmpty() && ChatActions.candidates(profile).isEmpty()) {
-            return JevProtocol.fallback(profile)
+            return withSource(JevProtocol.fallback(profile), snapshot)
         }
-        val detail = exchange(JevProtocol.detailPayload(input, model, profile))
+        val detail = exchange(JevProtocol.detailPayload(snapshot, model, profile))
         checkActive(shouldContinue())
-        return JevProtocol.parseDetail(detail, profile)
+        return withSource(JevProtocol.parseDetail(detail, profile), snapshot)
     }
+
+    private fun withSource(mood: Mood, input: AnalysisInput): Mood =
+        mood.copy(detail = mood.detail + "\n" + AnalysisState.description(input))
 
     private fun checkActive(active: Boolean) {
         if (!active) throw CancellationException("分析已停止或消息不再可见")

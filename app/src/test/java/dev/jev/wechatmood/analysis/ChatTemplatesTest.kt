@@ -6,11 +6,13 @@ import org.junit.Test
 class ChatTemplatesTest {
     private fun profile(scene: String, progress: String) = JevFixtures.profile(scene, progress)
 
-    @Test fun `eight scenes have four distinct complete cards each`() {
-        assertEquals(32, ChatTemplates.all.size)
-        assertEquals(32, ChatTemplates.all.map { it.id }.toSet().size)
-        assertEquals(8, ChatTemplates.all.groupBy { it.scene }.size)
-        ChatTemplates.all.groupBy { it.scene }.values.forEach { assertEquals(4, it.size) }
+    @Test fun `specialist cards and independent intent feelings have distinct complete options`() {
+        assertEquals(43, ChatTemplates.all.size)
+        assertEquals(43, ChatTemplates.all.map { it.id }.toSet().size)
+        assertEquals(8, ChatTemplates.all.count { it.id.startsWith("intent_") })
+        assertEquals(3, ChatTemplates.all.count { it.id.startsWith("feeling_") })
+        ChatTemplates.all.filterNot { it.id.startsWith("intent_") || it.id.startsWith("feeling_") }
+            .groupBy { it.scene }.values.forEach { assertEquals(4, it.size) }
         ChatTemplates.all.forEach {
             assertTrue(it.title.isNotBlank() && it.question.isNotBlank())
             assertEquals(setOf("signal", "ordinary", "unclear"), it.options.keys)

@@ -25,7 +25,8 @@ object ChatTemplates {
         "friction" to "委屈不满：表达受伤、不满、压力或需要空间",
         "repair" to "解释修复：就误会或不满解释、道歉、提出补救并回应",
         "closing" to "缓和收尾：接受回应、气氛缓和、告别或结束当前话题",
-        "other" to "纯事务指令或通知、无适合分类或信息不足；向朋友分享工作学习经历仍属于闲聊")
+        "other" to "纯事务指令或通知、无适合分类或信息不足；向朋友分享工作学习经历仍属于闲聊",
+        "intent" to "直接交流：拒绝、道歉、感谢、澄清或暂时不方便回应")
 
     val all = listOf(
         ChatTemplate("daily_share", "daily", "日常小事，也是在递话题", "这次分享更想得到什么？",
@@ -131,26 +132,66 @@ object ChatTemplates {
         ChatTemplate("closing_pause", "closing", "留白，也可以是舒服的节奏", "这会儿适合让聊天自然停一停吗？",
             "话题自然结束，没有待回应的问题", "对方还有明确问题或话题邀请",
             stopDuring = emptySet()),
+        ChatTemplate("intent_refuse", "intent", "尊重明确的意思", "是在拒绝提议，还是只调整时间？",
+            "明确不愿接受这次提议", "只说明当前不方便，仍愿意另作安排", stopDuring = emptySet()),
+        ChatTemplate("intent_apologize", "intent", "回应这次道歉", "是在为具体事情道歉吗？",
+            "承认具体问题并表达歉意", "只是礼貌用语，尚未承认具体问题", stopDuring = emptySet()),
+        ChatTemplate("intent_thank", "intent", "接住感谢", "这句主要是在表达感谢吗？",
+            "感谢具体帮助或回应", "客套铺垫，重点在后面的其他内容", stopDuring = emptySet()),
+        ChatTemplate("intent_clarify", "intent", "听清原意", "对方是在纠正之前的理解吗？",
+            "澄清被误解的意思或事实", "补充情况，没有明确纠正先前理解", stopDuring = emptySet()),
+        ChatTemplate("intent_busy", "intent", "暂时没有精力", "暂时不回应，是明确说明忙碌或疲惫吗？",
+            "说明目前无暇回应，需要先忙或休息", "没有说明原因，不能确定为何停顿", stopDuring = emptySet()),
+        ChatTemplate("intent_question", "intent", "先接住问题", "当前是在直接向你提问吗？",
+            "有明确希望你回答的问题", "只是转述、自问或表达感受", stopDuring = emptySet()),
+        ChatTemplate("intent_request", "intent", "说清能帮什么", "对方明确希望你采取行动吗？",
+            "请求你做一件具体的事", "只是描述困难，没有明确请求", stopDuring = emptySet()),
+        ChatTemplate("intent_pause", "intent", "给暂停留空间", "对方明确希望暂停交流吗？",
+            "明确要求暂停或不再继续追问", "只是暂时没有新话题", stopDuring = emptySet()),
+        ChatTemplate("feeling_anxious", "care", "担心一件尚未确定的事", "是在表达担心，还是已经发生的不满？",
+            "担心未来结果或尚不确定的事情", "在评价已经发生的不愉快经历", stopDuring = emptySet()),
+        ChatTemplate("feeling_confused", "care", "需要把事情弄明白", "主要是在表达不理解吗？",
+            "对信息、安排或原意感到困惑", "已经理解，只是不同意", stopDuring = emptySet()),
+        ChatTemplate("feeling_tired", "care", "精力也需要被考虑", "当前表达主要是疲惫吗？",
+            "明确说明身体或精力上的疲惫", "主要表达不满，不能仅归因于疲惫", stopDuring = emptySet()),
     )
 
+    private val directIntents = mapOf("refuse" to "intent_refuse", "apologize" to "intent_apologize",
+        "thank" to "intent_thank", "clarify" to "intent_clarify", "busy" to "intent_busy",
+        "question" to "intent_question", "request" to "intent_request", "pause" to "intent_pause")
+
     fun candidates(profile: ChatProfile): List<ChatTemplate> {
+        val generic = all.filter { card -> directIntents.any { (act, id) -> card.id == id && profile.has("speech_act", act) } ||
+            (card.id == "feeling_${profile.emotion.choice}" && profile.emotion.clear) }
+        // Explicit boundaries remain available even if another independent observation says new topic.
+        if (profile.has("speech_act", "refuse", "pause", "busy")) return generic
+        if (profile.has("speech_act", "goodbye")) return generic + all.filter { it.id == "closing_goodnight" }
         val externalVenting = profile.has("target", "experience", "third_party") && profile.has("speech_act", "vent")
         val scene = when {
             externalVenting -> "daily"
             profile.newTopic && (!profile.canSpecialize || profile.scene.choice == "closing") -> "daily"
             profile.canSpecialize -> profile.scene.choice
             profile.has("speech_act", "share") -> "daily"
-            else -> return emptyList()
+            else -> null
         }
         val progress = when {
             profile.newTopic || externalVenting -> "sharing"
             profile.progress.clear -> profile.progress.choice
             else -> "unknown"
         }
-        return all.filter { it.scene == scene && progress !in it.stopDuring &&
+        val secondary = profile.scene.probabilities.entries.sortedByDescending { it.value }
+            .firstOrNull { it.key != scene && it.key !in setOf("other", "intent") && it.value >= 0.25 &&
+                (profile.scene.probabilities[scene] ?: 0.0) - it.value <= 0.25 }?.key
+            ?.takeIf { profile.canSpecialize && !externalVenting && !profile.newTopic }
+        fun forScene(value: String?) = all.filter { it.scene == value && !it.id.startsWith("intent_") &&
+            !it.id.startsWith("feeling_") && progress !in it.stopDuring &&
             (it.onlyDuring.isEmpty() || progress in it.onlyDuring || progress == "unknown") &&
             allowed(it.id, profile) }
+        return (generic + forScene(scene) + forScene(secondary).take(2)).distinctBy { it.id }.take(8)
     }
+
+    fun displayScene(card: ChatTemplate): String = if (card.id.startsWith("feeling_")) "当前状态"
+        else scenes.getValue(card.scene).substringBefore('：')
 
     private fun allowed(id: String, p: ChatProfile): Boolean = when {
         id.startsWith("promise_") -> p.hasAgreement

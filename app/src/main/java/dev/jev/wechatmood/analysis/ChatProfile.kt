@@ -15,7 +15,8 @@ data class ChatProfile(
     fun has(key: String, vararg values: String): Boolean = facts[key]?.let {
         it.clear && it.choice in values
     } == true
-    val newTopic: Boolean get() = has("new_topic", "yes")
+    val newTopic: Boolean get() = !has("topic_relation", "continuing", "reopened") &&
+        (has("new_topic", "yes") || has("topic_relation", "new"))
     val personalConflict: Boolean get() = has("target", "listener") && !newTopic
     val hasAgreement: Boolean get() = has("commitment", "pending", "accepted") && !newTopic
     val acceptsResponse: Boolean get() = !newTopic && progress.clear && progress.choice == "accepted" &&

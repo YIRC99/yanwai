@@ -7,12 +7,12 @@ class MessageContextTest {
     private fun message(text: String, sent: Int = 0, talker: String = "friend", type: Int = 1) =
         MessageMetadata(type, sent, text, talker)
 
-    @Test fun `takes only ten predecessors in chronological order including both speakers`() {
+    @Test fun `collects preceding text in chronological order including both speakers`() {
         val rows = (0..14).map { message("message-$it", it % 2) }
         val visited = mutableListOf<Int>()
         val result = MessageContext.collect(rows[12], 12) { visited += it; rows[it] }!!
-        assertEquals((2..11).toList(), visited)
-        assertEquals((2..11).map { "message-$it" }, result.context.map { it.text })
+        assertEquals((11 downTo 0).toList(), visited)
+        assertEquals((0..11).map { "message-$it" }, result.context.map { it.text })
         assertEquals(listOf("对方", "我"), result.context.take(2).map { it.speaker })
         assertEquals("message-12", result.text)
     }

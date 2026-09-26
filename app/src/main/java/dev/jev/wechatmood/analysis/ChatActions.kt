@@ -6,8 +6,8 @@ data class ChatAction(val id: String, val condition: String, val text: String)
 object ChatActions {
     fun candidates(p: ChatProfile): List<ChatAction> = buildList {
         fun offer(id: String, condition: String, text: String) { add(ChatAction(id, condition, text)) }
-        val active = !p.has("speech_act", "pause", "goodbye") || p.newTopic
-        if (p.newTopic) {
+        val active = !p.has("speech_act", "pause", "goodbye", "refuse", "busy")
+        if (p.newTopic && active) {
             offer("follow_new_topic", "对方提供新话题或新计划，顺着新的内容聊", "顺着新话题，问问接下来的打算。")
         }
         if (active && p.has("speech_act", "share", "vent")) {
@@ -51,11 +51,26 @@ object ChatActions {
         if (active && p.has("speech_act", "confirm")) {
             offer("acknowledge", "只是确认具体信息，不额外推断约定或关系变化", "简短确认对方说的内容即可。")
         }
-        if (!p.newTopic && p.has("speech_act", "pause")) {
+        if (p.has("speech_act", "pause")) {
             offer("give_space", "对方明确要求暂停或独处", "让对方先缓一缓，别连续发消息。")
         }
-        if (!p.newTopic && p.has("speech_act", "goodbye")) {
+        if (p.has("speech_act", "goodbye")) {
             offer("goodbye", "对方明确告别，没有另开话题", "回一句告别，先让对方去忙。")
+        }
+        if (p.has("speech_act", "refuse")) {
+            offer("respect_refusal", "对方明确拒绝或表达边界，不继续劝说或追问理由", "接受对方的意思，先停下这次提议。")
+        }
+        if (p.has("speech_act", "busy")) {
+            offer("wait_until_free", "对方明确表示忙碌或疲惫，暂时不方便回应", "让对方先忙或休息，别催着回复。")
+        }
+        if (active && p.has("speech_act", "apologize")) {
+            offer("receive_apology", "对方向我方道歉，应回应具体事情，不能假装已经接受", "说清自己对这件事的感受，以及还有没有需要解决的部分。")
+        }
+        if (active && p.has("speech_act", "thank")) {
+            offer("receive_thanks", "对方主要在感谢，没有另一个待回答的问题或拒绝", "自然接下这句感谢就好。")
+        }
+        if (active && p.has("speech_act", "clarify")) {
+            offer("check_understanding", "对方澄清原意，适合确认理解，不重复质问已经说清的部分", "按对方澄清的意思回应，有没听懂的地方再具体问。")
         }
     }
 
