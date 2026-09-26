@@ -30,9 +30,10 @@ data class AnalysisInput(
     val voice: VoiceSource? = null,
     val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING,
     val quoted: QuotedMessage? = null,
+    val accountScope: String = "",
 ) {
     val key: String get() = MoodStore.keyOf(text, talker, context, messageId, speaker, createdAt, coverage,
-        zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: ""), quoted)
+        zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: ""), quoted, accountScope)
 }
 
 object MessagePolicy {

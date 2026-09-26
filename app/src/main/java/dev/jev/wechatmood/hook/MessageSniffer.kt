@@ -168,8 +168,8 @@ object MessageSniffer {
         val bound = bindings[row] ?: return
         cancelPendingCard(row)
         fun input() = bound.input?.takeIf {
-            active.get() != null && it.talker == displayedTalker && ModulePrefs.shouldDisplay(it)
-        }?.let(ModulePrefs::analysisInput)
+            active.get() != null && it.talker == displayedTalker
+        }?.let(ModulePrefs::analysisInput)?.takeIf(ModulePrefs::shouldDisplay)
         val message = input()
         if (BubbleDecorator.show(row, message) || message == null) return
         val observer = row.viewTreeObserver
@@ -195,6 +195,7 @@ object MessageSniffer {
     }
 
     fun resume(activity: Activity) {
+        ReplyDatabaseHistory.resetAccountScope()
         main.removeCallbacks(tick)
         SignalAnalyzer.cancelAll()
         clearPendingCards()
@@ -208,6 +209,7 @@ object MessageSniffer {
 
     fun pause(activity: Activity) {
         if (active.get() !== activity) return
+        ReplyDatabaseHistory.resetAccountScope()
         main.removeCallbacks(tick)
         SignalAnalyzer.cancelAll()
         clearPendingCards()
@@ -427,6 +429,7 @@ object MessageSniffer {
         val records = records(chatScope)
         val talker = conversation(activity, chatScope, records)
         if (displayedTalker != talker) {
+            ReplyDatabaseHistory.resetAccountScope()
             clearPendingCards()
             BubbleDecorator.clearAll()
             displayedTalker = talker

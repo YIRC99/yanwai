@@ -60,6 +60,13 @@ object SignalAnalyzer {
         val settings = snapshot.api
         fun active(): Boolean { job.ensureActive(); return shouldContinue() && ModulePrefs.analysisSettings()?.sameAnalysis(snapshot) == true }
         check(settings.isConfigured) { "请先在言外设置中填写并保存 API Key" }
+        if (!active()) throw CancellationException("分析已关闭或配置已改变")
+        val verifiedAccount = dev.jev.wechatmood.hook.ReplyDatabaseHistory.matchesAnalysisAccount(input)
+        if (verifiedAccount) {
+            val cached = AnalysisResultCache.find(input, snapshot)
+            if (!active()) throw CancellationException("分析已关闭或配置已改变")
+            if (cached != null) return@withContext cached
+        } else MoodLog.i("ANALYSIS_CACHE_ACCOUNT_UNVERIFIED 当前消息账号未核对，暂用内存缓存")
         val stage = Stage("正在分析…")
         stages[input.key] = stage
         try {
@@ -83,7 +90,12 @@ object SignalAnalyzer {
                 if (input.voice != null) append("\n\n语音转写：${prepared.text}\n（仅根据转写文字分析）")
                 if (prepared.coverage.unavailableVoice > 0) append("\n前文有 ${prepared.coverage.unavailableVoice} 条语音未能转写，分析依据不完整。")
             }
-            mood.copy(detail = mood.detail + note)
+            val result = mood.copy(detail = mood.detail + note)
+            if (!active()) throw CancellationException("分析已关闭或配置已改变")
+            if (verifiedAccount && !result.intentFailed) {
+                AnalysisResultCache.save(input, snapshot, result, AnalysisState.build(prepared).toString())
+            }
+            result
         } catch (e: org.json.JSONException) {
             throw IllegalStateException("模型返回不完整，本次不显示判断")
         } catch (e: IllegalArgumentException) {

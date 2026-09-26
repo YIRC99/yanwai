@@ -24,6 +24,7 @@ class SettingsProvider : ContentProvider() {
             throw SecurityException("Caller is not allowed: uid=$caller")
         }
         return when (method) {
+            "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
             "config" -> snapshot(ctx)
             "report" -> {
                 ctx.getSharedPreferences(RUNTIME_FILE, 0).edit()

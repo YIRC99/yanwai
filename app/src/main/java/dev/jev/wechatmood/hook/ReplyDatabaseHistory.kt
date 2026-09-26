@@ -13,11 +13,23 @@ import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 import dev.jev.wechatmood.voice.VoiceSource
+import dev.jev.wechatmood.core.AnalysisCacheKey
+import dev.jev.wechatmood.core.AnalysisInput
+import dev.jev.wechatmood.core.AnalysisAccountIdentity
+import dev.jev.wechatmood.core.AnalysisAccountScopes
 
 /** Reuses WeChat's open WCDB handle. Never opens files, obtains keys, writes, or closes its database. */
 object ReplyDatabaseHistory {
     private val known = WeakHashMap<Any, Boolean>()
     private val handles = ArrayList<WeakReference<Any>>()
+    private val moduleQuery = ThreadLocal<Boolean>()
+    private val accountWorker = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "yanwai-account") }
+    private val accountScopes = AnalysisAccountScopes({ accountWorker.execute(it) }, ::findAnalysisAccount)
+    fun accountScope(input: AnalysisInput): String = accountScopes.scope(input)
+    fun pendingAccountScope(): String = accountScopes.pendingScope()
+    fun resetAccountScope() = accountScopes.reset()
+    private fun scope(db: Any): String? = (db.javaClass.getMethod("getPath").invoke(db) as? String)
+        ?.replace('\\', '/')?.takeIf { it.endsWith("/EnMicroMsg.db") }?.let { AnalysisCacheKey.digest(it) }
 
     fun install(loader: ClassLoader) {
         var hooks = 0
@@ -38,22 +50,42 @@ object ReplyDatabaseHistory {
     }
 
     @Synchronized private fun observe(db: Any) {
+        if (moduleQuery.get() == true) return
         val main = known.getOrPut(db) {
             val path = db.javaClass.getMethod("getPath").invoke(db) as? String
             path?.replace('\\', '/')?.substringAfterLast('/') == "EnMicroMsg.db"
         }
         if (!main) return
+        val firstObservation = handles.none { it.get() === db }
         handles.removeAll { it.get() == null || it.get() === db }
         handles.add(0, WeakReference(db))
         while (handles.size > 4) handles.removeAt(handles.lastIndex)
+        if (firstObservation) accountScopes.retryUnverified()
     }
 
     private fun query(db: Any, sql: String, args: Array<String>): Cursor {
         check(db.javaClass.getMethod("isOpen").invoke(db) == true)
         val method = db.javaClass.methods.first { it.name == "rawQuery" && it.parameterCount == 2 &&
             it.parameterTypes[0] == String::class.java && it.parameterTypes[1].isAssignableFrom(Array<String>::class.java) }
-        return method.invoke(db, sql, args) as? Cursor ?: error("Unsupported history cursor")
+        val previous = moduleQuery.get()
+        moduleQuery.set(true)
+        return try { method.invoke(db, sql, args) as? Cursor ?: error("Unsupported history cursor") }
+        finally { moduleQuery.set(previous) }
     }
+
+    /** Verify the visible target against its account before reusing or saving a durable result. */
+    private fun findAnalysisAccount(input: AnalysisInput): String? {
+        val databases = synchronized(this) { handles.mapNotNull { it.get() } }
+        return databases.mapNotNull { db -> runCatching {
+            val account = scope(db) ?: return@runCatching null
+            query(db, "SELECT * FROM message WHERE talker = ? AND msgId = ? LIMIT 1",
+                arrayOf(input.talker, input.messageId.toString())).use {
+                account.takeIf { _ -> it.moveToFirst() && AnalysisAccountIdentity.matches(input, metadata(it)) }
+            }
+        }.getOrNull() }.distinct().singleOrNull()
+    }
+    fun matchesAnalysisAccount(input: AnalysisInput): Boolean =
+        input.accountScope.matches(Regex("[0-9a-f]{64}")) && findAnalysisAccount(input) == input.accountScope
 
     private fun metadata(cursor: Cursor): MessageMetadata {
         fun string(name: String) = cursor.getString(cursor.getColumnIndexOrThrow(name)).orEmpty()
@@ -105,12 +137,7 @@ object ReplyDatabaseHistory {
         val sources = databases.map { db -> ReplyHistoryQuery { sql, args ->
             active.ensureActive()
             check(db.javaClass.getMethod("isOpen").invoke(db) == true)
-            val rawQuery = db.javaClass.methods.first { method ->
-                method.name == "rawQuery" && method.parameterCount == 2 &&
-                    method.parameterTypes[0] == String::class.java && method.parameterTypes[1].isArray &&
-                    method.parameterTypes[1].isAssignableFrom(Array<String>::class.java)
-            }
-            val cursor = rawQuery.invoke(db, sql, args) as? Cursor ?: error("Unsupported history cursor")
+            val cursor = query(db, sql, args)
             cursor.use {
                 buildList {
                     while (size < limit + 1 && it.moveToNext()) {

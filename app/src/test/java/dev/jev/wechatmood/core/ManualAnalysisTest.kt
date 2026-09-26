@@ -6,6 +6,31 @@ import org.junit.Test
 class ManualAnalysisTest {
     private val message = AnalysisInput("好的", "alice", messageId = 42)
 
+    @Test fun `manual selection made during account lookup follows the verified account only`() {
+        val manual = ManualAnalysis()
+        val waiting = message.copy(accountScope = "pending:screen")
+        manual.select(waiting)
+        val verified = message.copy(accountScope = "verified-account")
+        manual.resolveAccount(verified, "pending:screen")
+        assertNotNull(manual.selectedInput(verified))
+        assertNull(manual.selectedInput(waiting))
+        assertNull(manual.selectedInput(verified.copy(accountScope = "other-account")))
+    }
+
+    @Test fun `manual choice survives pending then memory fallback then verified account`() {
+        val manual = ManualAnalysis()
+        val waiting = message.copy(accountScope = "pending:screen")
+        manual.select(waiting)
+        val fallback = message.copy(accountScope = "memory:screen")
+        manual.resolveAccount(fallback, waiting.accountScope)
+        assertNotNull(manual.selectedInput(fallback))
+        val verified = message.copy(accountScope = "verified")
+        manual.resolveAccount(verified, waiting.accountScope)
+        manual.resolveAccount(verified, fallback.accountScope)
+        assertNotNull(manual.selectedInput(verified))
+        assertNull(manual.selectedInput(fallback))
+    }
+
     @Test fun `closing chat switch clears all its manual choices and allows a fresh manual selection`() {
         val manual = ManualAnalysis()
         val second = message.copy(messageId = 43)

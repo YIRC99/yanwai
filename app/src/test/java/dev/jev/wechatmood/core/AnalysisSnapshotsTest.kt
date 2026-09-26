@@ -21,7 +21,7 @@ class AnalysisSnapshotsTest {
         assertEquals(otherTime, snapshots.resolve(otherTime))
     }
 
-    @Test fun `settings reset and explicit switch off permit fresh evidence`() {
+    @Test fun `explicit evidence reset permits a new snapshot`() {
         val snapshots = AnalysisSnapshots()
         snapshots.resolve(original)
         snapshots.clearConversation("alice")

@@ -110,6 +110,8 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // Exercise the same cache SQL against a real on-disk database on the JVM.
+    testImplementation("org.xerial:sqlite-jdbc:3.46.1.0")
 }
 
 // Live tests are opt-in, never part of a normal build and never store credentials in BuildConfig.

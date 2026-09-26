@@ -48,6 +48,7 @@ object ModulePrefs {
     fun init(context: Context) {
         val app = context.applicationContext ?: context
         this.context = app
+        AnalysisResultCache.init(app)
         if (app.packageName == "com.tencent.mm" && conversations == null) {
             val local = app.getSharedPreferences("yanwai_conversations", Context.MODE_PRIVATE)
             conversations = ConversationSwitches(local.getStringSet("enabled_chats", emptySet()).orEmpty()) {
@@ -88,17 +89,29 @@ object ModulePrefs {
     fun apiSettings(): ApiSettings = session.current?.api ?: ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")
     fun isChatEnabled(talker: String?) = conversations?.isEnabled(talker) == true
     fun canAnalyze(talker: String?) = isChatEnabled(talker) && session.current?.canAnalyze == true
-    fun analysisInput(input: AnalysisInput): AnalysisInput = manualAnalysis.selectedInput(input)
-        ?: if (isChatEnabled(input.talker)) analysisSnapshots.resolve(input) else input
-    fun shouldDisplay(input: AnalysisInput): Boolean = manualAnalysis.allows(input, isChatEnabled(input.talker))
-    fun canAnalyze(input: AnalysisInput): Boolean = shouldDisplay(input) && session.current?.canAnalyze == true
-    fun selectMessage(input: AnalysisInput): Boolean = manualAnalysis.select(input)
+    private fun scoped(input: AnalysisInput) = input.copy(accountScope = dev.jev.wechatmood.hook.ReplyDatabaseHistory.accountScope(input))
+    fun analysisInput(input: AnalysisInput): AnalysisInput {
+        val current = scoped(input)
+        if (!current.accountScope.startsWith("pending:")) {
+            manualAnalysis.resolveAccount(current, dev.jev.wechatmood.hook.ReplyDatabaseHistory.pendingAccountScope())
+            if (!current.accountScope.startsWith("memory:"))
+                manualAnalysis.resolveAccount(current, dev.jev.wechatmood.hook.ReplyDatabaseHistory.pendingAccountScope().replace("pending:", "memory:"))
+        }
+        return manualAnalysis.selectedInput(current)
+            ?: if (isChatEnabled(current.talker)) analysisSnapshots.resolve(current) else current
+    }
+    fun shouldDisplay(input: AnalysisInput): Boolean =
+        input.accountScope == dev.jev.wechatmood.hook.ReplyDatabaseHistory.accountScope(input) &&
+            manualAnalysis.allows(input, isChatEnabled(input.talker))
+    fun canAnalyze(input: AnalysisInput): Boolean = !input.accountScope.startsWith("pending:") &&
+        shouldDisplay(input) && session.current?.canAnalyze == true
+    fun selectMessage(input: AnalysisInput): Boolean = manualAnalysis.select(scoped(input))
     fun setChatEnabled(talker: String?, value: Boolean): Boolean = runCatching {
         val saved = conversations?.setEnabled(talker, value) == true
         // Only an explicit, successfully saved switch-off resets this chat's manual choices.
         if (saved && !value && talker != null) {
             manualAnalysis.clearConversation(talker)
-            analysisSnapshots.clearConversation(talker)
+            // Keep completed evidence/results. Disabling is not an instruction to re-analyze.
         }
         saved
     }.onFailure { MoodLog.e("CHAT_SWITCH_SAVE_FAILED 本地会话开关保存失败", it) }.getOrDefault(false)
