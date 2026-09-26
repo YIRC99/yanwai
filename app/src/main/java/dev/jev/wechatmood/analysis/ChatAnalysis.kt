@@ -20,15 +20,12 @@ object ChatAnalysis {
         val profile = JevProtocol.parseProfile(exchange(JevProtocol.payload(snapshot, model)))
         checkActive(shouldContinue())
         if (ChatTemplates.candidates(profile).isEmpty() && ChatActions.candidates(profile).isEmpty()) {
-            return withSource(JevProtocol.fallback(profile), snapshot)
+            return JevProtocol.fallback(profile)
         }
         val detail = exchange(JevProtocol.detailPayload(snapshot, model, profile))
         checkActive(shouldContinue())
-        return withSource(JevProtocol.parseDetail(detail, profile), snapshot)
+        return JevProtocol.parseDetail(detail, profile)
     }
-
-    private fun withSource(mood: Mood, input: AnalysisInput): Mood =
-        mood.copy(detail = mood.detail + "\n" + AnalysisState.description(input))
 
     private fun checkActive(active: Boolean) {
         if (!active) throw CancellationException("分析已停止或消息不再可见")

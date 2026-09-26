@@ -19,6 +19,7 @@ class ChatAnalysisTest {
         assertEquals(2, calls.size)
         assertEquals("act", calls[1].getJSONObject("state").getJSONObject("first_pass").getJSONObject("progress").getString("choice"))
         assertTrue(result.detail.contains("什么时候做"))
+        assertFalse(result.detail.contains("消息："))
     }
 
     @Test fun `unrelated or uncertain scene stops after first call`() {
@@ -32,8 +33,8 @@ class ChatAnalysisTest {
                 response.toString()
             })
             assertEquals(1, calls)
-            assertEquals(3, result.detail.lines().size)
-            assertTrue(result.detail.contains("提供前文 0 条"))
+            assertEquals(2, result.detail.lines().size)
+            assertFalse(result.detail.contains("消息："))
             assertTrue(result.detail.contains("情绪："))
             assertFalse(result.detail.contains("建议："))
         }

@@ -7,7 +7,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /** Time arithmetic belongs to code. Blocks describe gaps, never an automatic emotion reset. */
 object AnalysisState {
@@ -78,21 +77,4 @@ object AnalysisState {
                 "时间 null 表示未知；context 只有目标之前的已读取文字，省略的图片语音和缺失历史不是无事发生。")
     }
 
-    fun description(input: AnalysisInput): String {
-        val state = build(input)
-        val coverage = state.getJSONObject("context_coverage")
-        val zone = ZoneId.of(state.getString("timezone"))
-        val format = DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(zone)
-        val times = state.getJSONArray("context").let { array ->
-            (0 until array.length()).map { array.getJSONObject(it).optLong("sent_at_ms", 0) }.filter { it > 0 }
-        }
-        val range = if (times.isEmpty()) "时间未知" else "${format.format(Instant.ofEpochMilli(times.first()))}—${format.format(Instant.ofEpochMilli(times.last()))}"
-        val source = if (coverage.getString("source") == "loaded_page") "页面前文" else "提供前文"
-        val incomplete = coverage.getBoolean("truncated") || listOf("omitted_media", "unavailable", "omitted_text", "invalid_time")
-            .any { coverage.getInt(it) > 0 }
-        val target = if (input.createdAt > 0) format.format(Instant.ofEpochMilli(input.createdAt)) else "时间未知"
-        return "消息：$target · $source ${coverage.getInt("count")} 条（$range）" +
-            (if (times.isNotEmpty() && times.size < coverage.getInt("count")) " · 部分时间未知" else "") +
-            (if (incomplete) " · 有未读取或截断内容" else "")
-    }
 }

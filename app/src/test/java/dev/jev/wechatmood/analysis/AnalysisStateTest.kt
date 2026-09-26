@@ -31,7 +31,7 @@ class AnalysisStateTest {
         val input = AnalysisInput("当前", "f", listOf(ContextMessage("对方", "已知", 1000), ContextMessage("我", "时间缺失")), createdAt = 2000)
         val state = AnalysisState.build(input)
         assertTrue(state.isNull("gap_from_previous_minutes"))
-        assertTrue(AnalysisState.description(input).contains("部分时间未知"))
+        assertTrue(state.getJSONArray("context").getJSONObject(1).isNull("sent_at"))
     }
 
     @Test fun `daylight saving gap is computed from instants not local clock text`() {
