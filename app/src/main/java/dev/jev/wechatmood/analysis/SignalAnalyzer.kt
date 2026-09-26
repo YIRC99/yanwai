@@ -10,7 +10,9 @@ object SignalAnalyzer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val client = JevHttpClient()
     private val llmClient = dev.jev.wechatmood.reply.ReplyHttpClient()
-    private class Stage(@Volatile var text: String)
+    private class Stage(@Volatile var text: String) {
+        @Volatile var emotion: Mood? = null
+    }
     private val stages = ConcurrentHashMap<String, Stage>()
     private val queue = AnalysisQueue(scope, ModulePrefs::canAnalyze, { input ->
         ModulePrefs.requestReload()
@@ -28,6 +30,7 @@ object SignalAnalyzer {
     fun failure(key: String): String? = queue.failure(key)
     fun retryFailure(key: String) { MoodStore.retryIntent(key); queue.retryFailure(key); NativeVoiceBridge.retryFailures() }
     fun progress(key: String): String? = stages[key]?.text
+    fun partialMood(key: String): Mood? = stages[key]?.emotion
     fun reconcile(visibleKeys: Set<String>, talker: String?) =
         if (talker == null) queue.cancelAll() else queue.reconcile(visibleKeys, talker)
     fun cancelConversation(talker: String) = queue.cancelConversation(talker)
@@ -72,7 +75,10 @@ object SignalAnalyzer {
             val mood = IntentAnalysis.analyze(prepared, settings, snapshot.intent,
                 { client.exchangeSuspending(it, settings) },
                 { llmClient.request(snapshot.intent.llm, it, IntentProtocol::parse) }, ::active,
-                { emotion -> stage.text = emotion.detail.substringAfter('\n') + "\n智能分析中…" })
+                { emotion ->
+                    stage.text = emotion.detail.substringAfter('\n') + "\n智能分析中…"
+                    stage.emotion = emotion.copy(detail = emotion.detail + "\n智能分析中…")
+                })
             val note = buildString {
                 if (input.voice != null) append("\n\n语音转写：${prepared.text}\n（仅根据转写文字分析）")
                 if (prepared.coverage.unavailableVoice > 0) append("\n前文有 ${prepared.coverage.unavailableVoice} 条语音未能转写，分析依据不完整。")

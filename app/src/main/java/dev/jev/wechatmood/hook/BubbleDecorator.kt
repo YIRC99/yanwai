@@ -34,8 +34,9 @@ object BubbleDecorator {
             state = attach(row, key) ?: return false
             cards[row] = state
         }
-        val value = MoodStore.get(key)?.let {
-            AnalysisCardText.format(it)
+        val value = (MoodStore.get(key) ?: SignalAnalyzer.partialMood(key))?.let {
+            AnalysisCardText.format(it, row.resources.displayMetrics.density,
+                state.view.layoutParams.width - state.view.paddingLeft - state.view.paddingRight, state.view.paint)
         } ?: SignalAnalyzer.failure(key)?.let {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
         } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))
