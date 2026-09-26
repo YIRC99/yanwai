@@ -70,7 +70,7 @@ object MessageMenu {
                         val accepted = if (item.itemId == REPLY_ITEM_ID) target.reply?.let { MessageSniffer.suggestReply(view, it) } == true
                             else target.input?.let { MessageSniffer.analyzeMessage(view, it) } == true
                         if (!accepted) {
-                            Toast.makeText(view.context, "消息已变化，请重新长按需要分析的文字", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(view.context, "消息已变化，请重新长按需要分析的文字或语音", Toast.LENGTH_SHORT).show()
                         }
                     }.onFailure { MoodLog.e("MESSAGE_MENU_ACTION_FAILED 单条分析启动失败", it) }
                     runCatching { finishSelection(param.thisObject) }

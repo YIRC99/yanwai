@@ -1,5 +1,8 @@
 package dev.jev.wechatmood.hook
 
+import dev.jev.wechatmood.voice.VoicePreparation
+import dev.jev.wechatmood.voice.VoiceState
+
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
@@ -335,6 +338,7 @@ class ReplyHostUi(private val activity: Activity) {
             if (MessageSniffer.currentReplyTalker() != selectedTalker) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
             historyJob?.cancel()
+            NativeVoiceBridge.retryFailures()
             composition.historyLimit = limit
             val ticket = reference.begin(limit)
             snapshot = null; stale.visibility = View.GONE
@@ -347,19 +351,30 @@ class ReplyHostUi(private val activity: Activity) {
             if (loaded.talker != selectedTalker) { reference.cancel(); window.dismiss(); return }
             historyJob = scope.launch {
                 try {
-                    val current = ReplyDatabaseHistory.load(loaded, limit)
+                    val pending = ReplyDatabaseHistory.load(loaded, limit)
+                    val voiceCount = pending.messages.count { it.voice != null }
+                    var voiceIndex = 0
+                    val current = VoicePreparation.reply(pending) { source ->
+                        ensureActive()
+                        state.text = "正在转写语音 ${++voiceIndex}/$voiceCount…"
+                        NativeVoiceBridge.transcribe(source) {
+                            window === dialog && ModulePrefs.replyConsent && reference.isCurrent(ticket)
+                        }
+                    }
                     ensureActive()
                     if (window !== dialog || !ModulePrefs.replyConsent) return@launch
-                    if (current.messages.isEmpty()) {
+                    if (current.messages.isEmpty() || current.messages.all { it.voiceState == VoiceState.FAILED }) {
                         reference.fail(ticket)
-                        state.text = "尚未读取到文字消息，请在条数菜单中重试"
+                        state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
                         return@launch
                     }
                     if (!reference.complete(ticket, current, MessageSniffer.currentReplyTalker())) return@launch
                     snapshot = current
                     state.text = when {
+                        current.messages.any { it.voiceState == VoiceState.FAILED } ->
+                            "${current.messages.count { it.voiceState == VoiceState.FAILED }} 条语音未能转写，将明确标注缺失；可在条数菜单中重试。"
                         current.historyFailure != null -> "仅读取到页面 ${current.messages.size} 条。历史暂不可用，可切换条数重试。"
-                        current.messages.size < limit -> "本次读取到 ${current.messages.size} 条文字，将按实际内容回复。"
+                        current.messages.size < limit -> "本次读取到 ${current.messages.size} 条消息（含语音转写），将按实际内容回复。"
                         else -> ""
                     }
                     updateNotice()
@@ -537,14 +552,16 @@ class ReplyHostUi(private val activity: Activity) {
         val first = context.messages.firstOrNull()?.time ?: 0
         val last = context.messages.lastOrNull()?.time ?: 0
         fun time(value: Long) = if (value <= 0) "时间未知" else java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(value))
-        return "${time(first)} — ${time(last)} · 仅文字${if (context.trimmed) " · 已截取" else ""}" +
+        val voices = context.messages.count { it.voiceState == VoiceState.READY }
+        val missing = context.messages.count { it.voiceState == VoiceState.FAILED }
+        return "${time(first)} — ${time(last)} · 含 $voices 条语音转写${if (missing > 0) " · $missing 条转写失败" else ""}${if (context.trimmed) " · 已截取" else ""}" +
             (context.historyFailure?.let { "\n$it" } ?: "")
     }
     private fun showEvidence(context: ReplyContext) {
-        val source = if (context.source == ReplyContextSource.LOCAL_HISTORY) "本机聊天历史 · 选择最近 ${context.requestedMessages} 条，实际 ${context.messages.size} 条文字（不包含图片、语音等）"
-            else "仅页面已加载片段 · 跳过 ${context.omittedMedia} 条非文字"
+        val source = if (context.source == ReplyContextSource.LOCAL_HISTORY) "本机聊天历史 · 选择最近 ${context.requestedMessages} 条，实际 ${context.messages.size} 条文字或语音"
+            else "仅页面已加载片段 · 跳过 ${context.omittedMedia} 条其他媒体"
         val info = "$source\n${contextSummary(context)}\n\n" +
-            context.messages.joinToString("\n\n") { "${it.speaker} · ${ReplyProtocol.formatTime(it.time)}\n${it.text}" }
+            context.messages.joinToString("\n\n") { "${it.speaker} · ${ReplyProtocol.formatTime(it.time)}${if (it.voice != null) " · 语音转写" else ""}\n${it.text}" }
         AlertDialog.Builder(activity).setTitle("本次参考的聊天").setMessage(info).setPositiveButton("关闭", null).show()
     }
     private fun openSettings() = runCatching {

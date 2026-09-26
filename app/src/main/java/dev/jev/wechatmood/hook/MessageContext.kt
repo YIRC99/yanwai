@@ -8,7 +8,8 @@ import dev.jev.wechatmood.core.MessagePolicy
 /** Bounded local adapter reads only; keep whole messages and disclose holes in the evidence. */
 object MessageContext {
     fun collect(message: MessageMetadata, position: Int, itemAt: (Int) -> MessageMetadata?): AnalysisInput? {
-        val text = message.incomingText() ?: return null
+        if (message.isSend != 0) return null
+        val text = message.analysisText() ?: return null
         val recent = mutableListOf<ContextMessage>()
         var scanned = 0
         var media = 0
@@ -27,17 +28,17 @@ object MessageContext {
                 invalidTime++; continue
             }
             if (previous.createdAt > 0) newerTime = previous.createdAt
-            if (previous.type != 1) { media++; continue }
-            val previousText = previous.plainText()
+            if (previous.type !in setOf(1, 34)) { media++; continue }
+            val previousText = previous.analysisText()
             if (previousText == null) { omittedText++; continue }
             if (characters + previousText.length > MessagePolicy.MAX_CONTEXT_CHARACTERS) {
                 omittedText++; break // Do not cherry-pick older short messages around a missing long turn.
             }
             characters += previousText.length
-            recent += ContextMessage(previous.speaker(), previousText, previous.createdAt, previous.messageId)
+            recent += ContextMessage(previous.speaker(), previousText, previous.createdAt, previous.messageId, previous.voiceSource())
         }
         return AnalysisInput(text, message.talker, recent.asReversed().toList(), message.messageId, message.speaker(),
             message.createdAt, ContextCoverage("loaded_page", scanned, media, missing, omittedText, invalidTime,
-                cursor >= 0 || omittedText > 0))
+                cursor >= 0 || omittedText > 0), voice = message.voiceSource())
     }
 }

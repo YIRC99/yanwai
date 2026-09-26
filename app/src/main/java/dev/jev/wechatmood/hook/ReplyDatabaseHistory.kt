@@ -12,6 +12,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.util.WeakHashMap
+import dev.jev.wechatmood.voice.VoiceSource
 
 /** Reuses WeChat's open WCDB handle. Never opens files, obtains keys, writes, or closes its database. */
 object ReplyDatabaseHistory {
@@ -47,6 +48,56 @@ object ReplyDatabaseHistory {
         while (handles.size > 4) handles.removeAt(handles.lastIndex)
     }
 
+    private fun query(db: Any, sql: String, args: Array<String>): Cursor {
+        check(db.javaClass.getMethod("isOpen").invoke(db) == true)
+        val method = db.javaClass.methods.first { it.name == "rawQuery" && it.parameterCount == 2 &&
+            it.parameterTypes[0] == String::class.java && it.parameterTypes[1].isAssignableFrom(Array<String>::class.java) }
+        return method.invoke(db, sql, args) as? Cursor ?: error("Unsupported history cursor")
+    }
+
+    private fun metadata(cursor: Cursor): MessageMetadata {
+        fun string(name: String) = cursor.getString(cursor.getColumnIndexOrThrow(name)).orEmpty()
+        fun number(name: String) = cursor.getLong(cursor.getColumnIndexOrThrow(name))
+        return MessageMetadata(number("type").toInt(), number("isSend").toInt(), string("content"),
+            string("talker"), number("msgId"), number("createTime"), string("imgPath"), number("msgSvrId"))
+    }
+
+    /** A voice is tied to the exact open account database before reading text or invoking the host. */
+    internal class VerifiedVoice(val db: Any, val source: VoiceSource, val message: Any?)
+
+    internal fun voiceRecord(source: VoiceSource, messageClass: Class<*>?): VerifiedVoice? {
+        if (source.id <= 0 || source.time <= 0 || source.fileToken.isBlank()) return null
+        val databases = synchronized(this) { handles.mapNotNull { it.get() } }
+        for (db in databases) {
+            val verified = runCatching {
+                query(db, "SELECT * FROM message WHERE talker = ? AND msgId = ? AND type = 34 LIMIT 1",
+                    arrayOf(source.talker, source.id.toString())).use { cursor ->
+                    if (!cursor.moveToFirst() || metadata(cursor).voiceSource() != source) return@use null
+                    val instance = messageClass?.getDeclaredConstructor()?.apply { isAccessible = true }?.newInstance()
+                    instance?.let { messageClass.getMethod("convertFrom", Cursor::class.java).invoke(it, cursor) }
+                    VerifiedVoice(db, source, instance)
+                }
+            }.getOrNull()
+            if (verified != null) return verified
+        }
+        return null
+    }
+
+    internal fun voiceStillMatches(record: VerifiedVoice): Boolean = runCatching {
+        query(record.db, "SELECT * FROM message WHERE talker = ? AND msgId = ? AND type = 34 LIMIT 1",
+            arrayOf(record.source.talker, record.source.id.toString())).use {
+            it.moveToFirst() && metadata(it).voiceSource() == record.source
+        }
+    }.getOrDefault(false)
+
+    internal fun voiceText(record: VerifiedVoice): String? = runCatching {
+        if (!voiceStillMatches(record)) return@runCatching null
+        query(record.db, "SELECT content FROM VoiceTransText WHERE msgId = ? AND cmsgId = ? LIMIT 1",
+            arrayOf(record.source.id.toString(), record.source.fileToken)).use {
+            if (it.moveToFirst()) it.getString(0)?.trim()?.takeIf(String::isNotBlank) else null
+        }
+    }.getOrNull()
+
     suspend fun load(loaded: ReplyContext, limit: Int = ReplyContext.MAX_MESSAGES): ReplyContext = withContext(Dispatchers.IO) {
         require(limit in 1..ReplyContext.MAX_MESSAGES)
         val active = coroutineContext
@@ -61,17 +112,10 @@ object ReplyDatabaseHistory {
             }
             val cursor = rawQuery.invoke(db, sql, args) as? Cursor ?: error("Unsupported history cursor")
             cursor.use {
-                val id = it.getColumnIndexOrThrow("msgId")
-                val type = it.getColumnIndexOrThrow("type")
-                val sent = it.getColumnIndexOrThrow("isSend")
-                val content = it.getColumnIndexOrThrow("content")
-                val talker = it.getColumnIndexOrThrow("talker")
-                val time = it.getColumnIndexOrThrow("createTime")
                 buildList {
                     while (size < limit + 1 && it.moveToNext()) {
                         active.ensureActive()
-                        add(MessageMetadata(it.getInt(type), it.getInt(sent), it.getString(content).orEmpty(),
-                            it.getString(talker).orEmpty(), it.getLong(id), it.getLong(time)))
+                        add(metadata(it))
                     }
                 }
             }

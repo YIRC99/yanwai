@@ -82,7 +82,7 @@
         android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone"
         android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
     <TextView style="@style/Yanwai.Body" android:layout_marginTop="16dp"
-        android:text="可选最近 30、50 或 100 条本机文字消息，总长最多 48,000 字符。选择后自动读取，不需要手动向上翻页；历史不可用或条数不足会显示实际数量。可查看已读取内容与回复依据，图片、语音等不参与理解。" />
+        android:text="可选最近 30、50 或 100 条本机文字和语音消息，转写后总长最多 48,000 字符。选择后自动读取，双方语音使用微信原生转文字，可能联网，无需手动翻页。历史不可用或转写失败会提示；可查看正文与回复依据，图片等其他媒体不参与理解。" />
     <TextView style="@style/Yanwai.Section" android:text="回复逻辑来自狗头军师" />
     <TextView style="@style/Yanwai.Body" android:text="基于开源项目 goutoujunshi 的回复流程与知识资料。原始知识完整随应用打包，生成时按对方身份选用恋爱、家庭、日常接话等资料，调整口吻并拆成自然短消息。由你配置的模型生成，言外负责上下文和交互适配。" />
     <com.google.android.material.button.MaterialButton android:id="@+id/knowledgeSource"

@@ -38,7 +38,9 @@ object BubbleDecorator {
         }
         val value = MoodStore.get(key)?.detail ?: SignalAnalyzer.failure(key)?.let {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
-        } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message)) "正在分析…" else "模型未配置或设置未连接"
+        } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))
+            SignalAnalyzer.progress(key) ?: if (message.voice != null || message.context.any { it.voice != null }) "正在准备语音…" else "正在分析…"
+            else "模型未配置或设置未连接"
         if (state.view.text.toString() != value) state.view.text = value
         return true
     }

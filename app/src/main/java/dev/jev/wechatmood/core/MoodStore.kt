@@ -46,7 +46,10 @@ object MoodStore {
             field(createdAt.toString())
             field(zoneId)
             field(coverage.toString())
-            context.forEach { field(it.speaker); field(it.text); field(it.createdAt.toString()); field(it.messageId.toString()) }
+            context.forEach {
+                field(it.speaker); field(it.text); field(it.createdAt.toString()); field(it.messageId.toString())
+                it.voice?.let { source -> field(source.key); field(it.voiceState.name) }
+            }
         }
         return java.security.MessageDigest.getInstance("SHA-256")
             .digest(source.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }

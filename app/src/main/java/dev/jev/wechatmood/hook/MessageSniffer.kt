@@ -61,6 +61,7 @@ object MessageSniffer {
                 val settingsPoints = mutableListOf<HostSettingsEntry.Points>()
                 val methods = paths.flatMap { path ->
                     DexKitBridge.create(path).use { bridge ->
+                        NativeVoiceBridge.install(bridge, loader)
                         HostSettingsEntry.locate(bridge, loader)?.let(settingsPoints::add)
                         menuPoints += MessageMenu.locate(bridge, loader)
                         runCatching {
@@ -94,6 +95,7 @@ object MessageSniffer {
                             }
                         }
                         override fun afterHookedMethod(param: MethodHookParam) {
+                            NativeVoiceBridge.observeBinding(param.thisObject)
                             val holder = param.args.firstOrNull() ?: return
                             val row = runCatching {
                                 fields(holder.javaClass).firstOrNull { it.type == View::class.java }?.get(holder) as? View
@@ -157,6 +159,7 @@ object MessageSniffer {
         ui = null
         visibleKeys = emptySet()
         active.clear()
+        NativeVoiceBridge.clearActiveChat()
     }
 
     fun refresh() {
@@ -248,7 +251,7 @@ object MessageSniffer {
             val record = read(index) ?: continue
             if (record.talker != talker) continue
             messages += record
-            if (record.type == 1 && ++textCount >= ReplyContext.MAX_MESSAGES) break
+            if (record.type in setOf(1, 34) && ++textCount >= ReplyContext.MAX_MESSAGES) break
         }
         val result = ReplyContext.collect(talker, messages.asReversed())
         check(result.historyAnchor != null || result.messages.isNotEmpty()) { "暂时无法核对当前聊天，请重新进入后重试" }
@@ -388,19 +391,19 @@ object MessageSniffer {
         }
         val status = when {
             talker == null -> "暂未识别当前聊天，收到消息后重试"
-            !enabled -> if (selected.isEmpty()) "自动分析已关闭，可长按文字消息翻译意图"
+            !enabled -> if (selected.isEmpty()) "自动分析已关闭，可长按文字或语音翻译意图"
                 else "自动分析已关闭 · 本屏 ${selected.size} 条手动分析"
             !ModulePrefs.bridgeAvailable -> "设置连接失败，点此打开助手后重试"
             ModulePrefs.apiKey.isBlank() -> "请打开言外填写并保存 API Key"
             records.isEmpty() -> "未识别到消息 · $adapterStatus"
-            messages.isEmpty() -> "本屏无可分析文字，非纯文本及超过 1000 字符的消息已跳过"
+            messages.isEmpty() -> "本屏无可分析的文字或语音，其他媒体及超过 1000 字符的文字已跳过"
             else -> {
                 val done = messages.count { dev.jev.wechatmood.core.MoodStore.get(it.key) != null }
                 val failed = messages.count { SignalAnalyzer.failure(it.key) != null }
                 when {
                     failed > 0 -> "本屏 ${messages.size} 条 · $failed 条失败，点击查看"
                     done == messages.size -> "本屏 $done 条已分析 · 点击查看"
-                    else -> "正在分析本屏文字 $done/${messages.size} · 点击查看"
+                    else -> "正在准备语音及分析 $done/${messages.size} · 点击查看"
                 }
             }
         }
