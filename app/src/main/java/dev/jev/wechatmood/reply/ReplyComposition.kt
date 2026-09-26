@@ -3,11 +3,15 @@ package dev.jev.wechatmood.reply
 /** Local editor state. Opening, selecting and changing roles never initiate a request. */
 class ReplyComposition(remembered: RememberedReply? = null) {
     var relationship = remembered?.relationship ?: ReplyRelationship.UNSPECIFIED
+    var customRelationship = remembered?.customRelationship.orEmpty()
+    val activeCustomRelationship: String get() = relationship.customValue(customRelationship)
+    val hasValidRelationship: Boolean get() = relationship != ReplyRelationship.OTHER || activeCustomRelationship.isNotBlank()
     var historyLimit = remembered?.context?.requestedMessages ?: ReplyContext.MAX_MESSAGES
     var result: RememberedReply? = remembered?.copy(selectedPart = remembered.selectedPart.coerceIn(0, remembered.suggestion.parts.lastIndex))
         private set
     val selectedPart: Int get() = result?.selectedPart ?: 0
-    val canUse: Boolean get() = result?.relationship == relationship && result?.context?.requestedMessages == historyLimit
+    val canUse: Boolean get() = hasValidRelationship && result?.relationship == relationship &&
+        result?.customRelationship == activeCustomRelationship && result?.context?.requestedMessages == historyLimit
     val selectedText: String? get() = result?.takeIf { canUse }?.suggestion?.parts?.get(selectedPart)
     val previousText: String get() = result?.takeIf { canUse }?.suggestion?.text.orEmpty()
 
@@ -28,17 +32,19 @@ class ReplyComposition(remembered: RememberedReply? = null) {
     }
 
     fun accept(context: ReplyContext, suggestion: ReplySuggestion, direction: String, focusMessageId: Long?,
-        requestedRelationship: ReplyRelationship): Boolean {
-        if (requestedRelationship != relationship || context.requestedMessages != historyLimit) return false
-        result = RememberedReply(context, suggestion, direction, focusMessageId, requestedRelationship)
+        requestedRelationship: ReplyRelationship, requestedCustomRelationship: String = ""): Boolean {
+        if (!hasValidRelationship || requestedRelationship != relationship || context.requestedMessages != historyLimit ||
+            requestedRelationship.customValue(requestedCustomRelationship) != activeCustomRelationship) return false
+        result = RememberedReply(context, suggestion, direction, focusMessageId, requestedRelationship, customRelationship = activeCustomRelationship)
         return true
     }
 
     fun acceptTopics(context: ReplyContext, topics: List<TopicSuggestion>, key: TopicKey, focusMessageId: Long?): Boolean {
-        if (key.fingerprint != context.fingerprint || key.limit != historyLimit || context.requestedMessages != historyLimit ||
-            key.relationship != relationship) return false
+        if (!hasValidRelationship || key.fingerprint != context.fingerprint || key.limit != historyLimit || context.requestedMessages != historyLimit ||
+            key.relationship != relationship || key.customRelationship != activeCustomRelationship) return false
         val batch = TopicBatch(key, topics.toList())
-        result = RememberedReply(context, batch.current.asReply(), key.notes, focusMessageId, relationship, topics = batch)
+        result = RememberedReply(context, batch.current.asReply(), key.notes, focusMessageId, relationship, topics = batch,
+            customRelationship = activeCustomRelationship)
         return true
     }
 

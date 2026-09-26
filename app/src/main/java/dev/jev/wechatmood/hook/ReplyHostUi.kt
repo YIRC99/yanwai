@@ -120,14 +120,27 @@ class ReplyHostUi(private val activity: Activity) {
         val scroll = ScrollView(activity).apply { isFillViewport = false; clipToPadding = false }
         val results = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(8)) }
         val roleRow = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
-        fun roleLabel() = if (composition.relationship == ReplyRelationship.UNSPECIFIED) "选择对方身份 ▾" else "${composition.relationship.label} ▾"
-        val rolePicker = action(roleLabel())
-        rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.label}"
+        fun roleLabel() = if (composition.relationship == ReplyRelationship.UNSPECIFIED) "选择对方身份 ▾"
+            else "${composition.relationship.displayLabel(composition.customRelationship)} ▾"
+        val rolePicker = action(roleLabel()).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.displayLabel(composition.customRelationship)}"
         val historyPicker = action("参考最近 ${composition.historyLimit} 条 ▾")
         listOf(rolePicker, historyPicker).forEach { it.textSize = 13f; it.setPadding(dp(8), dp(6), dp(8), dp(6)) }
         roleRow.addView(rolePicker, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
         roleRow.addView(historyPicker, LinearLayout.LayoutParams(0, -2, 1.2f))
         results.addView(roleRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        val customRole = EditText(activity).apply {
+            hint = "填写对方身份，如：前同事、相亲对象"
+            contentDescription = "自定义对方身份，最多 ${ReplyRelationship.MAX_CUSTOM_LENGTH} 字"
+            textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
+            inputType = InputType.TYPE_CLASS_TEXT; setSingleLine(true); minHeight = dp(48)
+            filters = arrayOf(InputFilter.LengthFilter(ReplyRelationship.MAX_CUSTOM_LENGTH)); isSaveEnabled = false
+            setPadding(dp(10), dp(10), dp(10), dp(10)); background = theme.shape(theme.card, 12, theme.border)
+            setText(composition.customRelationship)
+            visibility = if (composition.relationship == ReplyRelationship.OTHER) View.VISIBLE else View.GONE
+            setOnFocusChangeListener { _, focused -> background = theme.shape(theme.card, 12, if (focused) theme.accent else theme.border) }
+        }
+        results.addView(customRole, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         val instruction = EditText(activity).apply {
             hint = "补充想法（可选）\n回复：如“想委婉拒绝，别太正式”\n找话题：如“她喜欢摄影，10月3日公历生日，最近在准备考试”"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
@@ -195,7 +208,7 @@ class ReplyHostUi(private val activity: Activity) {
         var failed = false
         var findingTopics = false
         fun topicKey(current: ReplyContext, draft: String, date: String) = TopicKey(current.fingerprint, current.requestedMessages,
-            composition.relationship, instruction.text.toString(), draft, date)
+            composition.relationship, instruction.text.toString(), draft, date, composition.activeCustomRelationship)
         fun controls(generating: Boolean) {
             val reading = reference.loading
             val ready = reference.context
@@ -206,10 +219,11 @@ class ReplyHostUi(private val activity: Activity) {
                 reading -> "正在读取最近 ${composition.historyLimit} 条消息…"
                 else -> null
             })
-            generateButton.isEnabled = !generating && !reading
+            generateButton.isEnabled = !generating && !reading && composition.hasValidRelationship
             generateButton.text = when {
                 generating -> if (findingTopics) "生成回复" else "正在生成…"
                 reading -> "正在读取消息…"
+                !composition.hasValidRelationship -> "先填写对方身份"
                 ready == null -> "重新读取消息"
                 failed -> "重试生成"
                 ready.source == ReplyContextSource.LOADED_PAGE -> "按已读取 ${ready.messages.size} 条生成"
@@ -222,7 +236,7 @@ class ReplyHostUi(private val activity: Activity) {
             val batch = composition.result?.topics
             val currentTopicKey = ready?.let { topicKey(it, editor()?.text?.toString().orEmpty(), java.time.LocalDate.now().toString()) }
             val sameTopicInputs = composition.canUse && batch != null && batch.key == currentTopicKey
-            topicButton.isEnabled = !generating && !reading
+            topicButton.isEnabled = !generating && !reading && composition.hasValidRelationship
             topicButton.text = when {
                 generating && findingTopics -> "正在找话题…"
                 sameTopicInputs -> "换个话题"
@@ -235,6 +249,10 @@ class ReplyHostUi(private val activity: Activity) {
                 else -> "本组已看完，再点「换个话题」生成新的一组"
             }
             instruction.isEnabled = !generating; rolePicker.isEnabled = !generating; stale.isEnabled = !generating
+            customRole.isEnabled = !generating
+            customRole.visibility = if (composition.relationship == ReplyRelationship.OTHER) View.VISIBLE else View.GONE
+            rolePicker.text = roleLabel()
+            rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.displayLabel(composition.customRelationship)}"
             historyPicker.isEnabled = !generating
             historyPicker.text = "参考最近 ${composition.historyLimit} 条 ▾"
             historyPicker.contentDescription = "选择参考聊天消息条数，当前最近 ${composition.historyLimit} 条"
@@ -256,7 +274,7 @@ class ReplyHostUi(private val activity: Activity) {
             topicTitle.text = batch?.current?.title.orEmpty()
             topicTitle.visibility = if (batch == null) View.GONE else View.VISIBLE
             val kind = if (batch == null) "${result?.suggestion?.parts?.size ?: 0} 条建议" else "话题 ${batch.shownCount} / ${batch.items.size}"
-            replyTitle.text = result?.let { "${it.relationship.label} · $kind${if (!composition.canUse) "（上次结果）" else ""} · 查看依据 ›" }.orEmpty()
+            replyTitle.text = result?.let { "${it.relationship.displayLabel(it.customRelationship)} · $kind${if (!composition.canUse) "（上次结果）" else ""} · 查看依据 ›" }.orEmpty()
             result?.suggestion?.parts?.forEachIndexed { index, text ->
                 val selected = composition.selectedPart == index
                 val row = LinearLayout(activity).apply {
@@ -275,6 +293,14 @@ class ReplyHostUi(private val activity: Activity) {
             if (reason.text.isBlank()) reason.visibility = View.GONE
             reasonToggle.text = if (reason.visibility == View.VISIBLE) "收起理由 ▴" else if (batch != null) "为什么聊这个 ▾" else "为什么这样回 ▾"
         }
+        customRole.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                composition.customRelationship = s?.toString().orEmpty()
+                failed = false; renderParts(); controls(busy)
+            }
+        })
         rolePicker.setOnClickListener {
             PopupMenu(activity, rolePicker).apply {
                 ReplyRelationship.entries.forEachIndexed { index, relationship ->
@@ -283,11 +309,18 @@ class ReplyHostUi(private val activity: Activity) {
                 menu.setGroupCheckable(0, true, true)
                 setOnMenuItemClickListener { item ->
                     if (!busy) {
+                        val wasEditingCustomRole = customRole.hasFocus()
                         composition.relationship = ReplyRelationship.entries[item.itemId]
-                        rolePicker.text = roleLabel()
-                        rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.label}"
                         failed = false
                         renderParts(); controls(false)
+                        val keyboard = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                        if (composition.relationship == ReplyRelationship.OTHER) {
+                            customRole.requestFocus(); customRole.setSelection(customRole.text.length)
+                            customRole.post { if (window === dialog && customRole.isShown && customRole.hasFocus())
+                                keyboard?.showSoftInput(customRole, InputMethodManager.SHOW_IMPLICIT) }
+                        } else if (wasEditingCustomRole) {
+                            customRole.clearFocus(); body.requestFocus(); keyboard?.hideSoftInputFromWindow(customRole.windowToken, 0)
+                        }
                     }
                     true
                 }
@@ -358,6 +391,7 @@ class ReplyHostUi(private val activity: Activity) {
         }
         fun generate(direction: String = "", findTopics: Boolean = false) {
             if (busy || reference.loading) return
+            if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return }
             if (MessageSniffer.currentReplyTalker() != selectedTalker) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
             val current = reference.context ?: run { prepareHistory(composition.historyLimit); return }
@@ -368,6 +402,7 @@ class ReplyHostUi(private val activity: Activity) {
             val input = editor() ?: run { toast("请先切换到文字输入"); return }
             baselineDraft = input.text.toString(); draftView = WeakReference(input)
             val relationship = composition.relationship
+            val customRelationship = composition.activeCustomRelationship
             val notes = instruction.text.toString()
             val time = if (findTopics) TopicCalendar.current() else null
             val requestedTopicKey = time?.let { topicKey(current, baselineDraft, it.date) }
@@ -399,15 +434,15 @@ class ReplyHostUi(private val activity: Activity) {
                     }
                     val client = ReplyHttpClient()
                     val topics = if (findTopics) client.findTopics(config, current, baselineDraft, notes, knowledge, relationship,
-                        requireNotNull(time), previousTopics) else null
-                    val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction, knowledge, previous, focusId, relationship)
+                        requireNotNull(time), previousTopics, customRelationship) else null
+                    val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction, knowledge, previous, focusId, relationship, customRelationship)
                     val activeConfig = ModulePrefs.replySettings()
                     if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || window !== dialog || !ModulePrefs.replyConsent) return@launch
                     if (activeConfig.endpoint != config.endpoint || activeConfig.model != config.model || activeConfig.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
                     }
                     val accepted = if (topics != null) composition.acceptTopics(current, topics, requireNotNull(requestedTopicKey), focusId)
-                        else composition.accept(current, requireNotNull(suggestion), notes, focusId, relationship)
+                        else composition.accept(current, requireNotNull(suggestion), notes, focusId, relationship, customRelationship)
                     if (!accepted) return@launch
                     snapshot = current
                     reason.visibility = View.GONE; reasonToggle.text = "为什么这样回 ▾"; renderParts()

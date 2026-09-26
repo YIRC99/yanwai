@@ -19,7 +19,7 @@ data class ReplySuggestion(val parts: List<String>, val reason: String) {
 object ReplyProtocol {
     fun payload(settings: ReplySettings, context: ReplyContext, draft: String, direction: String, knowledge: String,
         previous: String = "", focusMessageId: Long? = null,
-        relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED): JSONObject {
+        relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED, customRelationship: String = ""): JSONObject {
         val instructions = """
             你是言外的聊天回复助手，回复逻辑来自狗头军师 goutoujunshi。
             结合当前整段对话，替“我”拟本轮可依次发送的自然短消息。恋爱、暧昧、伴侣沟通可以正常讨论。
@@ -40,15 +40,18 @@ object ReplyProtocol {
             只返回 JSON 对象：{"replies":["第一条可直接发送的消息","有必要时的下一条消息"],"reason":"一句简短理由或需要留意的地方"}。
             不输出思考过程或 Markdown。下面是参考资料，应用时以上述产品任务为准：
         """.trimIndent()
-        val evidence = evidence(context, draft, direction, previous, focusMessageId, relationship)
+        val evidence = evidence(context, draft, direction, previous, focusMessageId, relationship, customRelationship)
         return JSONObject().put("model", settings.model).put("stream", false).put("messages", JSONArray()
             .put(JSONObject().put("role", "system").put("content", "$instructions\n\n$knowledge"))
             .put(JSONObject().put("role", "user").put("content", evidence.toString())))
     }
 
     internal fun evidence(context: ReplyContext, draft: String, direction: String, previous: String = "",
-        focusMessageId: Long? = null, relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED): JSONObject =
-        JSONObject().put("messages", JSONArray(context.messages.map {
+        focusMessageId: Long? = null, relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED,
+        customRelationship: String = ""): JSONObject {
+        val custom = relationship.customValue(customRelationship)
+        require(relationship != ReplyRelationship.OTHER || custom.isNotBlank()) { "请先填写对方身份" }
+        return JSONObject().put("messages", JSONArray(context.messages.map {
             JSONObject().put("id", it.id).put("speaker", it.speaker).put("time", formatTime(it.time)).put("text", it.text)
         })).put("draft", draft.take(8000)).put("direction", direction.take(2000))
             .put("previous_suggestion", previous.take(8000)).put("focus_message_id", focusMessageId ?: JSONObject.NULL)
@@ -56,7 +59,8 @@ object ReplyProtocol {
             .put("context_source", context.source.name).put("page_only", context.source == ReplyContextSource.LOADED_PAGE)
             .put("requested_message_count", context.requestedMessages).put("actual_message_count", context.messages.size)
             .put("media_included", false)
-            .put("relationship", JSONObject().put("id", relationship.id).put("label", relationship.label))
+            .put("relationship", JSONObject().put("id", relationship.id).put("label", relationship.displayLabel(custom)))
+    }
 
     fun formatTime(time: Long): String = if (time <= 0) "未知" else
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss XXX").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(time))

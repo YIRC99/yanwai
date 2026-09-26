@@ -5,8 +5,9 @@ import org.json.JSONObject
 
 object TopicProtocol {
     fun payload(settings: ReplySettings, context: ReplyContext, draft: String, notes: String, knowledge: String,
-        relationship: ReplyRelationship, time: TopicTimeContext, previous: List<TopicSuggestion> = emptyList()): JSONObject {
-        val evidence = ReplyProtocol.evidence(context, draft, notes, relationship = relationship)
+        relationship: ReplyRelationship, time: TopicTimeContext, previous: List<TopicSuggestion> = emptyList(),
+        customRelationship: String = ""): JSONObject {
+        val evidence = ReplyProtocol.evidence(context, draft, notes, relationship = relationship, customRelationship = customRelationship)
             .put("task", "find_topics").put("topic_count", TopicBatch.SIZE).put("calendar", time.toJson())
             .put("avoid_topics", JSONArray(previous.takeLast(TopicBatch.SIZE).map { JSONObject().put("title", it.title).put("replies", JSONArray(it.parts)) }))
         val instructions = """
