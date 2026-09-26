@@ -58,8 +58,10 @@ object MessageSniffer {
             runCatching {
                 System.loadLibrary("dexkit")
                 val menuPoints = mutableListOf<MessageMenu.HookPoints>()
+                val settingsPoints = mutableListOf<HostSettingsEntry.Points>()
                 val methods = paths.flatMap { path ->
                     DexKitBridge.create(path).use { bridge ->
+                        HostSettingsEntry.locate(bridge, loader)?.let(settingsPoints::add)
                         menuPoints += MessageMenu.locate(bridge, loader)
                         runCatching {
                             bridge.findMethod {
@@ -73,6 +75,7 @@ object MessageSniffer {
                 }.filter { it.parameterCount >= 3 && it.parameterTypes[2] == Int::class.javaPrimitiveType }
                     .distinct()
                 MessageMenu.install(menuPoints)
+                HostSettingsEntry.install(settingsPoints)
                 check(methods.isNotEmpty()) { "未找到新版聊天绑定点" }
                 for (method in methods) {
                     val adapterFields = fields(method.declaringClass).filter { field ->
@@ -356,7 +359,7 @@ object MessageSniffer {
             BubbleDecorator.clearAll()
             visibleKeys = emptySet()
             panel.showSettings()
-            report("微信设置入口已显示 · $adapterStatus")
+            report(HostSettingsEntry.status(activity))
             return
         }
         val records = records(chatScope)

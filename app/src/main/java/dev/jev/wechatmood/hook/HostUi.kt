@@ -2,21 +2,17 @@ package dev.jev.wechatmood.hook
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.ComponentName
-import android.content.Intent
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.AnalysisInput
 import dev.jev.wechatmood.core.Diagnostics
-import dev.jev.wechatmood.core.MoodLog
 
 /** Add controls to the existing header; never replace the chat's content or action bar. */
 class HostUi(private val activity: Activity) {
@@ -30,13 +26,8 @@ class HostUi(private val activity: Activity) {
     private var title: TextView? = null
     private var oldTitleWidth = Int.MAX_VALUE
     private var oldEllipsize: TextUtils.TruncateAt? = null
-    private val content = activity.findViewById<ViewGroup>(android.R.id.content)
-    private var settingsWrapper: LinearLayout? = null
-    private var settingsHost: View? = null
-    private var settingsParams: ViewGroup.LayoutParams? = null
 
     fun showStatus(value: String, current: List<AnalysisInput>, currentTalker: String? = null) {
-        restoreSettings()
         if (talker != currentTalker) dialog?.dismiss()
         talker = currentTalker
         replyUi.update(currentTalker)
@@ -131,61 +122,17 @@ class HostUi(private val activity: Activity) {
         messages = emptyList()
         dialog?.dismiss()
         removeControl()
-        if (settingsWrapper != null) return
-        val host = content.getChildAt(0) ?: return
-        settingsHost = host
-        settingsParams = host.layoutParams
-        val wrapper = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        settingsWrapper = wrapper
-        content.removeView(host)
-        content.addView(wrapper, ViewGroup.LayoutParams(-1, -1))
-        wrapper.addView(host, LinearLayout.LayoutParams(-1, 0, 1f))
-        wrapper.addView(TextView(activity).apply {
-            text = "言外  ›\n已加载 · 长按导出运行日志"
-            textSize = 14f
-            minHeight = dp(52)
-            setPadding(dp(16), dp(10), dp(16), dp(10))
-            setOnClickListener { openSettings() }
-            setOnLongClickListener { Diagnostics.show(activity); true }
-            setOnApplyWindowInsetsListener { view, insets ->
-                @Suppress("DEPRECATION")
-                val bottom = if (android.os.Build.VERSION.SDK_INT >= 30)
-                    insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
-                else minOf(insets.systemWindowInsetBottom, insets.stableInsetBottom)
-                view.setPadding(dp(16), dp(10), dp(16), dp(10) + bottom)
-                insets
-            }
-            requestApplyInsets()
-        }, LinearLayout.LayoutParams(-1, -2))
     }
 
-    private fun openSettings() {
-        runCatching {
-            activity.startActivity(Intent().setComponent(ComponentName("dev.jev.wechatmood", "dev.jev.wechatmood.MainActivity")))
-            MoodLog.i("SETTINGS_ACTIVITY_OPEN 请求已发送")
-        }.onFailure {
-            MoodLog.e("SETTINGS_ACTIVITY_OPEN_FAILED", it)
-            Diagnostics.showFailure(activity, "无法从微信打开言外", "SETTINGS_ACTIVITY_OPEN_FAILED：${it.javaClass.simpleName} ${it.message}")
-        }
-    }
+    private fun openSettings() = HostSettingsEntry.open(activity)
     fun suggestReply(focusMessageId: Long? = null) = replyUi.open(focusMessageId)
-    fun hide() { replyUi.hide(); removeControl(); restoreSettings(); dialog?.dismiss(); messages = emptyList(); talker = null }
+    fun hide() { replyUi.hide(); removeControl(); dialog?.dismiss(); messages = emptyList(); talker = null }
     fun dispose() { hide(); replyUi.dispose() }
     private fun removeControl() {
         control?.let { (it.parent as? ViewGroup)?.removeView(it) }
         control = null
         title?.let { it.maxWidth = oldTitleWidth; it.ellipsize = oldEllipsize }
         title = null
-    }
-    private fun restoreSettings() {
-        val wrapper = settingsWrapper ?: return
-        settingsHost?.let { host ->
-            wrapper.removeView(host)
-            content.removeView(wrapper)
-            content.addView(host, 0, settingsParams)
-        }
-        settingsWrapper = null
-        settingsHost = null
     }
     private fun descendants(root: View): List<View> {
         val result = mutableListOf<View>()

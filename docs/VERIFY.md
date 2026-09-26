@@ -1,3 +1,14 @@
+# 1.8.3 微信原生设置入口（2026-09-26）
+
+- 移除 HostUi 包裹宿主根视图、固定底部横条的实现。新版设置列表完成排序后，在「个人资料」前插入独立原生设置行；已有插件分组时接在其后，不改其他插件的位置链，也不注册或替换原有个人信息组件。只有独立标记的实例及其 clone 使用言外标题、分组和点击。
+- 对照 [WeKit 设置入口](https://github.com/Ujhhgtg/WeKit/blob/bdc7f18033d87a2f6307d2caedfdc6502986a401/app/src/main/java/dev/ujhhgtg/wekit/features/api/ui/WeSettingsInjector.kt) 的新版设置结构；独立实现，不引入其动态代理管理器或额外依赖。通过 ADB 只读提取当前微信 8.0.71 APK，用 apkanalyzer 检查工厂、行基类、渲染和点击链。混淆类名 `h04.m`、`nz3.i` 仅用于核查，生产代码用稳定类名、方法签名及 Dex 字符串定位。
+- 离线 `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemon -Pkotlin.compiler.execution.strategy=in-process` 成功；232 tests，0 failures/errors/skipped。新增 7 项位置策略测试覆盖无插件、多个插件、重复进入去重、分组边界及未知锚点。Lint 0 errors、130 warnings。
+- 独立只读审查核对 Pair 返回值、Resources 分组文本、原生点击、clone 标记、WeKit 共存与失败回滚，未发现必要修复。未在手机运行新版界面，构建成功不代表已完成原生注入和视觉验收。
+- ADB 覆盖安装返回 Success，系统包信息确认 versionName=1.8.3、versionCode=30。未启动、停止微信或操作聊天；构建结束后未发现项目服务或 Gradle/Kotlin 编译进程残留。
+- 手机验收：彻底重启微信后，进入「我 → 设置」，检查「插件」分组的「言外设置」、点击打开、上下滚动及深浅色；确认底部横条消失。没有 WeKit 时应自行显示一个插件标题。首次后台定位若晚于设置页创建，需要退出再进入；不识别的旧版/未知设置结构保留原页，桌面及聊天长按「分析」仍可打开言外。
+
+---
+
 # 1.7.0 时间上下文与独立意图分析（2026-09-26）
 
 - versionName=1.7.0、versionCode=24，通过 `tools/bump-version.ps1 -Part minor` 更新；启用 `.githooks` 版本检查。本次只做本地版本，不推送或发布。
