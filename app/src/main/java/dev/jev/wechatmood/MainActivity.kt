@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -62,11 +63,15 @@ class MainActivity : AppCompatActivity() {
             if (checked) {
                 binding.emotionPanel.visibility = if (id == R.id.tabEmotion) View.VISIBLE else View.GONE
                 binding.replySettings.root.visibility = if (id == R.id.tabReply) View.VISIBLE else View.GONE
+                binding.aboutPanel.visibility = if (id == R.id.tabAbout) View.VISIBLE else View.GONE
+                binding.wechatPanel.visibility = if (id == R.id.tabAbout) View.GONE else View.VISIBLE
                 binding.pageScroll.scrollTo(0, 0)
             }
         }
-        if (savedInstanceState?.getBoolean("reply_tab") == true || intent.getBooleanExtra("reply_tab", false))
-            binding.modelTabs.check(R.id.tabReply)
+        val selectedTab = savedInstanceState?.getInt("selected_tab")
+            ?.takeIf { it == R.id.tabEmotion || it == R.id.tabReply || it == R.id.tabAbout }
+            ?: if (intent.getBooleanExtra("reply_tab", false)) R.id.tabReply else R.id.tabEmotion
+        binding.modelTabs.check(selectedTab)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -232,7 +237,7 @@ class MainActivity : AppCompatActivity() {
             values.forEach { (name, value) -> putString(name, value) }
         }
         if (!saved) {
-            showResult("配置未保存\n请重试；若仍失败，可在「遇到问题」中导出日志。", StatusTone.ERROR)
+            showResult("配置未保存\n请重试；若仍失败，可在「关于言外 → 遇到问题」中导出日志。", StatusTone.ERROR)
             return false
         }
         bindingInputs = true
@@ -396,7 +401,15 @@ class MainActivity : AppCompatActivity() {
         tintStatus(binding.textTestResult, tone)
     }
 
-    private fun scrollTo(view: View) { binding.pageScroll.post { binding.pageScroll.smoothScrollTo(0, view.top) } }
+    private fun scrollTo(view: View) {
+        binding.pageScroll.post {
+            val content = binding.pageScroll.getChildAt(0) as android.view.ViewGroup
+            val bounds = Rect()
+            view.getDrawingRect(bounds)
+            content.offsetDescendantRectToMyCoords(view, bounds)
+            binding.pageScroll.smoothScrollTo(0, bounds.top)
+        }
+    }
 
     private fun showSetupGuide(open: Boolean) {
         binding.setupGuidePanel.visibility = if (open) View.VISIBLE else View.GONE
@@ -414,7 +427,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean("reply_tab", binding.modelTabs.checkedButtonId == R.id.tabReply)
+        outState.putInt("selected_tab", binding.modelTabs.checkedButtonId)
         super.onSaveInstanceState(outState)
     }
     override fun onDestroy() { uiScope.cancel(); super.onDestroy() }

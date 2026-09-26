@@ -12,10 +12,16 @@
         app:singleSelection="true" app:selectionRequired="true" app:checkedButton="@id/tabEmotion">
         <com.google.android.material.button.MaterialButton android:id="@+id/tabEmotion"
             style="@style/Yanwai.Button.Outline" android:layout_width="0dp" android:layout_weight="1"
+            android:minWidth="0dp" android:paddingStart="8dp" android:paddingEnd="8dp"
             android:text="情绪判断" />
         <com.google.android.material.button.MaterialButton android:id="@+id/tabReply"
             style="@style/Yanwai.Button.Outline" android:layout_width="0dp" android:layout_weight="1"
+            android:minWidth="0dp" android:paddingStart="8dp" android:paddingEnd="8dp"
             android:text="回复建议" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/tabAbout"
+            style="@style/Yanwai.Button.Outline" android:layout_width="0dp" android:layout_weight="1"
+            android:minWidth="0dp" android:paddingStart="8dp" android:paddingEnd="8dp"
+            android:text="关于言外" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
     <androidx.core.widget.NestedScrollView android:id="@+id/pageScroll"
         android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
@@ -131,6 +137,8 @@
 
             </LinearLayout>
             <include android:id="@+id/replySettings" layout="@layout/reply_settings" />
+            <LinearLayout android:id="@+id/wechatPanel" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical">
             <TextView android:id="@+id/wechatSection" style="@style/Yanwai.Section" android:text="微信中的使用情况" />
             <TextView android:id="@+id/textFrameworkStatus" style="@style/Yanwai.Body" />
             <com.google.android.material.button.MaterialButton android:id="@+id/buttonSetupGuide"
@@ -153,8 +161,11 @@
                 <com.google.android.material.button.MaterialButton android:id="@+id/buttonOpenWechat"
                     style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="打开微信" />
             </LinearLayout>
+            </LinearLayout>
 
-            <TextView style="@style/Yanwai.Section" android:text="遇到问题" />
+            <LinearLayout android:id="@+id/aboutPanel" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+            <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="遇到问题" />
             <TextView style="@style/Yanwai.Body" android:text="先复现一次，再导出日志。问题自行恢复后，也可以查看之前的记录。" />
             <com.google.android.material.button.MaterialButton android:id="@+id/buttonExportLog"
                 style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="导出运行日志" />
@@ -178,7 +189,7 @@
 
             <View android:layout_width="match_parent" android:layout_height="1dp"
                 android:layout_marginTop="28dp" android:background="@color/outline_subtle" />
-            <TextView style="@style/Yanwai.Section" android:layout_marginTop="24dp" android:text="关于与更新" />
+            <TextView style="@style/Yanwai.Section" android:layout_marginTop="24dp" android:text="版本与更新" />
             <TextView android:id="@+id/textUpdateStatus" style="@style/Yanwai.Caption" android:accessibilityLiveRegion="polite" />
             <com.google.android.material.button.MaterialButton android:id="@+id/buttonCheckUpdate"
                 style="@style/Yanwai.Button.Text" android:text="检查更新" />
@@ -209,6 +220,7 @@
                 style="@style/Yanwai.Button.Outline" android:layout_marginTop="8dp" android:text="查看开源代码 ↗" />
             <TextView style="@style/Yanwai.Caption" android:layout_marginTop="16dp"
                 android:text="理解多一种可能，不替你下结论。\n模型判断仅供参考。" android:gravity="center" />
+            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>
