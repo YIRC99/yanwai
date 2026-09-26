@@ -21,16 +21,6 @@ class ReplyComposition(remembered: RememberedReply? = null) {
         result = current.copy(selectedPart = index)
     }
 
-    /** Advancing means filled, never sent. The user remains in control of sending and re-selection. */
-    fun afterFill() {
-        if (canUse) result?.let { select((selectedPart + 1).coerceAtMost(it.suggestion.parts.lastIndex)) }
-    }
-
-    fun restoreSelection(filled: RememberedReply) {
-        val current = result ?: return
-        if (current.suggestion === filled.suggestion && current.context == filled.context) select(filled.selectedPart)
-    }
-
     fun accept(context: ReplyContext, suggestion: ReplySuggestion, direction: String, focusMessageId: Long?,
         requestedRelationship: ReplyRelationship, requestedCustomRelationship: String = ""): Boolean {
         if (!hasValidRelationship || requestedRelationship != relationship || context.requestedMessages != historyLimit ||

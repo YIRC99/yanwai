@@ -26,7 +26,6 @@ import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.reply.*
 import kotlinx.coroutines.*
-import java.lang.ref.WeakReference
 
 /** Native widgets only: module resource IDs are not valid inside the host's resource table. */
 class ReplyHostUi(private val activity: Activity) {
@@ -39,9 +38,6 @@ class ReplyHostUi(private val activity: Activity) {
     private var talker: String? = null
     private var dialog: Dialog? = null
     private var snapshot: ReplyContext? = null
-    private var pendingDraft: DraftReplacement? = null
-    private var pendingSelection: RememberedReply? = null
-    private var undoView = WeakReference<EditText>(null)
     private var newMessageNotice: TextView? = null
     private var invalidateRequest: (() -> Unit)? = null
 
@@ -84,8 +80,6 @@ class ReplyHostUi(private val activity: Activity) {
         if (captured.talker != selectedTalker) return false
         val initialEditor = editor()
         if (remembered == null && initialEditor == null) { toast("请先切换到文字输入"); return true }
-        var baselineDraft = initialEditor?.text?.toString().orEmpty()
-        var draftView = WeakReference(initialEditor)
         val focusId = remembered?.focusMessageId ?: focusMessageId
         snapshot = remembered?.context
         initialEditor?.let { (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
@@ -190,20 +184,16 @@ class ReplyHostUi(private val activity: Activity) {
         results.addView(reasonToggle); results.addView(reason); results.addView(shorter)
         scroll.addView(results); body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         body.addView(line(), LinearLayout.LayoutParams(-1, dp(1).coerceAtLeast(1)))
-        val undo = action("撤销上次填入", quiet = true)
-        undo.visibility = if (pendingDraft == null) View.GONE else View.VISIBLE; body.addView(undo)
-        val use = action("填入这条")
-        val copy = action("复制这条", quiet = true) {
+        val copy = action("复制这条", primary = true) {
             composition.selectedText?.let { text ->
                 (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(ClipData.newPlainText("言外回复建议", text))
-                toast("已复制第 ${composition.selectedPart + 1} 条")
+                toast("已复制第 ${composition.selectedPart + 1} 条，请自行粘贴发送")
             }
         }
         val footerActions = LinearLayout(activity).apply { setPadding(0, dp(10), 0, 0) }
-        footerActions.addView(copy, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
-        footerActions.addView(use, LinearLayout.LayoutParams(0, -2, 2f)); body.addView(footerActions)
-        val footerHint = theme.label("每次填入一条，由你发送", 11f, theme.muted).apply {
+        footerActions.addView(copy, LinearLayout.LayoutParams(-1, -2)); body.addView(footerActions)
+        val footerHint = theme.label("复制后，请自行粘贴到聊天框发送", 11f, theme.muted).apply {
             gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0)
         }
         body.addView(footerHint)
@@ -259,13 +249,12 @@ class ReplyHostUi(private val activity: Activity) {
             historyPicker.isEnabled = !generating
             historyPicker.text = "参考最近 ${composition.historyLimit} 条 ▾"
             historyPicker.contentDescription = "选择参考聊天消息条数，当前最近 ${composition.historyLimit} 条"
-            copy.isEnabled = !generating && !reading && composition.canUse; use.isEnabled = !generating && !reading && composition.canUse
-            use.text = "填入第 ${composition.selectedPart + 1} 条"
+            copy.isEnabled = !generating && !reading && composition.canUse
             copy.text = "复制这条"
             footerActions.visibility = if (composition.result == null) View.GONE else View.VISIBLE
             footerHint.visibility = footerActions.visibility
             footerHint.text = if (!composition.canUse) "身份或参考范围已改变，请重新生成"
-                else "每次填入一条，由你发送；再打开可继续下一条"
+                else "复制后，请自行粘贴到聊天框发送"
             state.visibility = if (state.text.isBlank()) View.GONE else View.VISIBLE
             if (window.isShowing) fitWindow()
         }
@@ -415,7 +404,8 @@ class ReplyHostUi(private val activity: Activity) {
                 prepareHistory(composition.historyLimit); toast("聊天有更新，读取完成后再点生成"); return
             }
             val input = editor() ?: run { toast("请先切换到文字输入"); return }
-            baselineDraft = input.text.toString(); draftView = WeakReference(input)
+            // Read existing draft for context only. Never write to the host's chat editor.
+            val baselineDraft = input.text.toString()
             val relationship = composition.relationship
             val customRelationship = composition.activeCustomRelationship
             val notes = instruction.text.toString()
@@ -487,33 +477,6 @@ class ReplyHostUi(private val activity: Activity) {
         })
         shorter.setOnClickListener { generate(instruction.text.toString() + "\n保持原意，更简短一点") }
         stale.setOnClickListener { prepareHistory(composition.historyLimit) }
-        undo.setOnClickListener {
-            val filled = pendingSelection
-            undoDraft()?.let { original ->
-                baselineDraft = original; draftView = WeakReference(editor())
-                filled?.let(composition::restoreSelection)
-                renderParts(); controls(busy); remember()
-            }
-            undo.visibility = View.GONE
-        }
-        use.setOnClickListener {
-            val text = composition.selectedText ?: return@setOnClickListener
-            val input = editor()
-            if (MessageSniffer.currentReplyTalker() != selectedTalker || input == null || input !== draftView.get()) {
-                toast("输入框已变化，请复制建议，或重新打开后填入"); return@setOnClickListener
-            }
-            if (input.text.toString() != baselineDraft) { toast("草稿已修改，请复制建议，避免覆盖新内容"); return@setOnClickListener }
-            // Reopening and filling the same suggestion must not replace the original undo record.
-            if (input.text.toString() == text) { window.dismiss(); return@setOnClickListener }
-            if (input === undoView.get() && pendingDraft?.blocksReplacement(input.text.toString(), text) == true) {
-                toast("上一条还在输入框，请先发送或清空，再填下一条"); return@setOnClickListener
-            }
-            pendingDraft = DraftReplacement(baselineDraft, text); undoView = WeakReference(input)
-            input.setText(text); input.setSelection(input.text.length)
-            pendingSelection = composition.result
-            composition.afterFill(); remember()
-            window.dismiss(); input.requestFocus()
-        }
         renderParts(); controls(false)
         window.setContentView(body)
         window.setOnDismissListener {
@@ -539,15 +502,6 @@ class ReplyHostUi(private val activity: Activity) {
             .setMessage("打开言外「回复建议」，配置模型并允许手动生成。")
             .setPositiveButton("去配置") { _, _ -> openSettings() }.setNegativeButton("稍后", null).show()
     }
-    private fun undoDraft(): String? {
-        val input = editor()
-        if (input == null || input !== undoView.get() || MessageSniffer.currentReplyTalker() != talker) return null
-        val original = pendingDraft?.undo(input.text.toString())
-        if (original == null) toast("内容已被修改或发送，不再覆盖")
-        else { input.setText(original); input.setSelection(input.text.length); toast("已恢复原稿") }
-        pendingDraft = null; pendingSelection = null; undoView.clear()
-        return original
-    }
     private fun contextSummary(context: ReplyContext): String {
         val first = context.messages.firstOrNull()?.time ?: 0
         val last = context.messages.lastOrNull()?.time ?: 0
@@ -570,7 +524,7 @@ class ReplyHostUi(private val activity: Activity) {
     }.onFailure { toast("请从桌面打开言外，进入回复建议") }
     fun hide() {
         dialog?.dismiss(); job?.cancel(); historyJob?.cancel(); session.cancel()
-        plusEntry.clear(); pendingDraft = null; pendingSelection = null; undoView.clear(); talker = null
+        plusEntry.clear(); talker = null
     }
     fun dispose() { hide(); scope.cancel() }
     private fun views(root: View): List<View> = buildList {

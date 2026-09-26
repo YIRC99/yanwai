@@ -14,7 +14,7 @@
                 android:textSize="26sp" android:textColor="@color/text_primary" android:layout_marginTop="10dp"
                 android:fontFamily="sans-serif-medium" android:accessibilityHeading="true" />
             <TextView style="@style/Yanwai.Body" android:layout_marginTop="8dp"
-                android:text="在微信聊天「＋」面板点「帮我回」，生成回复或找找新话题。一次准备 5 个话题，可立即换着看；填入后自己发送。" />
+                android:text="在微信聊天「＋」面板点「帮我回」，生成回复或找找新话题。一次准备 5 个话题，可立即换着看；复制后自行粘贴发送。" />
             <TextView android:id="@+id/replyStatus" style="@style/Yanwai.Badge"
                 android:layout_marginTop="16dp" android:text="尚未配置" />
         </LinearLayout>

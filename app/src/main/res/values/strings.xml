@@ -2,7 +2,7 @@
 <resources>
     <string name="app_title_version">言外 v%1$s</string>
     <string name="app_name">言外</string>
-    <string name="xposed_description">结合聊天前文解读情绪，手动生成回复建议。消息片段发送至用户配置的模型，填入草稿后由用户发送。</string>
+    <string name="xposed_description">结合聊天前文解读情绪，手动生成回复建议。消息片段发送至用户配置的模型，建议仅供复制，由用户自行粘贴发送。</string>
 
     <string name="status_framework">Xposed 框架</string>
     <string name="status_wechat">微信进程状态</string>

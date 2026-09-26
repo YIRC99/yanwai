@@ -32,14 +32,16 @@ class ReplyCompositionTest {
         assertEquals("自然一点", composer.result!!.direction)
     }
 
-    @Test fun `fill advances only one part and reopening preserves the next selection`() {
+    @Test fun `copy reads only selected part and reopening preserves manual selection`() {
         val composer = ReplyComposition()
         composer.accept(context, suggestion, "", null, ReplyRelationship.UNSPECIFIED)
         assertEquals("好呀", composer.selectedText)
-        composer.afterFill()
+        assertEquals("好呀", composer.selectedText)
+        assertEquals(0, composer.selectedPart)
+        composer.select(1)
         val reopened = ReplyComposition(composer.result)
         assertEquals("明天见", reopened.selectedText)
-        reopened.afterFill()
+        assertEquals(1, reopened.selectedPart)
         assertEquals("明天见", reopened.selectedText)
         reopened.select(0)
         assertEquals("好呀", reopened.selectedText)
@@ -49,7 +51,7 @@ class ReplyCompositionTest {
     @Test fun `new successful generation resets selection and failures preserve old evidence`() {
         val composer = ReplyComposition()
         composer.accept(context, suggestion, "旧要求", 1, ReplyRelationship.UNSPECIFIED)
-        composer.afterFill()
+        composer.select(1)
         val history = ReplyHistory()
         history.remember(composer.result!!)
         assertNull(history.recall("bob"))
@@ -64,21 +66,6 @@ class ReplyCompositionTest {
         assertEquals(newer, composer.result!!.context)
         assertEquals("新要求", composer.result!!.direction)
         assertEquals(ReplyRelationship.PARTNER, composer.result!!.relationship)
-    }
-
-    @Test fun `undo restores the filled part only for the same generated group`() {
-        val composer = ReplyComposition()
-        composer.accept(context, suggestion, "", null, ReplyRelationship.UNSPECIFIED)
-        val filled = composer.result!!
-        composer.afterFill()
-        assertEquals(1, composer.selectedPart)
-        composer.restoreSelection(filled)
-        assertEquals(0, composer.selectedPart)
-        composer.accept(context, ReplySuggestion(listOf("嗯好", "下次聊"), "收尾"), "", null, ReplyRelationship.UNSPECIFIED)
-        composer.select(1)
-        composer.restoreSelection(filled)
-        assertEquals(1, composer.selectedPart)
-        assertEquals("下次聊", composer.selectedText)
     }
 
     @Test fun `changing history count does not relabel or reuse the old suggestion`() {

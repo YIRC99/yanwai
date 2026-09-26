@@ -28,7 +28,7 @@ class TopicTest {
             .put("reason", "接着兴趣聊")
     })).toString()
 
-    @Test fun `topic short messages stay separate for selecting filling reopening and switching`() {
+    @Test fun `topic short messages stay separate for copying manual selection reopening and switching`() {
         val parsed = TopicProtocol.parse(envelope(segmentedBody(JSONArray(listOf("最近还拍照吗", "想看看你拍的")))))
         val topic = parsed.first()
         assertEquals(listOf("最近还拍照吗", "想看看你拍的"), topic.asReply().parts)
@@ -37,11 +37,12 @@ class TopicTest {
         // The batch order is random; visit until this two-message topic is selected.
         while (c.result!!.topics!!.current.title != topic.title) assertTrue(c.nextTopic(key()))
         assertEquals("最近还拍照吗", c.selectedText)
-        val beforeFill = c.result!!
-        c.afterFill()
+        assertEquals("最近还拍照吗", c.selectedText)
+        assertEquals(0, c.selectedPart)
+        c.select(1)
         val reopened = ReplyComposition(c.result)
         assertEquals("想看看你拍的", reopened.selectedText)
-        reopened.restoreSelection(beforeFill)
+        reopened.select(0)
         assertEquals("最近还拍照吗", reopened.selectedText)
         if (reopened.nextTopic(key())) assertEquals(0, reopened.selectedPart)
     }
