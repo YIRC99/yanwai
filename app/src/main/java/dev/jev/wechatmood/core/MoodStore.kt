@@ -37,9 +37,17 @@ object MoodStore {
     /** Length-prefix every field so different contexts or message identities never share a result. */
     fun keyOf(text: String, talker: String?, context: List<ContextMessage> = emptyList(),
         messageId: Long = 0, speaker: String = "对方", createdAt: Long = 0,
-        coverage: ContextCoverage = ContextCoverage(), zoneId: String = java.util.TimeZone.getDefault().id): String {
+        coverage: ContextCoverage = ContextCoverage(), zoneId: String = java.util.TimeZone.getDefault().id,
+        quoted: QuotedMessage? = null): String {
         val source = buildString {
             fun field(value: String) { append(value.length).append(':').append(value) }
+            fun quote(value: QuotedMessage?) {
+                field(if (value == null) "no-quote" else "quoted-v1")
+                if (value != null) {
+                    field(value.text.orEmpty()); field(value.displayName.orEmpty()); field(value.type.toString())
+                    field(value.serverId.orEmpty()); field(value.unavailableReason.orEmpty())
+                }
+            }
             field(talker.orEmpty())
             field(messageId.toString())
             field(speaker)
@@ -48,9 +56,11 @@ object MoodStore {
             field(createdAt.toString())
             field(zoneId)
             field(coverage.toString())
+            quote(quoted)
             context.forEach {
                 field(it.speaker); field(it.text); field(it.createdAt.toString()); field(it.messageId.toString())
                 it.voice?.let { source -> field(source.key); field(it.voiceState.name) }
+                quote(it.quoted)
             }
         }
         return java.security.MessageDigest.getInstance("SHA-256")

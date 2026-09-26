@@ -4,7 +4,8 @@ import dev.jev.wechatmood.voice.VoiceSource
 import dev.jev.wechatmood.voice.VoiceState
 
 data class ContextMessage(val speaker: String, val text: String, val createdAt: Long = 0, val messageId: Long = 0,
-    val voice: VoiceSource? = null, val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING)
+    val voice: VoiceSource? = null, val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING,
+    val quoted: QuotedMessage? = null)
 
 data class ContextCoverage(
     val source: String = "provided",
@@ -28,9 +29,10 @@ data class AnalysisInput(
     val zoneId: String = java.util.TimeZone.getDefault().id,
     val voice: VoiceSource? = null,
     val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING,
+    val quoted: QuotedMessage? = null,
 ) {
     val key: String get() = MoodStore.keyOf(text, talker, context, messageId, speaker, createdAt, coverage,
-        zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: ""))
+        zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: ""), quoted)
 }
 
 object MessagePolicy {

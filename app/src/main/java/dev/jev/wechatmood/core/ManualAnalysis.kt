@@ -24,7 +24,7 @@ class ManualAnalysis {
         fun identity(input: AnalysisInput): String? {
             if (input.messageId <= 0 || input.talker.isBlank() || MessagePolicy.textOrNull(input.text) == null) return null
             return MoodStore.keyOf(input.text, input.talker, messageId = input.messageId, speaker = input.speaker,
-                zoneId = input.voice?.key ?: java.util.TimeZone.getDefault().id)
+                zoneId = input.voice?.key ?: java.util.TimeZone.getDefault().id, quoted = input.quoted)
         }
     }
 }

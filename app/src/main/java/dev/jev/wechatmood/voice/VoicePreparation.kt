@@ -13,7 +13,7 @@ object VoicePreparation {
         val target = input.voice?.let {
             requireNotNull(MessagePolicy.textOrNull(transcribe(it))) { "语音转写为空或超过 1000 字符，无法分析" }
         } ?: input.text
-        var budget = MessagePolicy.MAX_CONTEXT_CHARACTERS
+        var budget = MessagePolicy.MAX_CONTEXT_CHARACTERS - (input.quoted?.text?.length ?: 0)
         val context = input.context.asReversed().mapNotNull { message ->
             currentCoroutineContext().ensureActive()
             if (budget <= 0) return@mapNotNull null
@@ -24,8 +24,9 @@ object VoicePreparation {
             catch (_: Exception) {
                 message.copy(text = VoiceText.FAILED, voiceState = VoiceState.FAILED)
             }
-            if (prepared.text.length > budget) { budget = 0; null }
-            else { budget -= prepared.text.length; prepared }
+            val size = prepared.text.length + (prepared.quoted?.text?.length ?: 0)
+            if (size > budget) { budget = 0; null }
+            else { budget -= size; prepared }
         }.asReversed()
         currentCoroutineContext().ensureActive()
         return input.copy(text = target, context = context,

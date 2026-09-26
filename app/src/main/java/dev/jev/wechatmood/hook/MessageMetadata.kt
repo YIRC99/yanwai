@@ -6,6 +6,11 @@ import dev.jev.wechatmood.voice.VoiceText
 
 data class MessageMetadata(val type: Int, val isSend: Int, val content: String, val talker: String,
     val messageId: Long = 0, val createdAt: Long = 0, val imagePath: String = "", val serverId: Long = 0) {
+    private val quoteReply by lazy {
+        if (type in setOf(49, 822083633) && isSend in 0..1 && talker.isNotBlank()) QuoteMessage.parse(body()) else null
+    }
+    fun quotedMessage() = quoteReply?.quoted
+    fun isAnalysisContent() = type in setOf(1, 34) || quoteReply != null
     fun incomingText(): String? = if (isSend == 0) plainText() else null
     fun isReplyTarget(): Boolean = isSend == 0 && talker.isNotBlank() && messageId > 0 &&
         (type == 1 && content.isNotBlank() || type == 34)
@@ -16,18 +21,24 @@ data class MessageMetadata(val type: Int, val isSend: Int, val content: String, 
     fun analysisText(): String? = if (voiceSource() != null) VoiceText.WAITING else plainText()
 
     fun plainText(): String? {
-        if (type != 1 || isSend !in 0..1 || talker.isBlank()) return null
-        val text = if (isSend == 0 && talker.endsWith("@chatroom") && content.contains(":\n"))
-            content.substringAfter(":\n") else content
+        if (isSend !in 0..1 || talker.isBlank()) return null
+        val text = if (type == 1) body() else quoteReply?.text ?: return null
         return MessagePolicy.textOrNull(text)
     }
 
+    private fun groupSender(): String? {
+        if (isSend != 0 || !talker.endsWith("@chatroom")) return null
+        val separator = if (type == 34) ":" else ":\n"
+        if (!content.contains(separator)) return null
+        return content.substringBefore(separator).takeIf {
+            it.isNotBlank() && it.length <= 128 && it.none { c -> c.isWhitespace() || c == '<' || c == '>' }
+        }
+    }
+    private fun body() = if (groupSender() != null && type != 34) content.substringAfter(":\n") else content
+
     fun speaker(): String = when {
         isSend == 1 -> "我"
-        talker.endsWith("@chatroom") && type == 34 -> content.substringBefore(':').takeIf {
-            it.isNotBlank() && it.length <= 128 && it.none { c -> c.isWhitespace() || c == '<' || c == '>' }
-        } ?: "对方（群成员未知）"
-        talker.endsWith("@chatroom") && content.contains(":\n") -> content.substringBefore(":\n").ifBlank { "对方" }
+        talker.endsWith("@chatroom") -> groupSender() ?: "对方（群成员未知）"
         else -> "对方"
     }
     companion object {

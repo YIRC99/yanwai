@@ -3,6 +3,7 @@ package dev.jev.wechatmood.analysis
 import dev.jev.wechatmood.core.AnalysisInput
 import dev.jev.wechatmood.core.ContextMessage
 import dev.jev.wechatmood.core.MessagePolicy
+import dev.jev.wechatmood.core.QuotedMessage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -11,6 +12,15 @@ import dev.jev.wechatmood.voice.VoiceState
 
 /** Time arithmetic belongs to code. Blocks describe gaps, never an automatic emotion reset. */
 object AnalysisState {
+    private fun quote(value: QuotedMessage?): Any = value?.let {
+        JSONObject().put("message", it.text ?: JSONObject.NULL)
+            .put("display_name", it.displayName ?: JSONObject.NULL)
+            .put("content_type", it.type ?: JSONObject.NULL)
+            .put("server_id", it.serverId ?: JSONObject.NULL)
+            .put("unavailable_reason", it.unavailableReason ?: JSONObject.NULL)
+            .put("source", "embedded_quote")
+    } ?: JSONObject.NULL
+
     fun build(input: AnalysisInput): JSONObject {
         require(input.voiceState != VoiceState.WAITING && input.context.none { it.voiceState == VoiceState.WAITING }) {
             "语音尚未完成转写"
@@ -24,7 +34,7 @@ object AnalysisState {
         fun crossDay(older: Long, newer: Long): Boolean? = if (gap(older, newer) != null)
             Instant.ofEpochMilli(older).atZone(zone).toLocalDate() != Instant.ofEpochMilli(newer).atZone(zone).toLocalDate() else null
         val selected = mutableListOf<ContextMessage>()
-        var budget = MessagePolicy.MAX_CONTEXT_CHARACTERS
+        var budget = MessagePolicy.MAX_CONTEXT_CHARACTERS - (input.quoted?.text?.length ?: 0)
         var newer = input.createdAt
         var rejected = 0
         for (message in input.context.asReversed()) {
@@ -32,8 +42,9 @@ object AnalysisState {
             if (message.createdAt > 0 && newer > 0 && message.createdAt > newer) { rejected++; continue }
             val text = MessagePolicy.textOrNull(message.text)
             if (text == null) { rejected++; continue }
-            if (text.length > budget) break
-            budget -= text.length
+            val size = text.length + (message.quoted?.text?.length ?: 0)
+            if (size > budget) break
+            budget -= size
             selected += message.copy(text = text)
             if (message.createdAt > 0) newer = message.createdAt
         }
@@ -48,7 +59,8 @@ object AnalysisState {
             if (!sameTurn(previous, message.speaker, message.createdAt)) turn++
             messages.put(JSONObject().put("message_id", message.messageId.takeIf { it > 0 } ?: JSONObject.NULL)
                 .put("speaker", message.speaker).put("message", message.text)
-                .put("message_source", if (message.voice != null) "voice_transcript" else "text")
+                .put("message_source", if (message.voice != null) "voice_transcript" else if (message.quoted != null) "quoted_reply" else "text")
+                .put("quoted_message", quote(message.quoted))
                 .put("voice_state", message.voiceState.name)
                 .put("sent_at_ms", message.createdAt.takeIf { it > 0 } ?: JSONObject.NULL)
                 .put("sent_at", local(message.createdAt) ?: JSONObject.NULL)
@@ -65,7 +77,8 @@ object AnalysisState {
         val coverage = input.coverage
         return JSONObject()
             .put("message", requireNotNull(MessagePolicy.textOrNull(input.text)) { "消息为空或超过 1000 字符" })
-            .put("message_source", if (input.voice != null) "voice_transcript" else "text")
+            .put("message_source", if (input.voice != null) "voice_transcript" else if (input.quoted != null) "quoted_reply" else "text")
+            .put("quoted_message", quote(input.quoted))
             .put("speaker", input.speaker).put("message_id", input.messageId.takeIf { it > 0 } ?: JSONObject.NULL)
             .put("sent_at_ms", input.createdAt.takeIf { it > 0 } ?: JSONObject.NULL)
             .put("sent_at", local(input.createdAt) ?: JSONObject.NULL).put("timezone", zone.id)
@@ -85,7 +98,9 @@ object AnalysisState {
                 "旧情绪不能自动延续，隔夜也不能自动清零；当前明确重提的问题仍可能未解决。" +
                 "时间 null 表示未知；context 只有目标之前的文字和语音转写，省略的媒体和缺失历史不是无事发生。" +
                 "voice_transcript 仅为语音转成的文字，可能识别错误；不包含音调、哭腔、语速等声音证据。" +
-                "voice_state 为 FAILED 的语音内容未知，不得据此推断态度、赞同或拒绝。")
+                "voice_state 为 FAILED 的语音内容未知，不得据此推断态度、赞同或拒绝。" +
+                "quoted_message 是当前消息引用的旧内容，只作理解回复的依据，不代表当前发送者的原话、情绪或最近一轮对话。" +
+                "引用的显示名不能确定身份，原发送时间未知；message 为 null 表示引用内容不可读，不推测图片或文件内容。")
     }
 
 }
