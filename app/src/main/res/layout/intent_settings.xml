@@ -9,7 +9,7 @@
         <RadioButton android:id="@+id/routeJev" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:minHeight="52dp" android:text="JEV 决策模型 · 快速判断" android:saveEnabled="false" />
         <RadioButton android:id="@+id/routeLlm" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="52dp" android:text="通用大模型 · 细致解读" android:saveEnabled="false" />
+            android:minHeight="52dp" android:text="智能分析 · 细致解读" android:saveEnabled="false" />
     </RadioGroup>
     <TextView android:id="@+id/routeHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
     <TextView android:id="@+id/intentStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp"

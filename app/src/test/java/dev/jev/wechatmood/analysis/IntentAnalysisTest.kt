@@ -33,6 +33,10 @@ class IntentAnalysisTest {
         assertTrue(mood.detail.contains("委屈 100%"))
         assertTrue(mood.detail.contains("可能在意"))
         assertFalse(mood.detail.contains("建议："))
+        assertTrue(mood.detail.contains("智能分析\n"))
+        assertFalse(mood.detail.contains("通用大模型"))
+        assertFalse(mood.detail.contains("\n\n"))
+        assertTrue(mood.detail.endsWith("仅供参考"))
     }
 
     @Test fun `Jev route never sends chat to LLM`() = runBlocking {

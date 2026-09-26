@@ -72,7 +72,7 @@ object SignalAnalyzer {
             val mood = IntentAnalysis.analyze(prepared, settings, snapshot.intent,
                 { client.exchangeSuspending(it, settings) },
                 { llmClient.request(snapshot.intent.llm, it, IntentProtocol::parse) }, ::active,
-                { emotion -> stage.text = emotion.detail.substringAfter('\n') + "\n\n通用大模型正在解读…" })
+                { emotion -> stage.text = emotion.detail.substringAfter('\n') + "\n智能分析中…" })
             val note = buildString {
                 if (input.voice != null) append("\n\n语音转写：${prepared.text}\n（仅根据转写文字分析）")
                 if (prepared.coverage.unavailableVoice > 0) append("\n前文有 ${prepared.coverage.unavailableVoice} 条语音未能转写，分析依据不完整。")

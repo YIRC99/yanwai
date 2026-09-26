@@ -24,7 +24,7 @@ object JevProtocol {
         "confused" to "对信息、说法或安排不理解、疑惑，不只是已经理解但不同意",
         "tired" to "明确表现出身体、注意力或精力的疲惫",
         "unknown" to "短句、缺失语境或多种同样合理解释使情绪无法确定；不能凭时间间隔或客套词猜测")
-    val header: String get() = "Jev ${BuildConfig.VERSION_NAME}"
+    val header: String get() = "yanwai ${BuildConfig.VERSION_NAME}"
     val progress = linkedMapOf("sharing" to "分享经历或自然闲聊", "clarify" to "等具体事实或细节",
         "reassure" to "等关心或重视的回应", "explain" to "等澄清误会或承认问题",
         "act" to "已有解释，等具体行动", "accepted" to "已明确接受回应或安排",

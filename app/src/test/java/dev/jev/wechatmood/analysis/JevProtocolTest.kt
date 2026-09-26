@@ -20,7 +20,7 @@ class JevProtocolTest {
             .put("choice", profile.emotion.choice).put("confidence", profile.emotion.confidence)
             .put("probabilities", JSONObject(profile.emotion.probabilities)))
         val card = JevProtocol.parseDetail(response.toString(), profile).detail
-        assertEquals("Jev ${BuildConfig.VERSION_NAME}", card.lineSequence().first())
+        assertEquals("yanwai ${BuildConfig.VERSION_NAME}", card.lineSequence().first())
         assertTrue(card.contains("开心 20% · 平静 50% · 生气 30%"))
         listOf("参考原话", "好感线索", "互动线索", "闲聊解读", "模型推测", "先别急着猜").forEach {
             assertFalse(card.contains(it))

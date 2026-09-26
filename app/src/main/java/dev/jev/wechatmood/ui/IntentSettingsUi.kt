@@ -55,8 +55,8 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
             binding.model.requestFocus(); binding.model.showDropDown()
         }
         binding.saveIntent.setOnClickListener {
-            if (save()) result(if (route == IntentRoute.JEV) "已使用 JEV 决策模型，无需配置通用大模型。" else
-                "已使用通用大模型解读意图；情绪概率仍使用 JEV。可分别检测两种连接。")
+            if (save()) result(if (route == IntentRoute.JEV) "已使用 JEV 决策模型。" else
+                "已开启智能分析；情绪概率仍使用 JEV。可分别检测两种连接。")
         }
         binding.testIntent.setOnClickListener { test() }
     }

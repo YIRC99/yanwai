@@ -35,7 +35,7 @@ object BubbleDecorator {
             cards[row] = state
         }
         val value = MoodStore.get(key)?.let {
-            AnalysisCardText.format(it, state.view.layoutParams.width - state.view.paddingLeft - state.view.paddingRight)
+            AnalysisCardText.format(it)
         } ?: SignalAnalyzer.failure(key)?.let {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
         } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))
@@ -56,8 +56,8 @@ object BubbleDecorator {
         val card = FrostedAnalysisView(row.context).apply {
             id = View.generateViewId()
             textSize = 13f
-            setPadding(dp(row, 12), dp(row, 10), dp(row, 12), dp(row, 10))
-            setLineSpacing(dp(row, 3).toFloat(), 1f)
+            setPadding(dp(row, 12), dp(row, 7), dp(row, 12), dp(row, 7))
+            setLineSpacing(dp(row, 1).toFloat(), 1f)
             setTextColor(0xFFF0F1F5.toInt())
             minHeight = dp(row, 48)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
