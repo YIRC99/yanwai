@@ -27,6 +27,7 @@
 - 参考 [WeKit AutoSpeechToText](https://github.com/Ujhhgtg/WeKit/blob/bdc7f18033d87a2f6307d2caedfdc6502986a401/app/src/main/java/dev/ujhhgtg/wekit/features/items/chat/AutoSpeechToText.kt) 的原生转写入口思路，本项目独立实现消息身份核验、历史加载、等待和模型输入准备。
 - 对连接手机的微信 **8.0.71 / versionCode 3080** 安装包做了只读字节码核对：确认转写方法 `(MsgInfo, boolean, int, int)`、按消息 ID 的状态查询、`(long, String) -> String` 结果读取、`VoiceTransText` 的 `msgId/cmsgId/content`、聊天标识获取及语音 ViewHolder 的 `getMainContainerView()`。
 - 这是安装包静态核对，不等于真实语音转写端到端验证。离线测试验证筛选、历史条数、转写准备、失败与取消、协议保护和反射签名选择。Debug 构建及最终测试结果见本次提交记录。
+- 后续已覆盖安装 2.0.0 / 31。作者提供的[语音分析实机截图](images/v2-voice-analysis.jpg)展示了语音、转写正文和分析卡；另有[回复](images/v2-reply-assistant.jpg)及[话题](images/v2-topic-suggestions.jpg)截图。这些只证明图中场景的效果，不替代对历史语音、群聊、失败重试或跨聊天取消的完整验收。
 
 ## 手机验收
 
