@@ -10,10 +10,13 @@ import dev.jev.wechatmood.core.EmotionIndicator
 
 object AnalysisCardText {
     fun format(mood: Mood, density: Float, availableWidth: Int, paint: android.graphics.Paint): CharSequence {
+        val emotions = EmotionIndicator.from(mood.emotions)
         val lines = mood.detail.lines().map(String::trim).filter(String::isNotEmpty)
+            .filterIndexed { index, line ->
+                !(index == 1 && line.startsWith("情绪：") && mood.emotions.isNotEmpty() && emotions.isEmpty())
+            }
         val text = SpannableStringBuilder()
         if (lines.isEmpty()) return text
-        val emotions = EmotionIndicator.from(mood.emotions)
         lines.forEachIndexed { index, line ->
             if (index > 0) text.append("\n")
             if (index == 1 && line.startsWith("情绪：") && emotions.isNotEmpty()) {

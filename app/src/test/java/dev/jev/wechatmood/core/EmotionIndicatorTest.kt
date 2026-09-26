@@ -5,14 +5,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class EmotionIndicatorTest {
-    @Test fun `all supported emotions retain their identity including zero probabilities`() {
-        val values = JevProtocol.emotions.values.associateWith { if (it == "开心") 1.0 else 0.0 }
+    @Test fun `nonzero emotions retain stable colors and zero probabilities take no space`() {
+        val values = JevProtocol.emotions.values.associateWith { 0.1 }
         val indicators = EmotionIndicator.from(values)
         assertEquals(values.keys.toSet(), indicators.map { it.label }.toSet())
         assertEquals(indicators.size, indicators.map { it.color }.toSet().size)
         assertEquals(indicators, EmotionIndicator.from(values.entries.reversed().associate { it.toPair() }))
-        assertEquals("100%", indicators.single { it.label == "开心" }.percent)
-        assertTrue(indicators.filter { it.label != "开心" }.all { it.percent == "0%" })
+        val single = EmotionIndicator.from(values.mapValues { if (it.key == "开心") 1.0 else 0.0 })
+        assertEquals(listOf("开心"), single.map { it.label })
+        assertEquals("100%", single.single().percent)
+        assertTrue(EmotionIndicator.from(values.mapValues { 0.0 }).isEmpty())
     }
 
     @Test fun `rounding does not turn near zero and near certainty into absolutes`() {
@@ -25,7 +27,7 @@ class EmotionIndicatorTest {
         val indicators = EmotionIndicator.from(mapOf("开心" to Double.NaN, "平静" to -0.1,
             "生气" to 2.0, "新情绪" to 0.4))
         assertFalse(indicators.any { it.label == "开心" })
-        assertEquals(0.0, indicators.single { it.label == "平静" }.probability, 0.0)
+        assertFalse(indicators.any { it.label == "平静" })
         assertEquals(1.0, indicators.single { it.label == "生气" }.probability, 0.0)
         assertEquals("40%", indicators.single { it.label == "新情绪" }.percent)
     }

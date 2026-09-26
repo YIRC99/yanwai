@@ -21,7 +21,7 @@ data class EmotionIndicator(val label: String, val probability: Double, val colo
 
         fun from(emotions: Map<String, Double>): List<EmotionIndicator> =
             (colors.keys + emotions.keys).distinct().mapNotNull { label ->
-                val probability = emotions[label]?.takeIf { it.isFinite() } ?: return@mapNotNull null
+                val probability = emotions[label]?.takeIf { it.isFinite() && it > 0.0 } ?: return@mapNotNull null
                 EmotionIndicator(label, probability.coerceIn(0.0, 1.0), colors[label] ?: colors.getValue("不明确"))
             }
     }
