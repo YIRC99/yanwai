@@ -167,7 +167,7 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
         setBusy(true)
         binding.testReply.text = "正在检测…"
         status("正在检测回复", R.color.status_neutral)
-        result("使用示例聊天和完整知识资料检测，不读取微信消息。长上下文模型可能需要稍等。")
+        result("使用示例聊天和相关知识资料检测，不读取微信消息。")
         scope.launch {
             try {
                 val knowledge = withContext(Dispatchers.IO) { ReplyKnowledge.load(activity) }
@@ -176,7 +176,8 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
                     ReplyMessage(2, "对方", System.currentTimeMillis(), "好呀，你有什么想去的地方吗？")))
                 val suggestion = ReplyHttpClient().generate(settings, example, "想去公园", "自然简短", knowledge)
                 status("回复检测通过", R.color.status_success)
-                result("示例回复：\n${suggestion.text}\n\n${suggestion.reason}\n\n接口和回复格式可用，聊天入口请在微信中体验。")
+                val preview = suggestion.parts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n\n")
+                result("示例回复（${suggestion.parts.size} 条）：\n$preview\n\n${suggestion.reason}\n\n接口和回复格式可用，聊天入口请在微信中体验。")
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { status("检测失败", R.color.status_error); result(e.message ?: "检测失败，请重试", true) }
             finally { setBusy(false); binding.testReply.text = "保存并检测回复" }

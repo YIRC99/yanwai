@@ -12,9 +12,10 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
     .connectTimeout(15, TimeUnit.SECONDS).readTimeout(90, TimeUnit.SECONDS).callTimeout(120, TimeUnit.SECONDS)
     .followRedirects(false).followSslRedirects(false).build()) {
     suspend fun generate(settings: ReplySettings, context: ReplyContext, draft: String, direction: String,
-        knowledge: String, previous: String = "", focusMessageId: Long? = null): ReplySuggestion {
+        knowledge: String, previous: String = "", focusMessageId: Long? = null,
+        relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED): ReplySuggestion {
         check(settings.isConfigured) { "请先在言外的「回复建议」中保存地址、API Key 和模型名" }
-        val payload = ReplyProtocol.payload(settings, context, draft, direction, knowledge, previous, focusMessageId)
+        val payload = ReplyProtocol.payload(settings, context, draft, direction, knowledge, previous, focusMessageId, relationship)
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(Request.Builder().url(settings.endpoint).header("Authorization", "Bearer ${settings.apiKey}")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build())

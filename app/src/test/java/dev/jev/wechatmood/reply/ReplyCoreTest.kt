@@ -63,6 +63,15 @@ class ReplyCoreTest {
         assertNull(draft.undo("建议加上我自己的话"))
     }
 
+    @Test fun `next short message cannot overwrite an unsent previous part`() {
+        val draft = DraftReplacement("原稿", "好呀")
+        assertTrue(draft.blocksReplacement("好呀", "明天见"))
+        assertFalse(draft.blocksReplacement("好呀", "好呀"))
+        assertFalse(draft.blocksReplacement("", "明天见"))
+        assertFalse(draft.blocksReplacement("原稿", "明天见"))
+        assertEquals("原稿", draft.undo("好呀"))
+    }
+
     @Test fun `unicode truncation never splits a surrogate pair`() {
         val context = ReplyContext.collect("a", listOf(MessageMetadata(1, 0,
             "a" + "😀".repeat(30000), "a", 1)))

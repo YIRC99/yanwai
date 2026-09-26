@@ -1,7 +1,8 @@
 package dev.jev.wechatmood.reply
 
 data class RememberedReply(val context: ReplyContext, val suggestion: ReplySuggestion,
-    val direction: String = "", val focusMessageId: Long? = null)
+    val direction: String = "", val focusMessageId: Long? = null,
+    val relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED, val selectedPart: Int = 0)
 
 /** Successful replies only. Never persisted, logged, or shared across conversations. */
 class ReplyHistory(private val capacity: Int = 12) {

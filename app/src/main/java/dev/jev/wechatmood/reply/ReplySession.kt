@@ -11,4 +11,5 @@ class ReplySession {
 
 class DraftReplacement(private val original: String, private val replacement: String) {
     fun undo(current: String): String? = original.takeIf { current == replacement }
+    fun blocksReplacement(current: String, next: String): Boolean = current == replacement && current != next
 }
