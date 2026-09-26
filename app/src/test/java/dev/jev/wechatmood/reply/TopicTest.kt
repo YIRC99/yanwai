@@ -20,8 +20,45 @@ class TopicTest {
     private fun envelope(content: String, finish: String = "stop") = JSONObject().put("choices", JSONArray().put(
         JSONObject().put("finish_reason", finish).put("message", JSONObject().put("content", content)))).toString()
     private fun body() = JSONObject().put("topics", JSONArray(topics.map {
-        JSONObject().put("title", it.title).put("opener", it.opener).put("reason", it.reason)
+        JSONObject().put("title", it.title).put("replies", JSONArray(it.parts)).put("reason", it.reason)
     })).toString()
+
+    private fun segmentedBody(replies: Any) = JSONObject().put("topics", JSONArray((1..5).map { index ->
+        JSONObject().put("title", "话题$index").put("replies", if (index == 1) replies else JSONArray(listOf("最近还拍照吗$index")))
+            .put("reason", "接着兴趣聊")
+    })).toString()
+
+    @Test fun `topic short messages stay separate for selecting filling reopening and switching`() {
+        val parsed = TopicProtocol.parse(envelope(segmentedBody(JSONArray(listOf("最近还拍照吗", "想看看你拍的")))))
+        val topic = parsed.first()
+        assertEquals(listOf("最近还拍照吗", "想看看你拍的"), topic.asReply().parts)
+        val c = composition()
+        c.acceptTopics(context, parsed, key(), null)
+        // The batch order is random; visit until this two-message topic is selected.
+        while (c.result!!.topics!!.current.title != topic.title) assertTrue(c.nextTopic(key()))
+        assertEquals("最近还拍照吗", c.selectedText)
+        val beforeFill = c.result!!
+        c.afterFill()
+        val reopened = ReplyComposition(c.result)
+        assertEquals("想看看你拍的", reopened.selectedText)
+        reopened.restoreSelection(beforeFill)
+        assertEquals("最近还拍照吗", reopened.selectedText)
+        if (reopened.nextTopic(key())) assertEquals(0, reopened.selectedPart)
+    }
+
+    @Test fun `topic parser rejects essays invalid segments and never masks invalid arrays with legacy opener`() {
+        listOf(JSONArray(), JSONArray(listOf("")), JSONArray(listOf(12)), JSONArray(listOf(JSONObject.NULL)),
+            JSONArray(List(4) { "短句$it" }), JSONArray(listOf("字".repeat(61))),
+            JSONArray(List(3) { "字".repeat(41) }), "这不是数组").forEach {
+            assertThrows(IllegalStateException::class.java) { TopicProtocol.parse(envelope(segmentedBody(it))) }
+        }
+        val invalid = JSONObject(segmentedBody(JSONArray()))
+        invalid.getJSONArray("topics").getJSONObject(0).put("opener", "旧短句")
+        assertThrows(IllegalStateException::class.java) { TopicProtocol.parse(envelope(invalid.toString())) }
+        assertThrows(IllegalStateException::class.java) { TopicProtocol.parse(envelope(body().replace("最近有想拍的地方1 吗？", "字".repeat(61)))) }
+        val unicode = TopicProtocol.parse(envelope(segmentedBody(JSONArray(listOf("🙂".repeat(60))))))
+        assertEquals(1, unicode.first().asReply().parts.size)
+    }
 
     @Test fun `five topics are shown once before requesting another batch including after reopen`() {
         var c = composition()
@@ -94,6 +131,14 @@ class TopicTest {
 
     @Test fun `strict topic parser rejects duplicates nonstrings partial batches and truncated responses`() {
         assertEquals(topics, TopicProtocol.parse(envelope(body())))
+        val legacy = JSONObject(body())
+        for (index in 0 until 5) legacy.getJSONArray("topics").getJSONObject(index).apply {
+            put("opener", topics[index].opener); remove("replies")
+        }
+        assertEquals(topics, TopicProtocol.parse(envelope(legacy.toString())))
+        assertThrows(IllegalStateException::class.java) {
+            TopicProtocol.parse(envelope(legacy.toString().replace("最近有想拍的地方1 吗？", "字".repeat(61))))
+        }
         listOf("{}", "{\"topics\":[]}", body().replace("摄影话题2", "摄影话题1"),
             body().replace("最近有想拍的地方2 吗？", "最近有想拍的地方1 吗？"),
             body().replace("\"摄影话题1\"", "12"), body().replace("\"摄影话题1\"", "\"\""),

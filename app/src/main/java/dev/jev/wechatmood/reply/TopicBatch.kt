@@ -1,8 +1,15 @@
 package dev.jev.wechatmood.reply
 
-data class TopicSuggestion(val title: String, val opener: String, val reason: String) {
-    init { require(title.isNotBlank() && title.length <= 100 && opener.isNotBlank() && opener.length <= 1000 && reason.length <= 500) }
-    fun asReply() = ReplySuggestion(opener, reason)
+data class TopicSuggestion(val title: String, val parts: List<String>, val reason: String) {
+    init {
+        require(title.isNotBlank() && title.length <= 100 && reason.length <= 500)
+        require(parts.size in 1..3 && parts.all { it.isNotBlank() && it.codePointCount(0, it.length) <= 60 })
+        require(parts.sumOf { it.codePointCount(0, it.length) } <= 120)
+    }
+    constructor(title: String, opener: String, reason: String) : this(title, listOf(opener), reason)
+    /** Combined text is only for deduplication; copy/fill always uses one selected part. */
+    val opener get() = parts.joinToString("\n")
+    fun asReply() = ReplySuggestion(parts, reason)
 }
 
 /** Only in process memory. Input changes require a new batch instead of relabeling old suggestions. */

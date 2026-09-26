@@ -158,6 +158,8 @@ class ReplyHostUi(private val activity: Activity) {
             textSize = 12f; gravity = Gravity.START or Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, 0)
         }
         results.addView(replyTitle)
+        val topicTitle = theme.label("", 14f, bold = true)
+        results.addView(topicTitle)
         val parts = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         results.addView(parts)
         val topicHint = theme.label("", 12f, theme.muted).apply { setPadding(0, dp(6), 0, dp(4)) }
@@ -237,12 +239,12 @@ class ReplyHostUi(private val activity: Activity) {
             historyPicker.text = "参考最近 ${composition.historyLimit} 条 ▾"
             historyPicker.contentDescription = "选择参考聊天消息条数，当前最近 ${composition.historyLimit} 条"
             copy.isEnabled = !generating && !reading && composition.canUse; use.isEnabled = !generating && !reading && composition.canUse
-            use.text = if (batch != null) "填入这条" else "填入第 ${composition.selectedPart + 1} 条"
+            use.text = "填入第 ${composition.selectedPart + 1} 条"
             copy.text = "复制这条"
             footerActions.visibility = if (composition.result == null) View.GONE else View.VISIBLE
             footerHint.visibility = footerActions.visibility
             footerHint.text = if (!composition.canUse) "身份或参考范围已改变，请重新生成"
-                else if (batch != null) "只填入当前开场白，由你决定何时发送" else "每次填入一条，由你发送；再打开可继续下一条"
+                else "每次填入一条，由你发送；再打开可继续下一条"
             state.visibility = if (state.text.isBlank()) View.GONE else View.VISIBLE
             if (window.isShowing) fitWindow()
         }
@@ -251,6 +253,8 @@ class ReplyHostUi(private val activity: Activity) {
             val result = composition.result
             replyTitle.visibility = if (result == null) View.GONE else View.VISIBLE
             val batch = result?.topics
+            topicTitle.text = batch?.current?.title.orEmpty()
+            topicTitle.visibility = if (batch == null) View.GONE else View.VISIBLE
             val kind = if (batch == null) "${result?.suggestion?.parts?.size ?: 0} 条建议" else "话题 ${batch.shownCount} / ${batch.items.size}"
             replyTitle.text = result?.let { "${it.relationship.label} · $kind${if (!composition.canUse) "（上次结果）" else ""} · 查看依据 ›" }.orEmpty()
             result?.suggestion?.parts?.forEachIndexed { index, text ->
@@ -258,7 +262,7 @@ class ReplyHostUi(private val activity: Activity) {
                 val row = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); minimumHeight = dp(48)
                     background = theme.shape(if (selected) theme.soft else theme.card, 12, if (selected) theme.accent else theme.border)
-                    addView(theme.label(batch?.current?.title ?: "${index + 1} / ${result.suggestion.parts.size}${if (selected) " · 已选" else " · 点选"}", 12f, theme.muted))
+                    addView(theme.label("${index + 1} / ${result.suggestion.parts.size}${if (selected) " · 已选" else " · 点选"}", 12f, theme.muted))
                     addView(theme.label(text, 16f).apply { setPadding(0, dp(3), 0, 0) })
                     isClickable = true; isFocusable = true
                     contentDescription = "第 ${index + 1} 条，共 ${result.suggestion.parts.size} 条${if (selected) "，已选" else ""}，$text"
