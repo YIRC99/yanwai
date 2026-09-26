@@ -1,5 +1,6 @@
 package dev.jev.wechatmood.hook
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.os.SystemClock
@@ -9,6 +10,8 @@ import android.widget.TextView
 import java.util.WeakHashMap
 
 /** Backdrop only is blurred. Text stays opaque; unsupported host rendering falls back to tint. */
+// Injected into WeChat with its host context; module AppCompat themes/resources are not available.
+@SuppressLint("AppCompatCustomView")
 class FrostedAnalysisView(context: Context) : TextView(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val bounds = RectF()

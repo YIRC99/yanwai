@@ -6,12 +6,12 @@
 
 微信里的聊天助手：理解文字和语音，参考上下文生成回复，聊不下去时找个新话题。
 
-![Version](https://img.shields.io/badge/version-2.1.6-2C7A73)
+![Version](https://img.shields.io/badge/version-2.1.7-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)
 
-[使用效果](#使用效果) · [功能介绍](#功能介绍) · [开始使用](#开始使用) · [接口配置](#接口配置) · [2.0.0 更新说明](docs/releases/2.0.0.md)
+[使用效果](#使用效果) · [功能介绍](#功能介绍) · [开始使用](#开始使用) · [接口配置](#接口配置) · [2.1.7 更新说明](docs/releases/2.1.7.md)
 
 </div>
 
@@ -241,6 +241,7 @@ gradle :app:assembleRelease --no-daemon -Pkotlin.compiler.execution.strategy=in-
 
 ## 进一步了解
 
+- [2.1.7 更新说明](docs/releases/2.1.7.md)
 - [2.0.0 完整更新说明](docs/releases/2.0.0.md)
 - [语音支持、兼容范围与手机验收](docs/VOICE_SUPPORT.md)
 - [回复建议、找话题与模型配置](docs/REPLY_ASSISTANT.md)

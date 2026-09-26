@@ -1,3 +1,14 @@
+# 2.1.7 发布准备（2026-09-27）
+
+- 版本统一提升至 2.1.7 / 40，补齐本轮正式 Release 说明并更新 README 入口，汇总双线路分析、紧凑彩色情绪圆环、零概率隐藏、滚动稳定、引用文字回复及仅复制操作。
+- 首次 Release Lint 被 `FrostedAnalysisView` 的 `AppCompatCustomView` 规则阻断。该控件使用微信消息行的宿主 Context，不能假设模块 AppCompat 主题和资源可用，因此保留原生 TextView，仅对此类添加带原因的局部豁免；未关闭全局检查或创建基线。
+- 最终执行 `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintRelease --offline --no-daemon -Pkotlin.compiler.execution.strategy=in-process`，BUILD SUCCESSFUL。270 项离线单元测试通过，0 failures/errors/skipped；Debug、Release 构建成功，Release Lint 0 errors、166 warnings，既有警告未在本次发布准备中扩展处理。
+- 用户明确确认此前公开包使用本机 Debug 签名，要求沿用。使用现有 `debug.keystore` 签署 Release 构建，未生成新密钥；签名验证通过，证书 SHA-256 与本机构建的 Debug APK 一致：`9de3e7290f510d54bee0b091e7546c7e0010d216719647de7e80444d33c93b14`。未下载旧公开包作独立证书比对。
+- 最终包为 `output/releases/2.1.7/yanwai-2.1.7-release.apk`，15,757,253 字节；包名 `dev.jev.wechatmood`，版本 2.1.7 / 40，minSdk 28、targetSdk 35，非 debuggable，签名和 zipalign 检查通过。APK SHA-256：`8ad8fd1d6f7b1267419275fa608014290b013b17c130eff9fa137fb792d0b7bf`。
+- 本轮未安装手机、未操作微信或调用真实模型，宿主显示与引用消息适配仍由用户实机验收。仅本地提交和产出安装包，未推送或上传发布；构建已退出，检查未发现项目服务或 Gradle/Kotlin 编译进程残留。
+
+---
+
 # 2.1.6 引用文字回复分析（2026-09-27）
 
 - 修复 `MessageMetadata` 只接受 type=1、`MessageContext` 只接受 type=1/34 导致引用文字回复被过滤的问题。仅为宿主 type=49/822083633 且 XML appmsg/type=57 提取 title；链接、文件与其他卡片继续跳过。自动分析和长按「翻译意图」共用同一入口，当前回复与前文引用均可进入分析。
