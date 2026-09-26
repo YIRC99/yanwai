@@ -16,7 +16,18 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
         relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED): ReplySuggestion {
         check(settings.isConfigured) { "请先在言外的「回复建议」中保存地址、API Key 和模型名" }
         val payload = ReplyProtocol.payload(settings, context, draft, direction, knowledge, previous, focusMessageId, relationship)
-        return suspendCancellableCoroutine { continuation ->
+        return request(settings, payload, ReplyProtocol::parse)
+    }
+
+    suspend fun findTopics(settings: ReplySettings, context: ReplyContext, draft: String, notes: String,
+        knowledge: String, relationship: ReplyRelationship, time: TopicTimeContext,
+        previous: List<TopicSuggestion> = emptyList()): List<TopicSuggestion> {
+        check(settings.isConfigured) { "请先配置回复模型" }
+        return request(settings, TopicProtocol.payload(settings, context, draft, notes, knowledge, relationship, time, previous), TopicProtocol::parse)
+    }
+
+    private suspend fun <T> request(settings: ReplySettings, payload: org.json.JSONObject, parse: (String) -> T): T =
+        suspendCancellableCoroutine { continuation ->
             val call = client.newCall(Request.Builder().url(settings.endpoint).header("Authorization", "Bearer ${settings.apiKey}")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build())
             continuation.invokeOnCancellation { call.cancel() }
@@ -38,7 +49,7 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
                         source.request(1024 * 1024L + 1)
                         check(source.buffer.size <= 1024 * 1024L) { "模型响应过长，请换一个模型后重试" }
                         val body = source.readUtf8()
-                        ReplyProtocol.parse(body)
+                        parse(body)
                     } }.recoverCatching { error ->
                         if (error is IllegalStateException) throw error
                         throw IllegalStateException("读取回复失败，请检查网络后重试")
@@ -47,5 +58,4 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
                 }
             })
         }
-    }
 }

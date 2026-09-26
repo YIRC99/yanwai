@@ -8,9 +8,10 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.text.InputFilter
 import android.text.InputType
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -114,6 +115,8 @@ class ReplyHostUi(private val activity: Activity) {
         heading.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
         heading.addView(action("关闭", quiet = true) { window.dismiss() }, LinearLayout.LayoutParams(dp(56), dp(48)))
         body.addView(heading)
+        val progress = ReplyLoadingView(activity, theme)
+        body.addView(progress, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         val scroll = ScrollView(activity).apply { isFillViewport = false; clipToPadding = false }
         val results = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(8)) }
         val roleRow = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -126,9 +129,9 @@ class ReplyHostUi(private val activity: Activity) {
         roleRow.addView(historyPicker, LinearLayout.LayoutParams(0, -2, 1.2f))
         results.addView(roleRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         val instruction = EditText(activity).apply {
-            hint = "补充想法（可选），如：想委婉拒绝"
+            hint = "补充想法（可选）\n回复：如“想委婉拒绝，别太正式”\n找话题：如“她喜欢摄影，10月3日公历生日，最近在准备考试”"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
-            gravity = Gravity.TOP or Gravity.START; minLines = 1; maxLines = 3; minHeight = dp(48)
+            gravity = Gravity.TOP or Gravity.START; minLines = 2; maxLines = 4; minHeight = dp(48)
             setPadding(dp(10), dp(10), dp(10), dp(10)); background = theme.shape(theme.card, 12, theme.border)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             filters = arrayOf(InputFilter.LengthFilter(2000)); isSaveEnabled = false
@@ -137,10 +140,11 @@ class ReplyHostUi(private val activity: Activity) {
         }
         results.addView(instruction, LinearLayout.LayoutParams(-1, -2))
         val generateButton = action("生成回复", primary = true)
+        val topicButton = action("找找话题")
         val shorter = action("更简短", quiet = true)
         val generationActions = LinearLayout(activity)
-        generationActions.addView(generateButton, LinearLayout.LayoutParams(0, -2, 2f).apply { rightMargin = dp(8) })
-        generationActions.addView(shorter, LinearLayout.LayoutParams(0, -2, 1f))
+        generationActions.addView(generateButton, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
+        generationActions.addView(topicButton, LinearLayout.LayoutParams(0, -2, 1f))
         results.addView(generationActions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         val state = theme.label("", 12f, theme.muted).apply {
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
@@ -150,24 +154,22 @@ class ReplyHostUi(private val activity: Activity) {
         val stale = action("有新消息 · 重新读取", quiet = true)
         stale.visibility = View.GONE; newMessageNotice = stale
         results.addView(stale, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(8) })
-        val progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = true; visibility = View.GONE; indeterminateTintList = ColorStateList.valueOf(theme.accent)
-        }
-        results.addView(progress, LinearLayout.LayoutParams(-1, dp(3)).apply { bottomMargin = dp(6) })
         val replyTitle = action("", quiet = true) { composition.result?.context?.let(::showEvidence) }.apply {
             textSize = 12f; gravity = Gravity.START or Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, 0)
         }
         results.addView(replyTitle)
         val parts = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         results.addView(parts)
+        val topicHint = theme.label("", 12f, theme.muted).apply { setPadding(0, dp(6), 0, dp(4)) }
+        results.addView(topicHint)
         val reasonToggle = action("为什么这样回 ▾", quiet = true)
         val reason = theme.label("", 12f, theme.muted).apply { visibility = View.GONE }
         reasonToggle.setOnClickListener {
             val expanded = reason.visibility != View.VISIBLE
             reason.visibility = if (expanded) View.VISIBLE else View.GONE
-            reasonToggle.text = if (expanded) "收起理由 ▴" else "为什么这样回 ▾"
+            reasonToggle.text = if (expanded) "收起理由 ▴" else if (composition.result?.topics != null) "为什么聊这个 ▾" else "为什么这样回 ▾"
         }
-        results.addView(reasonToggle); results.addView(reason)
+        results.addView(reasonToggle); results.addView(reason); results.addView(shorter)
         scroll.addView(results); body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         body.addView(line(), LinearLayout.LayoutParams(-1, dp(1).coerceAtLeast(1)))
         val undo = action("撤销上次填入", quiet = true)
@@ -189,33 +191,58 @@ class ReplyHostUi(private val activity: Activity) {
         body.addView(footerHint)
         var busy = false
         var failed = false
+        var findingTopics = false
+        fun topicKey(current: ReplyContext, draft: String, date: String) = TopicKey(current.fingerprint, current.requestedMessages,
+            composition.relationship, instruction.text.toString(), draft, date)
         fun controls(generating: Boolean) {
             val reading = reference.loading
             val ready = reference.context
-            busy = generating; progress.visibility = if (generating || reading) View.VISIBLE else View.GONE
+            busy = generating
+            progress.showLoading(when {
+                generating && findingTopics -> "正在准备 5 个新话题…"
+                generating -> "正在根据 ${ready?.messages?.size ?: 0} 条消息生成回复…"
+                reading -> "正在读取最近 ${composition.historyLimit} 条消息…"
+                else -> null
+            })
             generateButton.isEnabled = !generating && !reading
             generateButton.text = when {
-                generating -> "正在生成…"
+                generating -> if (findingTopics) "生成回复" else "正在生成…"
                 reading -> "正在读取消息…"
                 ready == null -> "重新读取消息"
                 failed -> "重试生成"
                 ready.source == ReplyContextSource.LOADED_PAGE -> "按已读取 ${ready.messages.size} 条生成"
-                composition.result == null -> "生成回复"
+                composition.result == null || composition.result?.topics != null -> "生成回复"
                 !composition.canUse -> "按新选择生成"
                 else -> "重新生成"
             }
             shorter.isEnabled = !generating && !reading && ready != null && composition.canUse
-            shorter.visibility = if (composition.result == null) View.GONE else View.VISIBLE
+            shorter.visibility = if (composition.result == null || composition.result?.topics != null) View.GONE else View.VISIBLE
+            val batch = composition.result?.topics
+            val currentTopicKey = ready?.let { topicKey(it, editor()?.text?.toString().orEmpty(), java.time.LocalDate.now().toString()) }
+            val sameTopicInputs = composition.canUse && batch != null && batch.key == currentTopicKey
+            topicButton.isEnabled = !generating && !reading
+            topicButton.text = when {
+                generating && findingTopics -> "正在找话题…"
+                sameTopicInputs -> "换个话题"
+                else -> "找找话题"
+            }
+            topicHint.visibility = if (batch == null) View.GONE else View.VISIBLE
+            topicHint.text = when {
+                !sameTopicInputs -> "参考内容或补充背景已变化，点「找找话题」生成新的一组"
+                batch?.hasNext == true -> "本组还有 ${batch.items.size - batch.shownCount} 个，点「换个话题」立即切换"
+                else -> "本组已看完，再点「换个话题」生成新的一组"
+            }
             instruction.isEnabled = !generating; rolePicker.isEnabled = !generating; stale.isEnabled = !generating
             historyPicker.isEnabled = !generating
             historyPicker.text = "参考最近 ${composition.historyLimit} 条 ▾"
             historyPicker.contentDescription = "选择参考聊天消息条数，当前最近 ${composition.historyLimit} 条"
             copy.isEnabled = !generating && !reading && composition.canUse; use.isEnabled = !generating && !reading && composition.canUse
-            use.text = "填入第 ${composition.selectedPart + 1} 条"
+            use.text = if (batch != null) "填入这条" else "填入第 ${composition.selectedPart + 1} 条"
             copy.text = "复制这条"
             footerActions.visibility = if (composition.result == null) View.GONE else View.VISIBLE
             footerHint.visibility = footerActions.visibility
-            footerHint.text = if (composition.canUse) "每次填入一条，由你发送；再打开可继续下一条" else "身份或参考范围已改变，请重新生成"
+            footerHint.text = if (!composition.canUse) "身份或参考范围已改变，请重新生成"
+                else if (batch != null) "只填入当前开场白，由你决定何时发送" else "每次填入一条，由你发送；再打开可继续下一条"
             state.visibility = if (state.text.isBlank()) View.GONE else View.VISIBLE
             if (window.isShowing) fitWindow()
         }
@@ -223,13 +250,15 @@ class ReplyHostUi(private val activity: Activity) {
             parts.removeAllViews()
             val result = composition.result
             replyTitle.visibility = if (result == null) View.GONE else View.VISIBLE
-            replyTitle.text = result?.let { "${it.relationship.label} · ${it.suggestion.parts.size} 条建议${if (!composition.canUse) "（上次结果）" else ""} · 查看依据 ›" }.orEmpty()
+            val batch = result?.topics
+            val kind = if (batch == null) "${result?.suggestion?.parts?.size ?: 0} 条建议" else "话题 ${batch.shownCount} / ${batch.items.size}"
+            replyTitle.text = result?.let { "${it.relationship.label} · $kind${if (!composition.canUse) "（上次结果）" else ""} · 查看依据 ›" }.orEmpty()
             result?.suggestion?.parts?.forEachIndexed { index, text ->
                 val selected = composition.selectedPart == index
                 val row = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); minimumHeight = dp(48)
                     background = theme.shape(if (selected) theme.soft else theme.card, 12, if (selected) theme.accent else theme.border)
-                    addView(theme.label("${index + 1} / ${result.suggestion.parts.size}${if (selected) " · 已选" else " · 点选"}", 11f, theme.muted))
+                    addView(theme.label(batch?.current?.title ?: "${index + 1} / ${result.suggestion.parts.size}${if (selected) " · 已选" else " · 点选"}", 12f, theme.muted))
                     addView(theme.label(text, 16f).apply { setPadding(0, dp(3), 0, 0) })
                     isClickable = true; isFocusable = true
                     contentDescription = "第 ${index + 1} 条，共 ${result.suggestion.parts.size} 条${if (selected) "，已选" else ""}，$text"
@@ -240,6 +269,7 @@ class ReplyHostUi(private val activity: Activity) {
             reason.text = result?.suggestion?.reason.orEmpty()
             reasonToggle.visibility = if (reason.text.isBlank()) View.GONE else View.VISIBLE
             if (reason.text.isBlank()) reason.visibility = View.GONE
+            reasonToggle.text = if (reason.visibility == View.VISIBLE) "收起理由 ▴" else if (batch != null) "为什么聊这个 ▾" else "为什么这样回 ▾"
         }
         rolePicker.setOnClickListener {
             PopupMenu(activity, rolePicker).apply {
@@ -272,7 +302,7 @@ class ReplyHostUi(private val activity: Activity) {
             val ticket = reference.begin(limit)
             snapshot = null; stale.visibility = View.GONE
             failed = false
-            state.text = "正在读取最近 $limit 条消息…"; state.setTextColor(theme.muted)
+            state.text = ""; state.setTextColor(theme.muted)
             renderParts(); controls(false)
             val loaded = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
                 reference.fail(ticket); state.text = it.message ?: "读取聊天失败，请重试"; controls(false); return
@@ -322,7 +352,7 @@ class ReplyHostUi(private val activity: Activity) {
                 }
             }.show()
         }
-        fun generate(direction: String = "") {
+        fun generate(direction: String = "", findTopics: Boolean = false) {
             if (busy || reference.loading) return
             if (MessageSniffer.currentReplyTalker() != selectedTalker) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
@@ -333,14 +363,22 @@ class ReplyHostUi(private val activity: Activity) {
             }
             val input = editor() ?: run { toast("请先切换到文字输入"); return }
             baselineDraft = input.text.toString(); draftView = WeakReference(input)
+            val relationship = composition.relationship
+            val notes = instruction.text.toString()
+            val time = if (findTopics) TopicCalendar.current() else null
+            val requestedTopicKey = time?.let { topicKey(current, baselineDraft, it.date) }
+            if (requestedTopicKey != null && composition.nextTopic(requestedTopicKey)) {
+                failed = false; state.text = ""; reason.visibility = View.GONE
+                reasonToggle.text = "为什么这样回 ▾"
+                renderParts(); controls(false); remember(); return
+            }
             job?.cancel()
             val config = ModulePrefs.replySettings()
             val ticket = session.begin(current.talker, current.fingerprint)
-            val previous = composition.previousText
-            val relationship = composition.relationship
-            val notes = instruction.text.toString()
-            state.text = "正在根据 ${current.messages.size} 条消息生成…"; state.setTextColor(theme.muted)
-            failed = false
+            val previous = if (composition.result?.topics == null) composition.previousText else ""
+            val previousTopics = composition.result?.topics?.items.orEmpty()
+            state.text = ""; state.setTextColor(theme.muted)
+            failed = false; findingTopics = findTopics
             (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
                 ?.hideSoftInputFromWindow(instruction.windowToken, 0)
             body.requestFocus()
@@ -355,13 +393,18 @@ class ReplyHostUi(private val activity: Activity) {
                     if (beforeSend.endpoint != config.endpoint || beforeSend.model != config.model || beforeSend.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
                     }
-                    val suggestion = ReplyHttpClient().generate(config, current, baselineDraft, direction, knowledge, previous, focusId, relationship)
+                    val client = ReplyHttpClient()
+                    val topics = if (findTopics) client.findTopics(config, current, baselineDraft, notes, knowledge, relationship,
+                        requireNotNull(time), previousTopics) else null
+                    val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction, knowledge, previous, focusId, relationship)
                     val activeConfig = ModulePrefs.replySettings()
                     if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || window !== dialog || !ModulePrefs.replyConsent) return@launch
                     if (activeConfig.endpoint != config.endpoint || activeConfig.model != config.model || activeConfig.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
                     }
-                    if (!composition.accept(current, suggestion, notes, focusId, relationship)) return@launch
+                    val accepted = if (topics != null) composition.acceptTopics(current, topics, requireNotNull(requestedTopicKey), focusId)
+                        else composition.accept(current, requireNotNull(suggestion), notes, focusId, relationship)
+                    if (!accepted) return@launch
                     snapshot = current
                     reason.visibility = View.GONE; reasonToggle.text = "为什么这样回 ▾"; renderParts()
                     state.text = ""
@@ -370,7 +413,7 @@ class ReplyHostUi(private val activity: Activity) {
                 catch (e: Exception) {
                     if (session.accepts(ticket, MessageSniffer.currentReplyTalker()) && window === dialog) {
                         failed = true
-                        state.text = if (composition.result == null) "生成失败" else "生成失败 · 保留上次建议"
+                        state.text = "${if (findTopics) "找话题" else "生成"}失败${if (composition.result == null) "" else " · 保留上次建议"}"
                         state.setTextColor(theme.error)
                         toast(e.message ?: "暂时无法生成，请重试")
                     }
@@ -382,6 +425,12 @@ class ReplyHostUi(private val activity: Activity) {
         generateButton.setOnClickListener {
             generate(instruction.text.toString().ifBlank { if (composition.canUse) "换一种自然表达，不要重复上一组建议" else "" })
         }
+        topicButton.setOnClickListener { generate(findTopics = true) }
+        instruction.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) { controls(busy) }
+        })
         shorter.setOnClickListener { generate(instruction.text.toString() + "\n保持原意，更简短一点") }
         stale.setOnClickListener { prepareHistory(composition.historyLimit) }
         undo.setOnClickListener {
@@ -416,6 +465,7 @@ class ReplyHostUi(private val activity: Activity) {
         window.setOnDismissListener {
             if (dialog !== window) return@setOnDismissListener
             remember(); job?.cancel(); historyJob?.cancel(); reference.cancel(); session.cancel()
+            progress.showLoading(null)
             if (dialog === window) { dialog = null; newMessageNotice = null; snapshot = null; invalidateRequest = null }
         }
         window.window?.apply {

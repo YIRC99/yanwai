@@ -14,7 +14,7 @@
                 android:textSize="26sp" android:textColor="@color/text_primary" android:layout_marginTop="10dp"
                 android:fontFamily="sans-serif-medium" android:accessibilityHeading="true" />
             <TextView style="@style/Yanwai.Body" android:layout_marginTop="8dp"
-                android:text="在微信聊天「＋」面板点「帮我回」，结合整段聊天给出建议。关闭后重开可查看上次内容，填入后自己发送。" />
+                android:text="在微信聊天「＋」面板点「帮我回」，生成回复或找找新话题。一次准备 5 个话题，可立即换着看；填入后自己发送。" />
             <TextView android:id="@+id/replyStatus" style="@style/Yanwai.Badge"
                 android:layout_marginTop="16dp" android:text="尚未配置" />
         </LinearLayout>
@@ -69,7 +69,7 @@
     <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/replyConsent"
         android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
         android:text="允许手动生成回复建议" android:saveEnabled="false" />
-    <TextView style="@style/Yanwai.Caption" android:text="开启后，在「帮我回」选择对方身份与参考条数。打开新面板或选择条数会先在本机读取聊天，点生成后才把准备好的消息、发送人、时间、身份、草稿和补充想法发送到所选服务。不会自动生成或发送消息。修改此开关后需保存。" />
+    <TextView style="@style/Yanwai.Caption" android:text="开启后，在「帮我回」选择对方身份与参考条数。打开或选条数先在本机读取；点生成回复或找找话题，才把消息、发送人、时间、身份、草稿和补充想法发到所选服务。找话题还附带本机日期、时间和节日背景，一组看完后再点会请求新一组。不会自动发送消息。修改开关后需保存。" />
     <com.google.android.material.button.MaterialButton android:id="@+id/testReply"
         style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测回复" />
     <TextView style="@style/Yanwai.Caption" android:text="检测会发送示例聊天和相关知识资料，可能产生 API 费用，不读取微信消息。列表可见不代表一定能调用。" />

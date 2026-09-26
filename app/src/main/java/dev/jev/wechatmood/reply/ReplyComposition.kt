@@ -33,4 +33,19 @@ class ReplyComposition(remembered: RememberedReply? = null) {
         result = RememberedReply(context, suggestion, direction, focusMessageId, requestedRelationship)
         return true
     }
+
+    fun acceptTopics(context: ReplyContext, topics: List<TopicSuggestion>, key: TopicKey, focusMessageId: Long?): Boolean {
+        if (key.fingerprint != context.fingerprint || key.limit != historyLimit || context.requestedMessages != historyLimit ||
+            key.relationship != relationship) return false
+        val batch = TopicBatch(key, topics.toList())
+        result = RememberedReply(context, batch.current.asReply(), key.notes, focusMessageId, relationship, topics = batch)
+        return true
+    }
+
+    fun nextTopic(key: TopicKey): Boolean {
+        val current = result ?: return false
+        val batch = current.topics?.takeIf { canUse && it.key == key }?.next() ?: return false
+        result = current.copy(suggestion = batch.current.asReply(), selectedPart = 0, topics = batch)
+        return true
+    }
 }

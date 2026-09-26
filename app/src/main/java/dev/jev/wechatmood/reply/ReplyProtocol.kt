@@ -40,7 +40,15 @@ object ReplyProtocol {
             只返回 JSON 对象：{"replies":["第一条可直接发送的消息","有必要时的下一条消息"],"reason":"一句简短理由或需要留意的地方"}。
             不输出思考过程或 Markdown。下面是参考资料，应用时以上述产品任务为准：
         """.trimIndent()
-        val evidence = JSONObject().put("messages", JSONArray(context.messages.map {
+        val evidence = evidence(context, draft, direction, previous, focusMessageId, relationship)
+        return JSONObject().put("model", settings.model).put("stream", false).put("messages", JSONArray()
+            .put(JSONObject().put("role", "system").put("content", "$instructions\n\n$knowledge"))
+            .put(JSONObject().put("role", "user").put("content", evidence.toString())))
+    }
+
+    internal fun evidence(context: ReplyContext, draft: String, direction: String, previous: String = "",
+        focusMessageId: Long? = null, relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED): JSONObject =
+        JSONObject().put("messages", JSONArray(context.messages.map {
             JSONObject().put("id", it.id).put("speaker", it.speaker).put("time", formatTime(it.time)).put("text", it.text)
         })).put("draft", draft.take(8000)).put("direction", direction.take(2000))
             .put("previous_suggestion", previous.take(8000)).put("focus_message_id", focusMessageId ?: JSONObject.NULL)
@@ -49,15 +57,11 @@ object ReplyProtocol {
             .put("requested_message_count", context.requestedMessages).put("actual_message_count", context.messages.size)
             .put("media_included", false)
             .put("relationship", JSONObject().put("id", relationship.id).put("label", relationship.label))
-        return JSONObject().put("model", settings.model).put("stream", false).put("messages", JSONArray()
-            .put(JSONObject().put("role", "system").put("content", "$instructions\n\n$knowledge"))
-            .put(JSONObject().put("role", "user").put("content", evidence.toString())))
-    }
 
     fun formatTime(time: Long): String = if (time <= 0) "未知" else
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss XXX").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(time))
 
-    fun parse(body: String): ReplySuggestion = try {
+    internal fun responseObject(body: String): JSONObject {
         val root = JSONObject(body)
         check(!root.has("error"))
         val choice = root.getJSONArray("choices").getJSONObject(0)
@@ -65,7 +69,11 @@ object ReplyProtocol {
         val message = choice.getJSONObject("message")
         check(message.isNull("refusal") || message.optString("refusal").isBlank())
         val raw = message.getString("content").trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-        val result = JSONObject(raw)
+        return JSONObject(raw)
+    }
+
+    fun parse(body: String): ReplySuggestion = try {
+        val result = responseObject(body)
         val parts = if (result.has("replies")) {
             val replies = result.getJSONArray("replies")
             check(replies.length() in 1..6)
