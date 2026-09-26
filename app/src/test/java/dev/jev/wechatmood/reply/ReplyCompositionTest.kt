@@ -80,4 +80,16 @@ class ReplyCompositionTest {
         assertEquals(1, composer.selectedPart)
         assertEquals("下次聊", composer.selectedText)
     }
+
+    @Test fun `changing history count does not relabel or reuse the old suggestion`() {
+        val composer = ReplyComposition()
+        composer.accept(context, suggestion, "", null, ReplyRelationship.UNSPECIFIED)
+        composer.historyLimit = 30
+        assertFalse(composer.canUse)
+        assertEquals(100, composer.result!!.context.requestedMessages)
+        assertFalse(composer.accept(context, suggestion, "", null, ReplyRelationship.UNSPECIFIED))
+        assertTrue(composer.accept(context.copy(requestedMessages = 30), suggestion, "", null, ReplyRelationship.UNSPECIFIED))
+        assertTrue(composer.canUse)
+        assertEquals(30, ReplyComposition(composer.result).historyLimit)
+    }
 }

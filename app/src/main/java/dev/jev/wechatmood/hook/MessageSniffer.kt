@@ -248,7 +248,7 @@ object MessageSniffer {
             if (record.type == 1 && ++textCount >= ReplyContext.MAX_MESSAGES) break
         }
         val result = ReplyContext.collect(talker, messages.asReversed())
-        check(result.messages.isNotEmpty()) { "当前没有可用的文字消息，暂时无法生成回复" }
+        check(result.historyAnchor != null || result.messages.isNotEmpty()) { "暂时无法核对当前聊天，请重新进入后重试" }
         return result.copy(trimmed = result.trimmed || messages.size < count)
     }
 

@@ -46,6 +46,7 @@ object ReplyProtocol {
             .put("previous_suggestion", previous.take(8000)).put("focus_message_id", focusMessageId ?: JSONObject.NULL)
             .put("omitted_media", context.omittedMedia).put("context_trimmed", context.trimmed)
             .put("context_source", context.source.name).put("page_only", context.source == ReplyContextSource.LOADED_PAGE)
+            .put("requested_message_count", context.requestedMessages).put("actual_message_count", context.messages.size)
             .put("media_included", false)
             .put("relationship", JSONObject().put("id", relationship.id).put("label", relationship.label))
         return JSONObject().put("model", settings.model).put("stream", false).put("messages", JSONArray()

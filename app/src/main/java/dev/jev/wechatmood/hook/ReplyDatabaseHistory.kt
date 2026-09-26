@@ -47,7 +47,8 @@ object ReplyDatabaseHistory {
         while (handles.size > 4) handles.removeAt(handles.lastIndex)
     }
 
-    suspend fun load(loaded: ReplyContext): ReplyContext = withContext(Dispatchers.IO) {
+    suspend fun load(loaded: ReplyContext, limit: Int = ReplyContext.MAX_MESSAGES): ReplyContext = withContext(Dispatchers.IO) {
+        require(limit in 1..ReplyContext.MAX_MESSAGES)
         val active = coroutineContext
         val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
         val sources = databases.map { db -> ReplyHistoryQuery { sql, args ->
@@ -67,7 +68,7 @@ object ReplyDatabaseHistory {
                 val talker = it.getColumnIndexOrThrow("talker")
                 val time = it.getColumnIndexOrThrow("createTime")
                 buildList {
-                    while (size < ReplyContext.MAX_MESSAGES + 1 && it.moveToNext()) {
+                    while (size < limit + 1 && it.moveToNext()) {
                         active.ensureActive()
                         add(MessageMetadata(it.getInt(type), it.getInt(sent), it.getString(content).orEmpty(),
                             it.getString(talker).orEmpty(), it.getLong(id), it.getLong(time)))
@@ -75,8 +76,8 @@ object ReplyDatabaseHistory {
                 }
             }
         } }
-        ReplyHistoryReader.read(loaded, sources) { active.ensureActive() }.also {
-            MoodLog.i("REPLY_HISTORY_RESULT source=${it.source} count=${it.messages.size} trimmed=${it.trimmed}")
+        ReplyHistoryReader.read(loaded, sources, limit) { active.ensureActive() }.also {
+            MoodLog.i("REPLY_HISTORY_RESULT requested=$limit handles=${databases.size} source=${it.source} count=${it.messages.size} trimmed=${it.trimmed}")
         }
     }
 }

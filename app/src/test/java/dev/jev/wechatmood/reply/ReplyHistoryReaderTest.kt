@@ -25,6 +25,70 @@ class ReplyHistoryReaderTest {
         assertNull(result.historyFailure)
     }
 
+    @Test fun selectedWindowLoadsLatestHistoryWithoutExpandingThePage() {
+        for (limit in listOf(30, 50, 100)) {
+            val source = ReplyHistoryQuery { sql, _ ->
+                if (sql.contains("msgId = ?")) listOf(row(200)) else {
+                    assertTrue(sql.contains("LIMIT ${limit + 1}"))
+                    (200 - limit..200).map { row(it) }.reversed()
+                }
+            }
+            val result = ReplyHistoryReader.read(loaded, listOf(source), limit)
+            assertEquals(limit, result.messages.size)
+            assertEquals((201 - limit).toLong(), result.messages.first().id)
+            assertEquals(200L, result.messages.last().id)
+            assertEquals(limit, result.requestedMessages)
+            assertEquals(ReplyContextSource.LOCAL_HISTORY, result.source)
+        }
+    }
+
+    @Test fun pageFallbackAndShortHistoryNeverInventTheSelectedCount() {
+        val largerPage = ReplyContext.collect("friend", (151..200).map { row(it) })
+        val fallback = ReplyHistoryReader.read(largerPage, emptyList(), 30)
+        assertEquals(30, fallback.messages.size)
+        assertEquals(171L, fallback.messages.first().id)
+        assertEquals(30, fallback.requestedMessages)
+        assertNotNull(fallback.historyFailure)
+        val small = ReplyHistoryReader.read(loaded, listOf(source((184..200).map { row(it) })), 50)
+        assertEquals(17, small.messages.size)
+        assertEquals(50, small.requestedMessages)
+        assertEquals(ReplyContextSource.LOCAL_HISTORY, small.source)
+        assertNull(small.historyFailure)
+    }
+
+    @Test fun invalidHistoryWindowIsRejectedBeforeQuery() {
+        for (limit in listOf(0, -1, 101, Int.MAX_VALUE)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                ReplyHistoryReader.read(loaded, listOf(ReplyHistoryQuery { _, _ -> error("must not query") }), limit)
+            }
+        }
+    }
+
+    @Test fun mediaOnlyPageCanVerifyCurrentDatabaseAndReadEarlierTextWithoutScrolling() {
+        val photo = MessageMetadata(3, 0, "private-image-location", "friend", 201, 201000)
+        val mediaPage = ReplyContext.collect("friend", listOf(photo))
+        val db = ReplyHistoryQuery { sql, _ ->
+            if (sql.contains("msgId = ?")) listOf(photo) else (150..200).map { row(it) }.reversed()
+        }
+        val result = ReplyHistoryReader.read(mediaPage, listOf(db), 50)
+        assertEquals(ReplyContextSource.LOCAL_HISTORY, result.source)
+        assertEquals(50, result.messages.size)
+        assertEquals(200L, result.messages.last().id)
+        assertEquals(201L, result.latestLoadedId)
+        assertFalse(mediaPage.toString().contains("private-image-location"))
+        assertFalse(result.toString().contains("private-image-location"))
+    }
+
+    @Test fun changedMediaAnchorCannotReadAnotherAccountHistory() {
+        val photo = MessageMetadata(3, 0, "private-image-location", "friend", 201, 201000)
+        var calls = 0
+        val db = ReplyHistoryQuery { _, _ -> calls++; listOf(photo.copy(content = "other-account-image")) }
+        val result = ReplyHistoryReader.read(ReplyContext.collect("friend", listOf(photo)), listOf(db), 30)
+        assertEquals(1, calls)
+        assertEquals(ReplyContextSource.LOADED_PAGE, result.source)
+        assertTrue(result.messages.isEmpty())
+    }
+
     @Test fun smallActualHistoryIsNotPaddedOrClaimedAsFailure() {
         val result = ReplyHistoryReader.read(loaded, listOf(source((184..200).map { row(it) }.reversed())))
         assertEquals(17, result.messages.size)

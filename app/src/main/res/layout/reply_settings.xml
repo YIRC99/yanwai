@@ -69,7 +69,7 @@
     <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/replyConsent"
         android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
         android:text="允许手动生成回复建议" android:saveEnabled="false" />
-    <TextView style="@style/Yanwai.Caption" android:text="开启后，先在「帮我回」里选对方身份，再点生成或更新，才会把当前聊天片段、发送人、时间、所选身份、草稿和补充想法发送到上面配置的服务。打开面板不会自动生成，填入后由你发送。修改此开关后需保存。" />
+    <TextView style="@style/Yanwai.Caption" android:text="开启后，在「帮我回」选择对方身份与参考条数。打开新面板或选择条数会先在本机读取聊天，点生成后才把准备好的消息、发送人、时间、身份、草稿和补充想法发送到所选服务。不会自动生成或发送消息。修改此开关后需保存。" />
     <com.google.android.material.button.MaterialButton android:id="@+id/testReply"
         style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测回复" />
     <TextView style="@style/Yanwai.Caption" android:text="检测会发送示例聊天和相关知识资料，可能产生 API 费用，不读取微信消息。列表可见不代表一定能调用。" />
@@ -82,7 +82,7 @@
         android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone"
         android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
     <TextView style="@style/Yanwai.Body" android:layout_marginTop="16dp"
-        android:text="生成时读取当前聊天的最近最多 100 条本机文字记录，总长最多 48,000 字符。历史不可用时仅使用页面消息并明确提示；面板可查看来源、时间及原文。图片、语音等不参与理解。" />
+        android:text="可选最近 30、50 或 100 条本机文字消息，总长最多 48,000 字符。选择后自动读取，不需要手动向上翻页；历史不可用或条数不足会显示实际数量。可查看已读取内容与回复依据，图片、语音等不参与理解。" />
     <TextView style="@style/Yanwai.Section" android:text="回复逻辑来自狗头军师" />
     <TextView style="@style/Yanwai.Body" android:text="基于开源项目 goutoujunshi 的回复流程与知识资料。原始知识完整随应用打包，生成时按对方身份选用恋爱、家庭、日常接话等资料，调整口吻并拆成自然短消息。由你配置的模型生成，言外负责上下文和交互适配。" />
     <com.google.android.material.button.MaterialButton android:id="@+id/knowledgeSource"
