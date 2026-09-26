@@ -6,7 +6,7 @@
 
 微信里的聊天助手：理解文字和语音，参考上下文生成回复，聊不下去时找个新话题。
 
-![Version](https://img.shields.io/badge/version-2.1.1-2C7A73)
+![Version](https://img.shields.io/badge/version-2.1.2-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)

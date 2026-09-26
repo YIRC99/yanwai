@@ -69,7 +69,7 @@ class AnalysisQueueTest {
         queue.submit(message.copy(messageId = 2))
         assertEquals(listOf(1L, 2L), started)
         val next = message.copy(talker = "bob", messageId = 3)
-        queue.reconcile(setOf(next.key))
+        queue.reconcile(setOf(next.key), next.talker)
         queue.submit(next)
         assertEquals(listOf(1L, 2L, 3L), started)
         assertEquals(setOf(1L, 2L), canceled.toSet())
@@ -119,6 +119,28 @@ class AnalysisQueueTest {
         queue.submit(message.copy(talker = "carol", messageId = 4))
         assertEquals(listOf(1L, 2L, 4L), started)
         queue.cancelAll()
+    }
+
+    @Test fun `scrolling away keeps running results but drops work not started`() {
+        val finish = CompletableDeferred<Unit>()
+        var visible = true
+        val started = mutableListOf<Long>()
+        val queue = AnalysisQueue(scope, { true }, { input ->
+            started += input.messageId
+            finish.await()
+            result
+        })
+        queue.submit(message) { visible }
+        queue.submit(message.copy(messageId = 2)) { visible }
+        queue.submit(message.copy(messageId = 3)) { visible }
+        visible = false
+        queue.reconcile(emptySet(), message.talker)
+        finish.complete(Unit)
+        assertEquals(result, MoodStore.get(message.key))
+        assertEquals(listOf(1L, 2L), started)
+        visible = true
+        queue.submit(message) { visible }
+        assertEquals(listOf(1L, 2L), started)
     }
 
     @Test fun `cancellation has no cooldown while ordinary failure can be retried explicitly`() {

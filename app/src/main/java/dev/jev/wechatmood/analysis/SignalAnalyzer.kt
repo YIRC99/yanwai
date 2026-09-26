@@ -28,7 +28,8 @@ object SignalAnalyzer {
     fun failure(key: String): String? = queue.failure(key)
     fun retryFailure(key: String) { MoodStore.retryIntent(key); queue.retryFailure(key); NativeVoiceBridge.retryFailures() }
     fun progress(key: String): String? = stages[key]?.text
-    fun reconcile(visibleKeys: Set<String>) = queue.reconcile(visibleKeys)
+    fun reconcile(visibleKeys: Set<String>, talker: String?) =
+        if (talker == null) queue.cancelAll() else queue.reconcile(visibleKeys, talker)
     fun cancelConversation(talker: String) = queue.cancelConversation(talker)
     fun cancelAll() = queue.cancelAll()
     fun resetSettings() { queue.resetSettings(); stages.clear() }

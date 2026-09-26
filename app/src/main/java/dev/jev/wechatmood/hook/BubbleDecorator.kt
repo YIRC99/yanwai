@@ -114,8 +114,12 @@ object BubbleDecorator {
             return null
         }
         val detach = object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) {}
-            override fun onViewDetachedFromWindow(v: View) { clear(v) }
+            override fun onViewAttachedToWindow(v: View) { MessageSniffer.restoreBoundCard(v) }
+            // RecyclerView temporarily detaches rows while scrolling. Keep their measured content.
+            override fun onViewDetachedFromWindow(v: View) {
+                // Older ListView adapters have no verified bind hook to clear recycled content.
+                if (!MessageSniffer.hasBoundMessage(v)) clear(v)
+            }
         }
         row.addOnAttachStateChangeListener(detach)
         return Card(key, card, target, branch, assignedId, detach)
@@ -155,6 +159,9 @@ object BubbleDecorator {
         if (state.assignedId != null && state.anchor.id == state.assignedId) state.anchor.id = View.NO_ID
     }
     fun clearAll() { cards.keys.toList().forEach(::clear) }
-    fun prune() { cards.keys.filter { !it.isAttachedToWindow }.forEach(::clear) }
+    fun prune() {
+        // Bound retention for recycled rows; leaving the chat still clears every card.
+        cards.keys.filter { !it.isAttachedToWindow }.drop(32).forEach(::clear)
+    }
     private fun dp(view: View, n: Int) = (n * view.resources.displayMetrics.density).toInt()
 }

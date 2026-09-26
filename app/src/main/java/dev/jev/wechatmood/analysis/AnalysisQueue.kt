@@ -17,6 +17,7 @@ class AnalysisQueue(
 ) {
     private class Entry(val input: AnalysisInput, val claim: MoodStore.Claim, val visible: () -> Boolean) {
         lateinit var job: Job
+        var started = false // Accessed under lock; scrolling only discards waiting entries.
     }
     private data class Failure(val atNanos: Long, val message: String)
     private val lock = Any()
@@ -45,11 +46,15 @@ class AnalysisQueue(
         try {
             slots.withPermit {
                 currentCoroutineContext().ensureActive()
-                if (!canAnalyze(entry.input) || !entry.visible()) throw CancellationException("消息不再可分析")
+                synchronized(lock) {
+                    if (entries[entry.claim.key] !== entry || !canAnalyze(entry.input) || !entry.visible())
+                        throw CancellationException("消息不再可分析")
+                    entry.started = true
+                }
                 val mood = analyze(entry.input)
                 currentCoroutineContext().ensureActive()
                 val accepted = synchronized(lock) {
-                    if (entries[entry.claim.key] !== entry || !canAnalyze(entry.input) || !entry.visible()) false
+                    if (entries[entry.claim.key] !== entry || !canAnalyze(entry.input)) false
                     else MoodStore.complete(entry.claim, mood).also { if (it) failures.remove(entry.claim.key) }
                 }
                 if (accepted) runCatching { onComplete(mood) }
@@ -59,7 +64,7 @@ class AnalysisQueue(
         } catch (e: Exception) {
             val accepted = synchronized(lock) {
                 if (entries[entry.claim.key] !== entry || !entry.job.isActive ||
-                    !canAnalyze(entry.input) || !entry.visible()) false
+                    !canAnalyze(entry.input)) false
                 else {
                     failures[entry.claim.key] = Failure(System.nanoTime(), e.message ?: "分析失败，请稍后重试")
                     true
@@ -89,7 +94,9 @@ class AnalysisQueue(
         canceled.forEach { it.job.cancel() }
     }
 
-    fun reconcile(visibleKeys: Set<String>) = cancelWhere { it.claim.key !in visibleKeys }
+    fun reconcile(visibleKeys: Set<String>, talker: String) = cancelWhere {
+        it.input.talker != talker || (!it.started && it.claim.key !in visibleKeys)
+    }
     fun cancelConversation(talker: String) = cancelWhere { it.input.talker == talker }
     fun cancelAll() = cancelWhere { true }
     fun resetSettings() {
