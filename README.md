@@ -6,7 +6,7 @@
 
 微信里的聊天助手：理解文字和语音，参考上下文生成回复，聊不下去时找个新话题。
 
-![Version](https://img.shields.io/badge/version-2.1.7-2C7A73)
+![Version](https://img.shields.io/badge/version-2.1.8-2C7A73)
 ![Android](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)
 ![Platform](https://img.shields.io/badge/LSPosed%20%2F%20Xposed-Module-555555)
 ![Model](https://img.shields.io/badge/Powered%20by-Jev-7161A8)
@@ -19,27 +19,46 @@
 
 ## 使用效果
 
-下面是作者提供的 **2.0.0 实机截图**，点击可查看原图。
+下面是作者提供的 **2.1.6 实机截图**，展示彩色情绪圆环与智能分析的新样式，点击可查看原图。
 
 <table>
   <tr>
-    <th width="33%">语音也能分析</th>
-    <th width="33%">结合前文，帮我回</th>
-    <th width="33%">接不下去，找找话题</th>
+    <th width="50%">语音也能分析</th>
+    <th width="50%">文字消息，结合前文理解</th>
   </tr>
   <tr>
-    <td valign="top" align="center"><a href="docs/images/v2-voice-analysis.jpg"><img src="docs/images/v2-voice-analysis.jpg" width="300" alt="言外 2.0.0 实机截图：语音转写后，在原消息下展示情绪概率、确认信息的意图、邀约安排建议与转写正文"></a></td>
+    <td valign="top" align="center"><a href="docs/images/v2.1-voice-analysis.jpg"><img src="docs/images/v2.1-voice-analysis.jpg" width="360" alt="言外 2.1.6 语音分析实机截图：情绪以彩色小圆环显示，智能分析解释意图、可能在意的点和情绪倾向，下方保留语音转写正文"></a></td>
+    <td valign="top" align="center"><a href="docs/images/v2.1-text-analysis.jpg"><img src="docs/images/v2.1-text-analysis.jpg" width="360" alt="言外 2.1.6 文字分析实机截图：结合前文解读没有和到了才说的两条短回复，在原消息下展示情绪圆环与智能分析"></a></td>
+  </tr>
+  <tr>
+    <td>语音先转文字，再分析情绪与意图；卡片保留转写正文，方便核对。仅分析文字内容，不判断声音语气。</td>
+    <td>简短回复也能结合前文解读，展示意图、可能在意的点和情绪倾向；彩色圆环显示非零情绪概率，结果仅供参考。</td>
+  </tr>
+</table>
+
+<details>
+<summary>更多功能：帮我回、找找话题（2.0.0 截图）</summary>
+
+<table>
+  <tr>
+    <th width="50%">结合前文，帮我回</th>
+    <th width="50%">接不下去，找找话题</th>
+  </tr>
+  <tr>
     <td valign="top" align="center"><a href="docs/images/v2-reply-assistant.jpg"><img src="docs/images/v2-reply-assistant.jpg" width="300" alt="言外 2.0.0 实机截图：选择暗恋对象和参考最近 100 条，在帮我回面板生成两条可分别选中的回复"></a></td>
     <td valign="top" align="center"><a href="docs/images/v2-topic-suggestions.jpg"><img src="docs/images/v2-topic-suggestions.jpg" width="300" alt="言外 2.0.0 实机截图：为长辈生成摆摊话题，显示本组第 3 个话题、开场短句、推荐理由与复制填入操作"></a></td>
   </tr>
   <tr>
-    <td>先转文字，再分析情绪与意图；正文留在卡片里，方便核对。</td>
     <td>选择关系、参考条数和补充想法，把建议分成日常聊天的短消息。</td>
     <td>从真实前文延伸话题，查看理由，选中一句复制。</td>
   </tr>
 </table>
 
-截图来自 2.0.0，其中的填入按钮已于 2.1.1 移除，当前只保留复制。截图展示了这些场景在作者设备上的使用效果，不代表所有微信版本、群聊或历史语音场景都已验证。完整范围见[语音支持](docs/VOICE_SUPPORT.md)和[验证记录](docs/VERIFY.md)。
+这两张旧版截图中的填入按钮已于 2.1.1 移除，当前只保留复制，由你自行粘贴并发送。
+
+</details>
+
+截图展示了这些场景在作者设备上的使用效果，不代表所有微信版本、群聊或历史语音场景都已验证。完整范围见[语音支持](docs/VOICE_SUPPORT.md)和[验证记录](docs/VERIFY.md)。
 
 ## 功能介绍
 
@@ -49,7 +68,7 @@
 
 - **情绪概率**：展示开心、平静、生气和不明确等概率，不把推测写成确定结论。
 - **两条意图线路**：默认 JEV 决策模型，从内置选项快速判断；也可选智能分析（通用大模型），结合前文解释意图、可能在意的点和情绪倾向。LLM 通常更慢，也可能误读，不保证更准确；这条线路不生成回应建议。两种线路的情绪概率始终由 JEV 提供。
-- **深色透明卡片**：用小圆环和固定配色显示情绪概率，环内有百分比、旁边有情绪名；紧凑短句解读放在原消息下方，不显示长条。背景模糊不可用时退回半透明样式，文字保持清晰。新样式尚待实机验收，上方截图仍为 2.0.0。
+- **深色透明卡片**：用小圆环和固定配色显示情绪概率，环内有百分比、旁边有情绪名；0% 的情绪隐藏，不占位置。解读放在原消息下方，不显示长条。背景模糊不可用时退回半透明样式，文字保持清晰；上方实机截图展示了新样式。
 - **意图与场景分开判断**：区分确认信息、提问、拒绝、道歉、感谢、澄清等意图，再结合邀约、倾诉等场景。43 套分析卡覆盖日常沟通及焦虑、困惑、疲惫等表达。
 - **结合时间和前文**：参考目标之前双方的文字与语音，保留原发送时间和间隔。最多扫描 80 个页面位置、保留 24 条，转写后总长不超过 12000 字符；不引用目标之后的消息。
 - **JEV 线路两轮复核**：第二轮复核情绪、意图和建议前提。识别到暂停或拒绝时，不继续给出劝说建议；依据不足时可以只展示情绪。LLM 线路只向 JEV 请求情绪，再由 LLM 独立解读；失败时保留情绪并可点击重试。
