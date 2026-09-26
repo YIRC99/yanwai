@@ -26,7 +26,7 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
         return request(settings, TopicProtocol.payload(settings, context, draft, notes, knowledge, relationship, time, previous, customRelationship), TopicProtocol::parse)
     }
 
-    private suspend fun <T> request(settings: ReplySettings, payload: org.json.JSONObject, parse: (String) -> T): T =
+    internal suspend fun <T> request(settings: ReplySettings, payload: org.json.JSONObject, parse: (String) -> T): T =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(Request.Builder().url(settings.endpoint).header("Authorization", "Bearer ${settings.apiKey}")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build())
@@ -38,7 +38,7 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
                 override fun onResponse(call: Call, response: Response) {
                     val result = runCatching { response.use {
                         check(it.isSuccessful) { when (it.code) {
-                            401, 403 -> "API Key 或模型权限不可用，请检查回复配置"
+                            401, 403 -> "API Key 或模型权限不可用，请检查模型配置"
                             402 -> "模型账户额度不足"
                             429 -> "请求过于频繁，请稍后重试"
                             400, 404, 422 -> "接口地址、模型或上下文长度不受支持，请检查配置"

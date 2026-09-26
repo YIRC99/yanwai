@@ -1,7 +1,5 @@
 package dev.jev.wechatmood.hook
 
-import android.content.res.Configuration
-import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -36,12 +34,14 @@ object BubbleDecorator {
             state = attach(row, key) ?: return false
             cards[row] = state
         }
-        val value = MoodStore.get(key)?.detail ?: SignalAnalyzer.failure(key)?.let {
+        val value = MoodStore.get(key)?.let {
+            AnalysisCardText.format(it, state.view.layoutParams.width - state.view.paddingLeft - state.view.paddingRight)
+        } ?: SignalAnalyzer.failure(key)?.let {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
         } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))
             SignalAnalyzer.progress(key) ?: if (message.voice != null || message.context.any { it.voice != null }) "正在准备语音…" else "正在分析…"
             else "模型未配置或设置未连接"
-        if (state.view.text.toString() != value) state.view.text = value
+        if (state.view.text.toString() != value.toString()) state.view.text = value
         return true
     }
 
@@ -53,19 +53,16 @@ object BubbleDecorator {
         val left = (anchorPos[0] - rowPos[0]).coerceAtLeast(0)
         val width = minOf(dp(row, 300), root.width - left - dp(row, 16))
         if (width < dp(row, 100)) return null
-        val dark = row.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        val card = TextView(row.context).apply {
+        val card = FrostedAnalysisView(row.context).apply {
             id = View.generateViewId()
-            textSize = 12f
-            setPadding(dp(row, 8), dp(row, 6), dp(row, 8), dp(row, 6))
-            setTextColor(if (dark) 0xFFE2E2E7.toInt() else 0xFF34343A.toInt())
-            background = GradientDrawable().apply {
-                cornerRadius = dp(row, 4).toFloat()
-                setColor(if (dark) 0xFF26262B.toInt() else 0xFFDDDEE2.toInt())
-            }
+            textSize = 13f
+            setPadding(dp(row, 12), dp(row, 10), dp(row, 12), dp(row, 10))
+            setLineSpacing(dp(row, 3).toFloat(), 1f)
+            setTextColor(0xFFF0F1F5.toInt())
+            minHeight = dp(row, 48)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             setOnClickListener {
-                if (SignalAnalyzer.failure(key) != null) {
+                if (SignalAnalyzer.failure(key) != null || MoodStore.get(key)?.intentFailed == true) {
                     SignalAnalyzer.retryFailure(key)
                     MessageSniffer.refresh()
                 }

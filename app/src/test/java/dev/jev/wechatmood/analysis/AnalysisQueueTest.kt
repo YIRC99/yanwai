@@ -18,6 +18,46 @@ class AnalysisQueueTest {
     @Before fun clear() = MoodStore.clear()
     @After fun cleanup() { scope.cancel(); MoodStore.clear() }
 
+    @Test fun `settings session change cancels occupied slots and clears previous errors`() {
+        var canceled = 0
+        var old = true
+        val queue = AnalysisQueue(scope, { true }, { input ->
+            if (!old) result
+            else if (input.messageId == 3L) error("old failure")
+            else try { awaitCancellation() } finally { canceled++ }
+        })
+        val session = dev.jev.wechatmood.core.SettingsSession(queue::resetSettings)
+        val jev = dev.jev.wechatmood.core.ApiSettings.fromInput(dev.jev.wechatmood.core.ApiSettings.DEFAULT_ENDPOINT, "key")
+        session.accept(dev.jev.wechatmood.core.RuntimeSettings(1, false, jev, "install"))
+        val failed = message.copy(messageId = 3)
+        queue.submit(failed)
+        assertNotNull(queue.failure(failed.key))
+        queue.submit(message); queue.submit(message.copy(messageId = 2))
+        session.accept(dev.jev.wechatmood.core.RuntimeSettings(2, false, jev, "install",
+            intent = dev.jev.wechatmood.core.IntentSettings(dev.jev.wechatmood.core.IntentRoute.LLM)))
+        assertEquals(2, canceled)
+        assertNull(queue.failure(failed.key))
+        old = false
+        queue.submit(failed)
+        assertEquals(result, MoodStore.get(failed.key))
+    }
+
+    @Test fun `replacing a revoked claim cancels old work instead of orphaning its slot`() {
+        var started = 0
+        var canceled = 0
+        val queue = AnalysisQueue(scope, { true }, {
+            started++
+            try { awaitCancellation() } finally { canceled++ }
+        })
+        queue.submit(message)
+        MoodStore.clear()
+        queue.submit(message)
+        assertEquals(2, started)
+        assertEquals(1, canceled)
+        queue.cancelAll()
+        assertEquals(2, canceled)
+    }
+
     @Test fun `leaving the screen cancels two running requests and starts new visible work`() = runBlocking {
         val started = mutableListOf<Long>()
         val canceled = mutableListOf<Long>()

@@ -15,7 +15,7 @@ object ModulePrefs {
     @Volatile private var context: Context? = null
     @Volatile private var conversations: ConversationSwitches? = null
     private val manualAnalysis = ManualAnalysis()
-    private val session = SettingsSession()
+    private val session = SettingsSession { dev.jev.wechatmood.analysis.SignalAnalyzer.resetSettings() }
     private val bridgeWorker = Executors.newSingleThreadExecutor { task -> Thread(task, "yanwai-settings") }
     private val bridge = SettingsBridge(session, { bridgeWorker.execute(it) },
         SystemClock::elapsedRealtime, ::readSettings, ::reportNow)
@@ -62,6 +62,7 @@ object ModulePrefs {
         bridge.receive(snapshot)
         MoodLog.protect(snapshot.api.apiKey)
         MoodLog.protect(snapshot.reply.apiKey)
+        MoodLog.protect(snapshot.intent.llm.apiKey)
         MoodLog.i("SYNC_RECEIVED revision=${snapshot.revision}；广播送达不代表设置服务可访问")
     }
     fun requestReload(force: Boolean = false) = bridge.requestReload(force)
@@ -71,10 +72,11 @@ object ModulePrefs {
         val result = requireNotNull(context).contentResolver.call(SettingsProvider.URI, "config", null, null)
             ?: error("设置服务无响应或不可见；检查隐藏应用列表规则及微信分身所在空间")
         requireNotNull(SettingsSync.decode(result)) { "设置服务返回的配置不完整" }
-            .also { MoodLog.protect(it.api.apiKey); MoodLog.protect(it.reply.apiKey); connected() }
+            .also { MoodLog.protect(it.api.apiKey); MoodLog.protect(it.reply.apiKey); MoodLog.protect(it.intent.llm.apiKey); connected() }
     }.onFailure { failure("BRIDGE_READ_FAILED", it) }.getOrNull()
     // No verified snapshot means disabled; a lost connection preserves the last explicit choice.
     val bridgeAvailable get() = session.current != null
+    fun analysisSettings() = session.current
     fun replySettings() = session.current?.reply ?: dev.jev.wechatmood.reply.ReplySettings.empty()
     val replyConsent get() = session.current?.replyConsent == true
     val exploreMode get() = session.current?.exploreMode == true

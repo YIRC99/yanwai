@@ -41,6 +41,17 @@ object JevProtocol {
     fun payload(text: String, model: String, context: List<ContextMessage> = emptyList(),
         speaker: String = "对方"): JSONObject = payload(AnalysisInput(text, "provided", context, speaker = speaker), model)
 
+    fun emotionPayload(input: AnalysisInput, model: String): JSONObject = JSONObject()
+        .put("model", model).put("state", AnalysisState.build(input))
+        .put("questions", JSONObject().put("emotion", choice(EMOTION, emotionCriteria)))
+
+    fun parseEmotion(body: String): Mood {
+        val emotion = readChoice(JSONObject(body).getJSONObject("answers"), "emotion", emotions)
+        val profile = ChatProfile(emotion, emotion, emotion, emptyMap())
+        return Mood("情绪概率", emotionScore(profile), 0, "", "$header\n${emotionProbabilities(profile)}",
+            emotions = displayEmotions(profile))
+    }
+
     fun payload(input: AnalysisInput, model: String): JSONObject = JSONObject()
         .put("model", model).put("state", AnalysisState.build(input))
         .put("questions", JSONObject()
@@ -134,11 +145,13 @@ object JevProtocol {
             selectedAction != null -> "下一步动作"
             else -> "情绪概率"
         }
-        return Mood(label, emotionScore(reviewed), 0, "", lines.joinToString("\n"))
+        return Mood(label, emotionScore(reviewed), 0, "", lines.joinToString("\n"), emotions = displayEmotions(reviewed))
     }
 
     fun fallback(profile: ChatProfile): Mood = Mood("情绪概率", emotionScore(profile), 0, "",
-        listOfNotNull(header, emotionProbabilities(profile), intentLine(profile)).joinToString("\n"))
+        listOfNotNull(header, emotionProbabilities(profile), intentLine(profile)).joinToString("\n"), emotions = displayEmotions(profile))
+
+    private fun displayEmotions(profile: ChatProfile) = profile.emotion.probabilities.mapKeys { emotions.getValue(it.key) }
 
     private val supportOptions = linkedMapOf("yes" to "原文支持前提，且该动作现在仍合适", "no" to "前提不成立、已经回应过或不宜继续", "unknown" to "证据不足")
 

@@ -46,6 +46,7 @@ object SettingsSync {
                 bundle.getString(dev.jev.wechatmood.reply.ReplySettings.KEY_API_KEY).orEmpty(),
                 bundle.getString(dev.jev.wechatmood.reply.ReplySettings.KEY_MODEL).orEmpty()) }
                 .getOrElse { dev.jev.wechatmood.reply.ReplySettings.empty() },
-            bundle.getBoolean(dev.jev.wechatmood.reply.ReplySettings.KEY_CONSENT, false))
+            bundle.getBoolean(dev.jev.wechatmood.reply.ReplySettings.KEY_CONSENT, false),
+            IntentSettings.load { bundle.getString(it) })
     }.getOrNull()
 }

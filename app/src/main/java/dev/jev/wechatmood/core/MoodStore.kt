@@ -14,6 +14,8 @@ data class Mood(
     val risk: Int,
     val raw: String,
     val detail: String = label,
+    val intentFailed: Boolean = false,
+    val emotions: Map<String, Double> = emptyMap(),
 )
 
 /**
@@ -56,6 +58,8 @@ object MoodStore {
     }
 
     fun get(key: String): Mood? = cache[key]
+
+    fun retryIntent(key: String) { cache.computeIfPresent(key) { _, mood -> if (mood.intentFailed) null else mood } }
 
     /** 尝试认领一次分析任务；已经在跑或已完成返回 null。 */
     @Synchronized fun acquire(key: String): Claim? {

@@ -32,7 +32,7 @@ class AnalysisQueue(
             val claim = MoodStore.acquire(key) ?: return
             val entry = Entry(input, claim, stillVisible)
             entry.job = scope.launch(start = CoroutineStart.LAZY) { run(entry) }
-            entries[key] = entry
+            entries.put(key, entry)?.job?.cancel()
             failures.remove(key)
             // Covers a lazy job canceled before its body (and its finally block) starts.
             entry.job.invokeOnCompletion { cleanup(entry) }
@@ -92,6 +92,10 @@ class AnalysisQueue(
     fun reconcile(visibleKeys: Set<String>) = cancelWhere { it.claim.key !in visibleKeys }
     fun cancelConversation(talker: String) = cancelWhere { it.input.talker == talker }
     fun cancelAll() = cancelWhere { true }
+    fun resetSettings() {
+        cancelAll()
+        synchronized(lock) { failures.clear() }
+    }
     fun failure(key: String): String? = synchronized(lock) { failures[key]?.message }
     fun retryFailure(key: String) { synchronized(lock) { failures.remove(key) } }
 }

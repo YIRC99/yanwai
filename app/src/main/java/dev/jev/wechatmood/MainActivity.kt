@@ -97,6 +97,10 @@ class MainActivity : AppCompatActivity() {
             prefs.getString(ModulePrefs.KEY_API_MODEL, "").orEmpty())
         binding.inputProvider.setSimpleItems(JevProvider.entries.map { it.label }.toTypedArray())
         showProvider()
+        binding.toggleJevConfig.setOnClickListener { showJevConfig(binding.jevConfigPanel.visibility != View.VISIBLE) }
+        dev.jev.wechatmood.ui.IntentSettingsUi(this, binding.intentSettings, uiScope, ::openHelp) { route ->
+            showJevConfig(route == dev.jev.wechatmood.core.IntentRoute.JEV || !ModulePrefs.apiSettings().isConfigured)
+        }
         binding.inputProvider.setOnItemClickListener { _, _, position, _ ->
             drafts[selectedProvider] = ApiDraft(binding.inputApiBase.text.toString(), binding.inputApiKey.text.toString(),
                 binding.inputApiModel.text.toString())
@@ -402,6 +406,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollTo(view: View) {
+        if (view == binding.modelSection || view == binding.layoutApiKey || view == binding.inputApiKey || view == binding.textTestResult) showJevConfig(true)
         binding.pageScroll.post {
             val content = binding.pageScroll.getChildAt(0) as android.view.ViewGroup
             val bounds = Rect()
@@ -409,6 +414,11 @@ class MainActivity : AppCompatActivity() {
             content.offsetDescendantRectToMyCoords(view, bounds)
             binding.pageScroll.smoothScrollTo(0, bounds.top)
         }
+    }
+
+    private fun showJevConfig(open: Boolean) {
+        binding.jevConfigPanel.visibility = if (open) View.VISIBLE else View.GONE
+        binding.toggleJevConfig.text = if (open) "收起 JEV 配置" else "查看 / 修改 JEV 配置"
     }
 
     private fun showSetupGuide(open: Boolean) {
