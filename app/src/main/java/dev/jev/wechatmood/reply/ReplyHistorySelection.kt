@@ -10,7 +10,7 @@ class ReplyHistorySelection(private val talker: String, initial: ReplyContext? =
     val loading: Boolean get() = active != null
 
     fun begin(limit: Int): Ticket {
-        require(limit in OPTIONS)
+        require(ReplyHistoryLimit.valid(limit))
         context = null
         return Ticket(++serial, limit).also { active = it }
     }
@@ -26,5 +26,5 @@ class ReplyHistorySelection(private val talker: String, initial: ReplyContext? =
     fun isCurrent(ticket: Ticket): Boolean = ticket.serial == serial
     fun cancel() { serial++; active = null; context = null }
 
-    companion object { val OPTIONS = listOf(30, 50, 100) }
+    companion object { val OPTIONS = listOf(10, 30, 50, 100) }
 }

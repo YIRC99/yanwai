@@ -25,6 +25,12 @@ object BubbleDecorator {
     fun show(row: View, message: AnalysisInput?): Boolean {
         if (message == null || !ModulePrefs.shouldDisplay(message)) { clear(row); return false }
         val key = message.key
+        val mood = MoodStore.get(key) ?: SignalAnalyzer.partialMood(key)
+        val display = ModulePrefs.analysisSettings()?.cardDisplay ?: dev.jev.wechatmood.core.CardDisplaySettings()
+        if (mood != null && AnalysisCardContent.lines(mood, display).isEmpty()) {
+            clear(row)
+            return true // intentionally hidden, not an unsupported host layout
+        }
         var state = cards[row]
         if (state != null && (state.key != key || state.view.parent !== state.parent)) {
             clear(row)
@@ -34,9 +40,9 @@ object BubbleDecorator {
             state = attach(row, key) ?: return false
             cards[row] = state
         }
-        val value = (MoodStore.get(key) ?: SignalAnalyzer.partialMood(key))?.let {
+        val value = mood?.let {
             AnalysisCardText.format(it, row.resources.displayMetrics.density,
-                state.view.layoutParams.width - state.view.paddingLeft - state.view.paddingRight, state.view.paint)
+                state.view.layoutParams.width - state.view.paddingLeft - state.view.paddingRight, state.view.paint, display)
         } ?: SignalAnalyzer.failure(key)?.let {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
         } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))

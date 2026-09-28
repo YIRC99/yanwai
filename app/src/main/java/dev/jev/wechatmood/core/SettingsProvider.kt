@@ -24,6 +24,18 @@ class SettingsProvider : ContentProvider() {
             throw SecurityException("Caller is not allowed: uid=$caller")
         }
         return when (method) {
+            "reply_limit_get", "reply_limit_put" -> {
+                val prefs = ctx.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
+                val store = dev.jev.wechatmood.reply.ReplyLimitPreferences(caller,
+                    { key -> runCatching { if (prefs.contains(key)) prefs.getInt(key, 100) else null }.getOrNull() },
+                    { key, value -> check(prefs.edit().putInt(key, value).commit()) })
+                val account = requireNotNull(arg)
+                if (method == "reply_limit_get") Bundle().apply { putInt("limit", store.load(account)) }
+                else {
+                    store.save(account, requireNotNull(extras).getInt("limit", 0))
+                    Bundle().apply { putBoolean("saved", true) }
+                }
+            }
             "reply_identity_get", "reply_identity_put" -> ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
             "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
             "config" -> snapshot(ctx)
@@ -61,6 +73,7 @@ class SettingsProvider : ContentProvider() {
                 putString(KEY_GENERATION, generation)
                 putLong(KEY_REVISION, prefs.getLong(KEY_REVISION, 0L))
                 putBoolean(ModulePrefs.KEY_EXPLORE, prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false))
+                CardDisplaySettings.KEYS.forEach { putBoolean(it, prefs.getBoolean(it, true)) }
                 putString(ModulePrefs.KEY_API_BASE, prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))
                 putString(ModulePrefs.KEY_API_KEY, prefs.getString(ModulePrefs.KEY_API_KEY, ""))
                 putString(ModulePrefs.KEY_API_PROVIDER, prefs.getString(ModulePrefs.KEY_API_PROVIDER, null))

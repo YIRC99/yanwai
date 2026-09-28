@@ -27,6 +27,23 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
     private val drafts = mutableMapOf<ReplyProvider, Draft>()
 
     init {
+        listOf(binding.showIntent to CardDisplaySettings.KEY_INTENT,
+            binding.showConcern to CardDisplaySettings.KEY_CONCERN,
+            binding.showTone to CardDisplaySettings.KEY_TONE).forEach { (toggle, key) ->
+            toggle.isChecked = prefs.getBoolean(key, true)
+            var restoring = false
+            toggle.setOnCheckedChangeListener { _, enabled ->
+                if (!restoring) {
+                    if (SettingsProvider.save(activity) { putBoolean(key, enabled) }) {
+                        ModulePrefs.reload(force = true)
+                        binding.cardDisplayStatus.text = "已保存，返回聊天即可查看；不重新分析。"
+                    } else {
+                        restoring = true; toggle.isChecked = prefs.getBoolean(key, true); restoring = false
+                        binding.cardDisplayStatus.text = "保存失败，请重试。"
+                    }
+                }
+            }
+        }
         binding.provider.setSimpleItems(ReplyProvider.entries.map { it.label }.toTypedArray())
         showProvider()
         binding.routeGroup.check(if (route == IntentRoute.LLM) R.id.routeLlm else R.id.routeJev)

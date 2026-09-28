@@ -85,6 +85,7 @@ class ReplyCompositionTest {
         assertFalse(composer.accept(context, suggestion, "", null, ReplyRelationship.UNSPECIFIED))
         assertTrue(composer.accept(context.copy(requestedMessages = 30), suggestion, "", null, ReplyRelationship.UNSPECIFIED))
         assertTrue(composer.canUse)
-        assertEquals(30, ReplyComposition(composer.result).historyLimit)
+        // A result is evidence of an older request, not the account's current preference.
+        assertEquals(100, ReplyComposition(composer.result).historyLimit)
     }
 }

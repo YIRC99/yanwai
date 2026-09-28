@@ -25,6 +25,7 @@ import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.ReplyIdentityBridge
+import dev.jev.wechatmood.core.ReplyLimitBridge
 import dev.jev.wechatmood.reply.*
 import kotlinx.coroutines.*
 
@@ -83,6 +84,7 @@ class ReplyHostUi(private val activity: Activity) {
                 val account = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(live) }
                 val owner = ReplyIdentityOwner(epoch, account, selectedTalker)
                 val identity = owner.key?.let { ReplyIdentityBridge.load(activity, it) } ?: ReplyIdentitySetting()
+                val preferredLimit = ReplyLimitBridge.load(activity, account)
                 ensureActive()
                 if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())) return@launch
                 val latestPage = MessageSniffer.replyContext(requireBottom = false)
@@ -90,24 +92,25 @@ class ReplyHostUi(private val activity: Activity) {
                 if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
                     !owner.acceptsAccount(latestAccount)) return@launch
                 // All reads finish before the editor is created, so a late load cannot erase typed text.
-                openResolved(focusMessageId, live, owner, identity)
+                openResolved(focusMessageId, live, owner, identity, preferredLimit)
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
                 if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker)
-                    toast("身份读取失败，请重新打开重试")
+                    toast("回复设置读取失败，请重新打开重试")
             }
         }
         return true
     }
 
     private fun openResolved(focusMessageId: Long?, live: ReplyContext, owner: ReplyIdentityOwner,
-        identity: ReplyIdentitySetting): Boolean {
+        identity: ReplyIdentitySetting, preferredLimit: Int): Boolean {
         val selectedTalker = owner.talker
         val remembered = history.recall(selectedTalker, focusMessageId, owner.historyScope)
         val group = selectedTalker.endsWith("@chatroom")
         val composition = ReplyComposition(remembered, if (group) ReplyIdentitySetting(
-            remembered?.relationship ?: ReplyRelationship.UNSPECIFIED, remembered?.customRelationship.orEmpty()) else identity)
-        val reference = ReplyHistorySelection(selectedTalker, remembered?.context)
+            remembered?.relationship ?: ReplyRelationship.UNSPECIFIED, remembered?.customRelationship.orEmpty()) else identity,
+            preferredLimit)
+        val reference = ReplyHistorySelection(selectedTalker, remembered?.context?.takeIf { it.requestedMessages == preferredLimit })
         if (remembered == null && !canGenerate()) { configure(); return true }
         // Reopening saved content must not depend on scrolling to the latest message or text input mode.
         val captured = remembered?.context ?: live
@@ -115,7 +118,7 @@ class ReplyHostUi(private val activity: Activity) {
         val initialEditor = editor()
         if (remembered == null && initialEditor == null) { toast("请先切换到文字输入"); return true }
         val focusId = remembered?.focusMessageId ?: focusMessageId
-        snapshot = remembered?.context
+        snapshot = reference.context
         initialEditor?.let { (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
             ?.hideSoftInputFromWindow(it.windowToken, 0) }
         val theme = ReplyTheme(activity)
@@ -438,19 +441,65 @@ class ReplyHostUi(private val activity: Activity) {
                 }
             }
         }
+        var limitSaveRevision = 0L
+        var limitDialog: AlertDialog? = null
+        fun selectHistory(limit: Int) {
+            if (busy || !ownsDrawer()) return
+            composition.historyLimit = limit
+            historyJob?.cancel()
+            reference.cancel(); snapshot = null; stale.visibility = View.GONE
+            failed = false; state.text = ""; renderParts(); controls(false)
+            val revision = ++limitSaveRevision
+            if (owner.account == null) toast("账号尚未确认，本次条数不会保存")
+            else ReplyLimitBridge.save(activity, owner, limit, { ReplyDatabaseHistory.replyAccount(live) }) { saved ->
+                activity.runOnUiThread {
+                    if (ownsDrawer() && revision == limitSaveRevision && !saved) toast("条数保存失败，请重新选择后重试")
+                }
+            }
+            prepareHistory(limit)
+        }
+        fun customHistory() {
+            if (busy || !ownsDrawer()) return
+            val input = EditText(activity).apply {
+                // Numeric keyboard, but preserve pasted decimals/signs so validation rejects them,
+                // rather than silently turning e.g. 1.5 into 15 through DigitsKeyListener.
+                inputType = InputType.TYPE_CLASS_TEXT
+                setRawInputType(InputType.TYPE_CLASS_NUMBER)
+                setSingleLine(true); isSaveEnabled = false
+                hint = "1～100"; contentDescription = "自定义参考消息条数，1 到 100"
+                setText(composition.historyLimit.toString()); selectAll()
+            }
+            limitDialog?.dismiss()
+            val chooser = AlertDialog.Builder(activity).setTitle("自定义参考条数")
+                .setView(input).setNegativeButton("取消", null).setPositiveButton("确定", null).create()
+            limitDialog = chooser
+            chooser.setOnDismissListener { if (limitDialog === chooser) limitDialog = null }
+            chooser.show()
+            chooser.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (!ownsDrawer() || busy) { chooser.dismiss(); return@setOnClickListener }
+                val value = try { requireNotNull(ReplyHistoryLimit.parse(input.text.toString())) }
+                    catch (error: IllegalArgumentException) { input.error = error.message; return@setOnClickListener }
+                selectHistory(value)
+                chooser.dismiss()
+            }
+            input.requestFocus()
+            chooser.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        }
         historyPicker.setOnClickListener {
             PopupMenu(activity, historyPicker).apply {
                 ReplyHistorySelection.OPTIONS.forEach { limit ->
                     menu.add(0, limit, limit, "最近 $limit 条消息").isChecked = limit == composition.historyLimit
                 }
+                menu.add(0, -1, 101, "自定义…").isChecked = composition.historyLimit !in ReplyHistorySelection.OPTIONS
                 menu.setGroupCheckable(0, true, true)
-                reference.context?.let { menu.add(1, 1, 101, "查看已读取的 ${it.messages.size} 条消息") }
-                menu.add(1, 2, 102, "重新读取")
+                reference.context?.let { menu.add(1, 1, 102, "查看已读取的 ${it.messages.size} 条消息") }
+                menu.add(1, 2, 103, "重新读取")
                 setOnMenuItemClickListener { item ->
-                    when (item.itemId) {
-                        1 -> reference.context?.let(::showEvidence)
-                        2 -> prepareHistory(composition.historyLimit)
-                        else -> prepareHistory(item.itemId)
+                    if (ownsDrawer() && !busy) when {
+                        item.groupId == 1 && item.itemId == 1 -> reference.context?.let(::showEvidence)
+                        item.groupId == 1 && item.itemId == 2 -> prepareHistory(composition.historyLimit)
+                        item.itemId == -1 -> customHistory()
+                        else -> selectHistory(item.itemId)
                     }
                     true
                 }
@@ -545,6 +594,7 @@ class ReplyHostUi(private val activity: Activity) {
         renderParts(); controls(false)
         window.setContentView(body)
         window.setOnDismissListener {
+            limitDialog?.dismiss()
             if (dialog !== window) return@setOnDismissListener
             remember(); job?.cancel(); historyJob?.cancel(); reference.cancel(); session.cancel()
             progress.showLoading(null)
@@ -558,7 +608,7 @@ class ReplyHostUi(private val activity: Activity) {
         window.show()
         fitWindow()
         body.requestFocus(); updateNotice()
-        if (remembered == null) prepareHistory(composition.historyLimit)
+        if (reference.context == null) prepareHistory(composition.historyLimit)
         return true
     }
     private fun canGenerate() = ModulePrefs.replyConsent && ModulePrefs.replySettings().isConfigured

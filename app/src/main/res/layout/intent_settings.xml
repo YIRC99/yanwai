@@ -12,6 +12,19 @@
             android:minHeight="52dp" android:text="智能分析 · 细致解读" android:saveEnabled="false" />
     </RadioGroup>
     <TextView android:id="@+id/routeHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
+    <TextView style="@style/Yanwai.Section" android:text="分析卡片显示" android:layout_marginTop="20dp" />
+    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showIntent"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+        android:text="显示意图解析" android:saveEnabled="false" />
+    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showConcern"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+        android:text="显示可能在意" android:saveEnabled="false" />
+    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showTone"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+        android:text="显示情绪倾向" android:saveEnabled="false" />
+    <TextView android:id="@+id/cardDisplayStatus" style="@style/Yanwai.Caption"
+        android:text="只调整智能分析内容的显示，切换即保存；不重新分析。情绪指标和失败提示继续显示。"
+        android:accessibilityLiveRegion="polite" />
     <TextView android:id="@+id/intentStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp"
         android:accessibilityLiveRegion="polite" />
     <LinearLayout android:id="@+id/llmPanel" android:layout_width="match_parent" android:layout_height="wrap_content"

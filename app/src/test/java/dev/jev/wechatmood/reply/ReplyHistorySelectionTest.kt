@@ -4,6 +4,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReplyHistorySelectionTest {
+    @Test fun `all supported limits and rapidly changing custom counts reject stale completions`() {
+        val selection = ReplyHistorySelection("alice")
+        val tickets = listOf(1, 10, 17, 100, 17).map(selection::begin)
+        tickets.dropLast(1).forEach {
+            assertFalse(selection.complete(it, context(it.limit), "alice"))
+            selection.fail(it)
+            assertTrue(selection.loading)
+        }
+        assertTrue(selection.complete(tickets.last(), context(17), "alice"))
+        assertEquals(17, selection.context!!.requestedMessages)
+        for (invalid in listOf(0, -1, 101)) {
+            assertThrows(IllegalArgumentException::class.java) { selection.begin(invalid) }
+        }
+    }
+
     private fun context(limit: Int = 100) = ReplyContext("alice", listOf(ReplyMessage(9, "对方", 10, "好呀")),
         source = ReplyContextSource.LOCAL_HISTORY, requestedMessages = limit)
 

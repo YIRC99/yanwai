@@ -26,7 +26,7 @@ class ReplyHistoryReaderTest {
     }
 
     @Test fun selectedWindowLoadsLatestHistoryWithoutExpandingThePage() {
-        for (limit in listOf(30, 50, 100)) {
+        for (limit in listOf(1, 10, 17, 30, 50, 100)) {
             val source = ReplyHistoryQuery { sql, _ ->
                 if (sql.contains("msgId = ?")) listOf(row(200)) else {
                     assertTrue(sql.contains("LIMIT ${limit + 1}"))
@@ -39,6 +39,10 @@ class ReplyHistoryReaderTest {
             assertEquals(200L, result.messages.last().id)
             assertEquals(limit, result.requestedMessages)
             assertEquals(ReplyContextSource.LOCAL_HISTORY, result.source)
+            val input = ReplyProtocol.evidence(result, "", "")
+            assertEquals(limit, input.getJSONArray("messages").length())
+            assertEquals(limit, input.getInt("requested_message_count"))
+            assertEquals(limit, input.getInt("actual_message_count"))
         }
     }
 

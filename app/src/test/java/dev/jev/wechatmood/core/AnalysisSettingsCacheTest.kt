@@ -4,6 +4,33 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AnalysisSettingsCacheTest {
+    @Test fun `display changes keep cache keys cached data and active requests unchanged`() {
+        MoodStore.clear()
+        var resets = 0
+        val session = SettingsSession { resets++ }
+        val api = ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "key")
+        val before = RuntimeSettings(1, false, api, "install")
+        session.accept(before)
+        val mood = Mood("完整结果", 0.0, 0, "", "意图解析：安排\n可能在意：时间\n情绪倾向：平和")
+        MoodStore.complete(requireNotNull(MoodStore.acquire("cached")), mood)
+        val pending = requireNotNull(MoodStore.acquire("pending"))
+        val input = AnalysisInput("好", "alice", messageId = 1, createdAt = 1, accountScope = "a".repeat(64))
+        val initialKey = AnalysisCacheKey.of(input, before)
+        assertNotNull(initialKey)
+        for ((index, display) in listOf(CardDisplaySettings(false, true, false), CardDisplaySettings(false, false, false), CardDisplaySettings()).withIndex()) {
+            val settings = RuntimeSettings(index + 2L, false, api, "install", cardDisplay = display)
+            session.accept(settings, fromProvider = false)
+            assertSame(display, session.current!!.cardDisplay)
+            assertEquals(initialKey, AnalysisCacheKey.of(input, settings))
+            assertSame(mood, MoodStore.get("cached"))
+            assertNull(MoodStore.acquire("cached")) // no new model request can be claimed
+        }
+        assertEquals(1, resets)
+        assertTrue(MoodStore.complete(pending, mood))
+        assertEquals(CardDisplaySettings(), CardDisplaySettings.load { null })
+        MoodStore.clear()
+    }
+
     @Test fun `switching only intent route invalidates cache while unrelated reply edits do not`() {
         MoodStore.clear()
         val session = SettingsSession()
