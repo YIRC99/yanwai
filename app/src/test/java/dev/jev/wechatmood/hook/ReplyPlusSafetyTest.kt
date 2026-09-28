@@ -5,8 +5,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Android/Xposed entry points cannot run in these JVM tests. Guard the safe fallback's
- * wiring: until a host grid contract is verified, no code may target the plus panel.
+ * Android/Xposed entry points cannot run in these JVM tests. Guard native entry wiring
+ * alongside executable data and paging tests in ReplyPlusItemsTest.
  * This does not verify host touch dispatch; that still requires device acceptance.
  */
 class ReplyPlusSafetyTest {
@@ -19,13 +19,16 @@ class ReplyPlusSafetyTest {
         assertFalse("Lifecycle still mutates the plus panel", reply.contains("plusEntry."))
     }
 
-    @Test fun `unverified native panel has no injection implementation including dormant code`() {
-        val panelAnchors = Regex("\\b(AppPanel|AppGrid|MMFlipper)\\b")
-        val offenders = sourceRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }
-            .filter { panelAnchors.containsMatchIn(it.readText()) }
-            .map { it.relativeTo(sourceRoot).path }.toList()
-        assertEquals("Native grid integration needs verified data, paging and click contracts first",
-            emptyList<String>(), offenders)
+    @Test fun `native entry does not wrap resize overlay or replace native grid listeners`() {
+        val entry = source("NativeReplyPlus")
+        for (operation in listOf("removeView(", "addView(", "setLayoutParams(", "layoutParams =",
+            "PopupWindow", "setOnItemClickListener(", "setOnTouchListener(", "setNumColumns(")) {
+            assertFalse("Plus entry must not interfere with host geometry or listeners: $operation", entry.contains(operation))
+        }
+        assertTrue(entry.contains("ReplyPlusItems.supports("))
+        assertTrue(entry.contains("if (!owns(item)) return"))
+        assertTrue(entry.contains("XposedBridge.invokeOriginalMethod(c.rebuild"))
+        assertTrue(File(sourceRoot, "xposed/HookEntry.kt").readText().contains("NativeReplyPlus.install(context)"))
     }
 
     @Test fun `header and message menu still open the existing reply interface`() {
