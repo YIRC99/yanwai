@@ -39,7 +39,7 @@ class HostUi(private val activity: Activity) {
             visibility = View.VISIBLE
             isChecked = ModulePrefs.isChatEnabled(talker)
             isEnabled = talker != null
-            contentDescription = "当前聊天分析开关，本地记住选择；$value；长按打开分析与设置"
+            contentDescription = "当前聊天分析开关，本地记住选择；$value；长按打开帮我回、找话题与设置"
         }
         syncing = false
     }

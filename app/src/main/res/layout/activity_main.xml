@@ -51,7 +51,7 @@
                     <TextView style="@style/Yanwai.Section" android:text="第一次使用" />
                     <TextView style="@style/Yanwai.Body" android:text="1. 在「分析」或「回复」中配置模型并检测。\n2. 在 LSPosed 启用言外，作用域勾选微信。\n3. 彻底关闭并重新打开微信，进入一个聊天。" />
                     <TextView style="@style/Yanwai.Section" android:text="聊天里可以做什么" />
-                    <TextView style="@style/Yanwai.Body" android:text="自动分析：打开聊天右上角「分析」，每个聊天单独记住开关，默认关闭。\n\n单条解读：长按对方消息，选择「翻译意图」，无需打开自动分析。\n\n回复与话题：点微信「＋」里的「帮我回」，选择对方身份和参考条数，再点「生成回复」或「找找话题」。生成后复制、自行粘贴发送。\n\n对方背景：在「帮我回」面板填写对方经历、偏好等长期信息；群聊不提供此项。" />
+                    <TextView style="@style/Yanwai.Body" android:text="自动分析：打开聊天右上角「分析」，每个聊天单独记住开关，默认关闭。\n\n单条解读：长按对方消息，选择「翻译意图」，无需打开自动分析。\n\n回复与话题：长按右上角「分析」，选择「帮我回 / 上次建议」，选择对方身份和参考条数，再点「生成回复」或「找找话题」。生成后复制、自行粘贴发送。\n\n对方背景：在「帮我回」面板填写对方经历、偏好等长期信息；群聊不提供此项。" />
                     <TextView style="@style/Yanwai.Section" android:text="消息与参考范围" />
                     <TextView style="@style/Yanwai.Body" android:text="支持文字与微信语音转写。回复可选参考条数或自定义上限，以实际读到的内容为准；图片等其他媒体不参与理解。语音转写可能联网。\n\n分析卡片的三个显示开关在「更多」中调整，切换立即保存，不重新请求模型。" />
                 </LinearLayout>

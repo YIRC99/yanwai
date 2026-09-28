@@ -264,14 +264,6 @@ object MessageSniffer {
         return ui?.suggestReply(target.messageId) == true
     }
 
-    /** Resolve the active chat at click time; a recycled/hidden grid must never open another chat. */
-    fun suggestReplyFromPlus(grid: View): Boolean {
-        val activity = active.get() ?: return false
-        if (!grid.isShown || !grid.isAttachedToWindow || grid.rootView !== activity.window.decorView.rootView) return false
-        if (currentReplyTalker() == null) return false
-        return ui?.suggestReply() == true
-    }
-
     fun currentReplyTalker(): String? {
         val activity = active.get() ?: return null
         val scope = chatNodes(activity.window.decorView)

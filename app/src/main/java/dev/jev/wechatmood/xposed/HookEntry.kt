@@ -16,7 +16,6 @@ import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.Diagnostics
 import dev.jev.wechatmood.hook.MessageSniffer
 import dev.jev.wechatmood.hook.ReplyDatabaseHistory
-import dev.jev.wechatmood.hook.NativeReplyPlus
 
 /** Direct package entry, independent of the optional initZygote callback. */
 class HookEntry : IXposedHookLoadPackage {
@@ -66,7 +65,6 @@ class HookEntry : IXposedHookLoadPackage {
             MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
             ModulePrefs.report("模块 ${BuildConfig.VERSION_NAME} 已加载，等待打开聊天")
             ReplyDatabaseHistory.install(context.classLoader)
-            NativeReplyPlus.install(context)
             MessageSniffer.install(context)
             installed = true
         }.onFailure {
