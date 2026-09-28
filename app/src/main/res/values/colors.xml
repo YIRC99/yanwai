@@ -15,4 +15,6 @@
     <color name="status_warning_bg">#F6ECD3</color>
     <color name="status_error">#9B3336</color>
     <color name="status_error_bg">#F8E3E2</color>
+    <color name="status_info">#285E92</color>
+    <color name="status_info_bg">#E2EDF8</color>
 </resources>

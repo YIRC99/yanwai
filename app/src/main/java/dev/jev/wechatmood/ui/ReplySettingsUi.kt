@@ -3,9 +3,7 @@ package dev.jev.wechatmood.ui
 import android.content.Context
 import android.view.View
 import android.widget.ArrayAdapter
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.widget.doAfterTextChanged
 import dev.jev.wechatmood.R
 import dev.jev.wechatmood.core.ModulePrefs
@@ -51,18 +49,17 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
         binding.fetchModels.setOnClickListener { fetchModels() }
         binding.referenceModels.setOnClickListener {
             setModels(provider.referenceModels)
-            binding.modelsStatus.text = "官方文档参考模型（2026-09-26），不是账户可用列表。选择后请检测回复。"
+            SettingsStatus.show(binding.modelsStatus, "文档参考模型，不代表账户可用；选择后请检测。", R.color.status_warning)
             showModelChoices()
         }
         binding.replyConsent.setOnCheckedChangeListener { _, _ -> markDirty() }
-        binding.saveReply.setOnClickListener { save()?.let { result("回复配置已保存。点击「帮我回」时使用，与情绪判断互不影响。") } }
-        binding.testReply.setOnClickListener { test() }
-        binding.knowledgeSource.setOnClickListener { openUrl(ReplyKnowledge.SOURCE_URL) }
-        binding.knowledgeLicense.setOnClickListener {
-            AlertDialog.Builder(activity).setTitle("狗头军师 · MIT License")
-                .setMessage(activity.assets.open("goutoujunshi/LICENSE").bufferedReader().use { it.readText() })
-                .setPositiveButton("关闭", null).show()
+        binding.saveReply.setOnClickListener {
+            save()?.let {
+                binding.replyResult.visibility = View.GONE
+                android.widget.Toast.makeText(activity, "回复配置已保存", android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
+        binding.testReply.setOnClickListener { test() }
     }
 
     private fun showProvider() {
@@ -73,8 +70,6 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
         binding.apiKey.setText(draft.key)
         binding.model.setText(draft.model, false)
         binding.endpointLayout.visibility = if (provider == ReplyProvider.CUSTOM) View.VISIBLE else View.GONE
-        binding.providerAddress.visibility = if (provider == ReplyProvider.CUSTOM) View.GONE else View.VISIBLE
-        binding.providerAddress.text = provider.endpoint
         binding.providerHint.text = provider.hint
         binding.providerConsole.visibility = if (provider.consoleUrl.isBlank()) View.GONE else View.VISIBLE
         binding.referenceModels.visibility = if (provider.referenceModels.isEmpty()) View.GONE else View.VISIBLE
@@ -96,7 +91,7 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
 
     private fun clearModels() {
         setModels(emptyList())
-        binding.modelsStatus.text = "填写 Key 后获取，或直接输入模型 ID。"
+        SettingsStatus.show(binding.modelsStatus, "填写 Key 后获取，或直接输入模型 ID。")
     }
 
     private fun showModelChoices() {
@@ -142,16 +137,16 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
         clearModels()
         setBusy(true)
         binding.fetchModels.text = "正在获取…"
-        binding.modelsStatus.text = "正在向 ${provider.label} 获取模型列表，不会发送聊天内容。"
+        SettingsStatus.show(binding.modelsStatus, "正在获取模型列表…", R.color.status_info)
         scope.launch {
             var loaded = false
             try {
                 val models = ReplyModelsClient().list(settings)
                 setModels(models)
-                binding.modelsStatus.text = "已从接口获取 ${models.size} 个候选模型。选定后请检测回复，确认权限和兼容性。"
+                SettingsStatus.show(binding.modelsStatus, "已获取 ${models.size} 个候选模型；选定后请检测。", if (models.isEmpty()) R.color.status_warning else R.color.status_success)
                 loaded = true
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { binding.modelsStatus.text = e.message ?: "获取失败，请重试或手动填写模型 ID" }
+            catch (e: Exception) { SettingsStatus.show(binding.modelsStatus, e.message ?: "获取失败，可重试或手动填写模型 ID", R.color.status_error) }
             finally {
                 setBusy(false)
                 binding.fetchModels.text = "获取模型列表"
@@ -166,7 +161,7 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
         val settings = save() ?: return
         setBusy(true)
         binding.testReply.text = "正在检测…"
-        status("正在检测回复", R.color.status_neutral)
+        status("正在检测回复", R.color.status_info)
         result("使用示例聊天和相关知识资料检测，不读取微信消息。")
         scope.launch {
             try {
@@ -175,7 +170,8 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
                     ReplyMessage(1, "我", System.currentTimeMillis() - 60000, "最近忙完了，周末想出去走走。"),
                     ReplyMessage(2, "对方", System.currentTimeMillis(), "好呀，你有什么想去的地方吗？")))
                 val suggestion = ReplyHttpClient().generate(settings, example, "想去公园", "自然简短", knowledge)
-                status("回复检测通过", R.color.status_success)
+                status(if (binding.replyConsent.isChecked) "回复检测通过 · 手动生成已开启" else "检测通过 · 手动生成仍关闭",
+                    if (binding.replyConsent.isChecked) R.color.status_success else R.color.status_warning)
                 val preview = suggestion.parts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n\n")
                 result("示例回复（${suggestion.parts.size} 条）：\n$preview\n\n${suggestion.reason}\n\n接口和回复格式可用，聊天入口请在微信中体验。")
             } catch (e: CancellationException) { throw e }
@@ -192,10 +188,10 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
         binding.progressReply.visibility = if (busy) View.VISIBLE else View.GONE
     }
     private fun status(text: String, color: Int) {
-        binding.replyStatus.text = text; binding.replyStatus.setTextColor(ContextCompat.getColor(activity, color))
+        SettingsStatus.show(binding.replyStatus, text, color)
     }
     private fun result(text: String, error: Boolean = false) {
         binding.replyResult.visibility = View.VISIBLE; binding.replyResult.text = text
-        binding.replyResult.setTextColor(ContextCompat.getColor(activity, if (error) R.color.status_error else R.color.text_primary))
+        SettingsStatus.show(binding.replyResult, text, if (error) R.color.status_error else R.color.status_neutral)
     }
 }

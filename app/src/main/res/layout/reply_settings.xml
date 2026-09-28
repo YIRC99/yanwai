@@ -1,94 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent" android:layout_height="wrap_content"
-    android:orientation="vertical" android:visibility="gone">
-    <com.google.android.material.card.MaterialCardView android:layout_width="match_parent"
-        android:layout_height="wrap_content" app:cardBackgroundColor="@color/panel_surface"
-        app:cardCornerRadius="24dp" app:cardElevation="0dp" app:strokeWidth="1dp" app:strokeColor="@color/outline_subtle">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:padding="20dp">
-            <TextView style="@style/Yanwai.Caption" android:text="回复建议 · LLM"
-                android:textColor="@color/brand_primary" android:fontFamily="sans-serif-medium" />
-            <TextView style="@style/Yanwai.Body" android:text="想好这次怎么回"
-                android:textSize="26sp" android:textColor="@color/text_primary" android:layout_marginTop="10dp"
-                android:fontFamily="sans-serif-medium" android:accessibilityHeading="true" />
-            <TextView style="@style/Yanwai.Body" android:layout_marginTop="8dp"
-                android:text="在微信聊天「＋」面板点「帮我回」，生成回复或找找新话题。一次准备 5 个话题，可立即换着看；复制后自行粘贴发送。" />
-            <TextView android:id="@+id/replyStatus" style="@style/Yanwai.Badge"
-                android:layout_marginTop="16dp" android:text="尚未配置" />
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-    <TextView style="@style/Yanwai.Section" android:text="连接回复模型" />
-    <TextView style="@style/Yanwai.Body" android:text="选供应商，填入 Key，再获取并选择模型。每家的配置分别保存，与情绪判断互不影响。" />
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/providerLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="16dp" android:hint="供应商">
-        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/provider"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="none" android:importantForAutofill="no" android:saveEnabled="false" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+    <TextView style="@style/Yanwai.PageTitle" android:text="回复与话题" />
+    <TextView style="@style/Yanwai.Body" android:text="「帮我回」和「找找话题」共用这份模型配置。" />
+    <TextView android:id="@+id/replyStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/providerLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="供应商">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/provider" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:importantForAutofill="no" android:saveEnabled="false" />
     </com.google.android.material.textfield.TextInputLayout>
     <TextView android:id="@+id/providerHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
-    <TextView android:id="@+id/providerAddress" style="@style/Yanwai.Caption"
-        android:layout_marginTop="8dp" android:textIsSelectable="true" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/providerConsole"
-        style="@style/Yanwai.Button.Text" android:text="去官方平台获取 Key ↗" />
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/endpointLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API 地址"
-        app:helperText="填写服务商的 Base URL（如 https://example.com/v1）或完整 /chat/completions 地址。">
-        <com.google.android.material.textfield.TextInputEditText android:id="@+id/endpoint"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="textUri" android:maxLines="3" android:importantForAutofill="no" android:saveEnabled="false" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/providerConsole" style="@style/Yanwai.Button.Text" android:text="去官方平台获取 Key ↗" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/endpointLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API 地址" app:helperText="填写服务商的 Base URL（如 https://example.com/v1）或完整 /chat/completions 地址。">
+        <com.google.android.material.textfield.TextInputEditText android:id="@+id/endpoint" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textUri" android:maxLines="3" android:importantForAutofill="no" android:saveEnabled="false" />
     </com.google.android.material.textfield.TextInputLayout>
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/keyLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API Key"
-        app:endIconMode="password_toggle" app:helperText="填写这个服务商的 Key，仅保存在本机。">
-        <com.google.android.material.textfield.TextInputEditText android:id="@+id/apiKey"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="textPassword" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/keyLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API Key" app:endIconMode="password_toggle" app:helperText="填写这个服务商的 Key，仅保存在本机。">
+        <com.google.android.material.textfield.TextInputEditText android:id="@+id/apiKey" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textPassword" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
     </com.google.android.material.textfield.TextInputLayout>
-    <com.google.android.material.button.MaterialButton android:id="@+id/fetchModels"
-        style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="获取模型列表" />
-    <TextView android:id="@+id/modelsStatus" style="@style/Yanwai.Caption"
-        android:accessibilityLiveRegion="polite" android:text="填写 Key 后获取，或直接输入模型 ID。" />
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/modelLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="选择模型 / 输入模型 ID"
-        app:helperText="输入名称可筛选列表，也可手动填写。请选择支持长上下文的聊天模型。">
-        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/model"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="textVisiblePassword" android:completionThreshold="0" android:singleLine="true"
-            android:importantForAutofill="no" android:saveEnabled="false" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/fetchModels" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="获取模型列表" />
+    <TextView android:id="@+id/modelsStatus" style="@style/Yanwai.Caption" android:accessibilityLiveRegion="polite" android:text="填写 Key 后获取，或直接输入模型 ID。" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/modelLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="选择模型 / 输入模型 ID" app:helperText="输入名称可筛选列表，也可手动填写。请选择支持长上下文的聊天模型。">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/model" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textVisiblePassword" android:completionThreshold="0" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
     </com.google.android.material.textfield.TextInputLayout>
-    <com.google.android.material.button.MaterialButton android:id="@+id/referenceModels"
-        style="@style/Yanwai.Button.Text" android:visibility="gone" android:text="选择官方文档中的参考模型" />
-    <TextView style="@style/Yanwai.Section" android:text="由你决定何时使用" />
-    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/replyConsent"
-        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-        android:text="允许手动生成回复建议" android:saveEnabled="false" />
-    <TextView style="@style/Yanwai.Caption" android:text="开启后，在「帮我回」选择对方身份与参考条数。打开或选条数先在本机读取；点生成回复或找找话题，才把消息、发送人、时间、身份、草稿和补充想法发到所选服务。找话题还附带本机日期、时间和节日背景，一组看完后再点会请求新一组。不会自动发送消息。修改开关后需保存。" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/testReply"
-        style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测回复" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/referenceModels" style="@style/Yanwai.Button.Text" android:visibility="gone" android:text="选择官方文档中的参考模型" />
+    <TextView style="@style/Yanwai.Section" android:text="使用许可" />
+    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/replyConsent" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="允许手动生成回复建议" android:saveEnabled="false" />
+    <TextView style="@style/Yanwai.Caption" android:text="开启后仍需手动点击生成。相关聊天、对方背景和本次要求会发送给所选模型；回复只供复制，由你粘贴发送。修改后需保存。" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/testReply" style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测回复" />
     <TextView style="@style/Yanwai.Caption" android:text="检测会发送示例聊天和相关知识资料，可能产生 API 费用，不读取微信消息。列表可见不代表一定能调用。" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/saveReply"
-        style="@style/Yanwai.Button.Text" android:text="仅保存配置" />
-    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progressReply"
-        android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true"
-        android:visibility="gone" android:contentDescription="正在检测回复模型" />
-    <TextView android:id="@+id/replyResult" style="@style/Yanwai.Body" android:layout_marginTop="12dp"
-        android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone"
-        android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
-    <TextView style="@style/Yanwai.Body" android:layout_marginTop="16dp"
-        android:text="可选最近 30、50 或 100 条本机文字和语音消息，转写后总长最多 48,000 字符。选择后自动读取，双方语音使用微信原生转文字，可能联网，无需手动翻页。历史不可用或转写失败会提示；可查看正文与回复依据，图片等其他媒体不参与理解。" />
-    <TextView style="@style/Yanwai.Section" android:text="回复逻辑来自狗头军师" />
-    <TextView style="@style/Yanwai.Body" android:text="基于开源项目 goutoujunshi 的回复流程与知识资料。原始知识完整随应用打包，生成时按对方身份选用恋爱、家庭、日常接话等资料，调整口吻并拆成自然短消息。由你配置的模型生成，言外负责上下文和交互适配。" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/knowledgeSource"
-        style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="了解狗头军师 ↗" />
-    <TextView style="@style/Yanwai.Caption" android:layout_marginTop="8dp"
-        android:text="MIT License · Copyright (c) 2026 powerycy\n知识版本：6db7354 · 模型建议仅供参考。" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/knowledgeLicense"
-        style="@style/Yanwai.Button.Text" android:text="查看开源许可" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/saveReply" style="@style/Yanwai.Button.Text" android:text="仅保存配置" />
+    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progressReply" android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true" android:visibility="gone" android:contentDescription="正在检测回复模型" />
+    <TextView android:id="@+id/replyResult" style="@style/Yanwai.Body" android:layout_marginTop="12dp" android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone" android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
 </LinearLayout>

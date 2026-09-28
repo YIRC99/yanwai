@@ -5,6 +5,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import dev.jev.wechatmood.R
+import dev.jev.wechatmood.ui.SettingsStatus
 import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.databinding.ActivityMainBinding
 import kotlinx.coroutines.CancellationException
@@ -105,7 +107,13 @@ class UpdateNotice(private val activity: AppCompatActivity, private val binding:
             else -> "打开言外时检查新版，点击后前往 GitHub 下载。"
         }
         val checked = if (lastSuccess > 0) "\n上次成功检查：${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(lastSuccess))}" else ""
-        binding.textUpdateStatus.text = "$state\n$detail$checked"
+        SettingsStatus.show(binding.textUpdateStatus, "$state\n$detail$checked", when {
+            checking -> R.color.status_info
+            prefs.getBoolean("failed", false) -> R.color.status_warning
+            release?.isUpdateFor(current) == true -> R.color.status_info
+            lastSuccess > 0 -> R.color.status_success
+            else -> R.color.status_neutral
+        })
         binding.buttonReleasePage.text = if (release?.isUpdateFor(current) == true) "去 GitHub 下载" else "GitHub 发布页"
     }
 

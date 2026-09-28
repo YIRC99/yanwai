@@ -1,107 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-    <TextView style="@style/Yanwai.Section" android:text="情绪分析来源" />
-    <RadioGroup android:id="@+id/emotionGroup" android:layout_width="match_parent" android:layout_height="wrap_content">
-        <RadioButton android:id="@+id/emotionJev" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="48dp" android:text="JEV 决策模型" android:saveEnabled="false" />
-        <RadioButton android:id="@+id/emotionLlm" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="48dp" android:text="LLM 大模型" android:saveEnabled="false" />
-    </RadioGroup>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <TextView android:id="@+id/intentStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/emotionSourceLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="情绪分析来源">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/emotionSource" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" android:importantForAutofill="no" />
+    </com.google.android.material.textfield.TextInputLayout>
     <TextView android:id="@+id/emotionHint" style="@style/Yanwai.Body" />
-    <RadioGroup android:id="@+id/emotionConfigGroup" android:layout_width="match_parent" android:layout_height="wrap_content">
-        <RadioButton android:id="@+id/useAnalysisConfig" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="48dp" android:text="使用下方分析模型配置" android:saveEnabled="false" />
-        <RadioButton android:id="@+id/useReplyConfig" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="48dp" android:text="复用「帮我回」已保存的模型配置" android:saveEnabled="false" />
-    </RadioGroup>
-    <TextView android:id="@+id/intentRouteTitle" style="@style/Yanwai.Section" android:text="JEV 情绪之后，意图怎么分析" />
-    <RadioGroup android:id="@+id/routeGroup" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="vertical">
-        <RadioButton android:id="@+id/routeJev" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="52dp" android:text="JEV 决策模型 · 快速判断" android:saveEnabled="false" />
-        <RadioButton android:id="@+id/routeLlm" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:minHeight="52dp" android:text="智能分析 · 细致解读" android:saveEnabled="false" />
-    </RadioGroup>
-    <TextView android:id="@+id/routeHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
-    <TextView style="@style/Yanwai.Section" android:text="分析卡片显示" android:layout_marginTop="20dp" />
-    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showIntent"
-        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
-        android:text="显示意图解析" android:saveEnabled="false" />
-    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showConcern"
-        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
-        android:text="显示可能在意" android:saveEnabled="false" />
-    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showTone"
-        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
-        android:text="显示情绪倾向" android:saveEnabled="false" />
-    <TextView android:id="@+id/cardDisplayStatus" style="@style/Yanwai.Caption"
-        android:text="只调整智能分析内容的显示，切换即保存；不重新分析。情绪指标和失败提示继续显示。"
-        android:accessibilityLiveRegion="polite" />
-    <TextView android:id="@+id/intentStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp"
-        android:accessibilityLiveRegion="polite" />
-    <LinearLayout android:id="@+id/llmPanel" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="vertical" android:visibility="gone">
-    <TextView style="@style/Yanwai.Section" android:text="连接分析模型" android:layout_marginTop="20dp" />
-    <TextView style="@style/Yanwai.Caption" android:text="选服务商 → 填 Key → 选模型。这里的配置单独保存，不影响「帮我回」。" />
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/providerLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="16dp" android:hint="供应商">
-        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/provider"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="none" android:importantForAutofill="no" android:saveEnabled="false" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/configSourceLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="LLM 配置来源">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/configSource" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" android:importantForAutofill="no" />
     </com.google.android.material.textfield.TextInputLayout>
-    <TextView android:id="@+id/providerHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
-    <TextView android:id="@+id/providerAddress" style="@style/Yanwai.Caption"
-        android:layout_marginTop="8dp" android:textIsSelectable="true" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/providerConsole"
-        style="@style/Yanwai.Button.Text" android:text="去官方平台获取 Key ↗" />
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/endpointLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API 地址"
-        app:helperText="填写服务商的 Base URL（如 https://example.com/v1）或完整 /chat/completions 地址。">
-        <com.google.android.material.textfield.TextInputEditText android:id="@+id/endpoint"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="textUri" android:maxLines="3" android:importantForAutofill="no" android:saveEnabled="false" />
-    </com.google.android.material.textfield.TextInputLayout>
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/keyLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API Key"
-        app:endIconMode="password_toggle" app:helperText="填写这个服务商的 Key，仅保存在本机。">
-        <com.google.android.material.textfield.TextInputEditText android:id="@+id/apiKey"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="textPassword" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
-    </com.google.android.material.textfield.TextInputLayout>
-    <com.google.android.material.button.MaterialButton android:id="@+id/fetchModels"
-        style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="获取模型列表" />
-    <TextView android:id="@+id/modelsStatus" style="@style/Yanwai.Caption"
-        android:accessibilityLiveRegion="polite" android:text="填写 Key 后获取，或直接输入模型 ID。" />
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/modelLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="选择模型 / 输入模型 ID"
-        app:helperText="输入名称可筛选列表，也可手动填写。请选择支持长上下文的聊天模型。">
-        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/model"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
-            android:inputType="textVisiblePassword" android:completionThreshold="0" android:singleLine="true"
-            android:importantForAutofill="no" android:saveEnabled="false" />
-    </com.google.android.material.textfield.TextInputLayout>
-    <com.google.android.material.button.MaterialButton android:id="@+id/referenceModels"
-        style="@style/Yanwai.Button.Text" android:visibility="gone" android:text="选择官方文档中的参考模型" />
-    <TextView style="@style/Yanwai.Caption" android:layout_marginTop="12dp"
-        android:text="手动或自动分析会将当前消息、相关前文、时间及对方背景发送给所选服务。只生成解读，不生成回复。" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/testIntent" style="@style/Yanwai.Button"
-        android:layout_marginTop="16dp" android:text="保存并检测意图模型" />
-    <TextView style="@style/Yanwai.Caption" android:text="检测只发送示例聊天，可能产生 API 费用，不读取微信消息。" />
+    <LinearLayout android:id="@+id/reusedConfigPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+        <TextView android:id="@+id/reusedConfigStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/editReplyConfig" style="@style/Yanwai.Button.Text" android:text="前往回复页修改配置" />
     </LinearLayout>
-    <com.google.android.material.button.MaterialButton android:id="@+id/testSelected" style="@style/Yanwai.Button"
-        android:layout_marginTop="12dp" android:text="保存并检测 LLM 分析" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/saveIntent" style="@style/Yanwai.Button.Outline"
-        android:layout_marginTop="12dp" android:text="保存分析方式" />
-    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progressIntent"
-        android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true"
-        android:visibility="gone" android:contentDescription="正在连接意图模型" />
-    <TextView android:id="@+id/intentResult" style="@style/Yanwai.Body" android:layout_marginTop="12dp"
-        android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone"
-        android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/intentRouteLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="意图解读方式">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/intentRoute" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" android:importantForAutofill="no" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <TextView android:id="@+id/routeHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
+    <LinearLayout android:id="@+id/llmPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+        <TextView style="@style/Yanwai.Section" android:text="分析模型" android:layout_marginTop="20dp" />
+        <TextView style="@style/Yanwai.Caption" android:text="这份配置独立保存，仅用于聊天分析。" />
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/providerLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="供应商">
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/provider" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:importantForAutofill="no" android:saveEnabled="false" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <TextView android:id="@+id/providerHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/providerConsole" style="@style/Yanwai.Button.Text" android:text="去官方平台获取 Key ↗" />
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/endpointLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API 地址" app:helperText="填写服务商的 Base URL（如 https://example.com/v1）或完整 /chat/completions 地址。">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/endpoint" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textUri" android:maxLines="3" android:importantForAutofill="no" android:saveEnabled="false" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/keyLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API Key" app:endIconMode="password_toggle" app:helperText="填写这个服务商的 Key，仅保存在本机。">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/apiKey" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textPassword" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/fetchModels" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="获取模型列表" />
+        <TextView android:id="@+id/modelsStatus" style="@style/Yanwai.Caption" android:accessibilityLiveRegion="polite" android:text="填写 Key 后获取，或直接输入模型 ID。" />
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/modelLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="选择模型 / 输入模型 ID" app:helperText="输入名称可筛选列表，也可手动填写。请选择支持长上下文的聊天模型。">
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/model" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textVisiblePassword" android:completionThreshold="0" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/referenceModels" style="@style/Yanwai.Button.Text" android:visibility="gone" android:text="选择官方文档中的参考模型" />
+    </LinearLayout>
+    <TextView style="@style/Yanwai.Caption" android:layout_marginTop="16dp" android:text="分析会将消息、相关前文和时间发送给所选服务；LLM 还会参考对方背景。支持文字与微信语音转写，不会自动回复。" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/testSelected" style="@style/Yanwai.Button" android:layout_marginTop="12dp" android:text="保存并检测分析模型" />
+    <TextView android:id="@+id/testHint" style="@style/Yanwai.Caption" android:text="检测使用示例聊天，不读取微信消息，可能产生 API 费用。" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/saveIntent" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="保存分析设置" />
+    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progressIntent" android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true" android:visibility="gone" android:contentDescription="正在连接意图模型" />
+    <TextView android:id="@+id/intentResult" style="@style/Yanwai.Body" android:layout_marginTop="12dp" android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone" android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
 </LinearLayout>

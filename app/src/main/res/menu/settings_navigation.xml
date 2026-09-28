@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/tabHome" android:icon="@drawable/ic_home" android:title="首页" />
+    <item android:id="@+id/tabEmotion" android:icon="@drawable/ic_analysis" android:title="分析" />
+    <item android:id="@+id/tabReply" android:icon="@drawable/ic_reply" android:title="回复" />
+    <item android:id="@+id/tabAbout" android:icon="@drawable/ic_settings" android:title="更多" />
+</menu>

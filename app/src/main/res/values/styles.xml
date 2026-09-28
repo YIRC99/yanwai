@@ -49,4 +49,19 @@
         <item name="cornerRadius">14dp</item>
         <item name="android:textAllCaps">false</item>
     </style>
+    <style name="Yanwai.PageTitle" parent="Yanwai.Section">
+        <item name="android:textSize">26sp</item>
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+    </style>
+    <style name="Yanwai.Entry" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">80dp</item>
+        <item name="android:paddingVertical">16dp</item>
+        <item name="android:paddingHorizontal">4dp</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
 </resources>
