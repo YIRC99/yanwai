@@ -39,4 +39,11 @@ class ReplyPlusSafetyTest {
         assertTrue(source("MessageMenu").contains("MessageSniffer.suggestReply(view, it)"))
         assertTrue(source("MessageSniffer").contains("ui?.suggestReply(target.messageId) == true"))
     }
+
+    @Test fun `dex optimized labels must not require a reflective constructor`() {
+        // Actual 8.0.71 DEX y has no declared constructor; x already initializes its labels.
+        val entry = source("NativeReplyPlus")
+        assertFalse("The host label has no public constructor in DEX", entry.contains("label.getConstructor()"))
+        assertFalse("Reuse labels created by the host item constructor", entry.contains("labelClass.getConstructor()"))
+    }
 }

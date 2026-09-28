@@ -20,6 +20,7 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.reply.ReplyPlusItems
+import dev.jev.wechatmood.reply.ReplyPlusLabels
 import dev.jev.wechatmood.reply.ReplyPlusOwnership
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -37,6 +38,7 @@ internal object NativeReplyPlus {
     private var installed = false
     private val replyViews = WeakHashMap<View, Boolean>()
     private val blockedPanels = WeakHashMap<Any, Boolean>()
+    private val reportedPanels = WeakHashMap<Any, Boolean>()
 
     private fun owns(item: Any?): Boolean = ownership.owns(item)
 
@@ -55,12 +57,7 @@ internal object NativeReplyPlus {
             itemClass.getField("r2").set(item, "icons_filled_live_mark")
             itemClass.getField("s2").set(item, "icons_filled_live_mark")
             itemClass.getField("g2").setInt(item, 0) // inert even if native dispatch is reached
-            listOf("n2", "o2", "p2", "q2").forEach { field ->
-                val label = labelClass.getConstructor().newInstance()
-                labelClass.getField("a").set(label, "帮我回")
-                labelClass.getField("b").set(label, "")
-                itemClass.getField(field).set(item, label)
-            }
+            ReplyPlusLabels.populate(item, labelClass)
             ownership.remember(item)
         }
     }
@@ -138,13 +135,18 @@ internal object NativeReplyPlus {
                         val native = raw?.let { ArrayList(original.filterNot(::owns)) }
                         c.setItems.invoke(panel, items)
                         param.setObjectExtra(KEY, Build(native, other + items))
-                    }.onFailure { MoodLog.w("REPLY_PLUS_SKIP ${it.javaClass.simpleName}") }
+                    }.onFailure { MoodLog.e("REPLY_PLUS_SKIP", it) }
                 }
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val build = param.getObjectExtra(KEY) as? Build ?: return
                     val panel = param.args[0]
                     val verified = !param.hasThrowable() && runCatching { verify(c, panel, build) }.getOrDefault(false)
-                    if (verified) return
+                    if (verified) {
+                        if (reportedPanels.put(panel, true) == null) {
+                            MoodLog.i("REPLY_PLUS_ATTACHED total=${c.totalCount.getInt(panel)} pages=${(c.grids.get(panel) as List<*>).size}")
+                        }
+                        return
+                    }
                     blockedPanels[panel] = true
                     // Rebuild once with the exact native item order, never leave a half-added item.
                     runCatching {
@@ -158,7 +160,7 @@ internal object NativeReplyPlus {
             MoodLog.i("REPLY_PLUS_READY native dynamic entry enabled for 8.0.71/3080")
         }.onFailure {
             hooks.asReversed().forEach { hook -> runCatching { hook.unhook() } }
-            MoodLog.w("REPLY_PLUS_UNAVAILABLE ${it.javaClass.simpleName}")
+            MoodLog.e("REPLY_PLUS_UNAVAILABLE", it)
         }
     }
 
@@ -192,7 +194,8 @@ internal object NativeReplyPlus {
             check(type == expected && !Modifier.isStatic(modifiers)); isAccessible = true
         }
         val intType = Int::class.javaPrimitiveType!!
-        item.getConstructor(); label.getConstructor()
+        // y has no constructor in the original DEX; x initializes all four label instances.
+        item.getConstructor()
         check(item.getField("field_appId").type == String::class.java)
         listOf("e2", "r2", "s2").forEach { field(item, it, String::class.java) }
         field(item, "g2", intType)
