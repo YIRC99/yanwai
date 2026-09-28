@@ -87,6 +87,18 @@ object ReplyDatabaseHistory {
     fun matchesAnalysisAccount(input: AnalysisInput): Boolean =
         input.accountScope.matches(Regex("[0-9a-f]{64}")) && findAnalysisAccount(input) == input.accountScope
 
+    /** Worker-thread only. A visible anchor must match exactly one account, including outgoing messages. */
+    fun replyAccount(page: ReplyContext): String? {
+        val databases = synchronized(this) { handles.mapNotNull { it.get() } }
+        val sources = databases.mapNotNull { db -> runCatching {
+            val account = scope(db) ?: return@runCatching null
+            account to ReplyHistoryQuery { sql, args -> query(db, sql, args).use {
+                if (it.moveToFirst()) listOf(metadata(it)) else emptyList()
+            } }
+        }.getOrNull() }
+        return dev.jev.wechatmood.reply.ReplyAccountIdentity.resolve(page, sources)
+    }
+
     private fun metadata(cursor: Cursor): MessageMetadata {
         fun string(name: String) = cursor.getString(cursor.getColumnIndexOrThrow(name)).orEmpty()
         fun number(name: String) = cursor.getLong(cursor.getColumnIndexOrThrow(name))

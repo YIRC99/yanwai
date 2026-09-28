@@ -40,7 +40,7 @@ class TopicTest {
         assertEquals("最近还拍照吗", c.selectedText)
         assertEquals(0, c.selectedPart)
         c.select(1)
-        val reopened = ReplyComposition(c.result)
+        val reopened = ReplyComposition(c.result, ReplyIdentitySetting(c.result!!.relationship, c.result!!.customRelationship))
         assertEquals("想看看你拍的", reopened.selectedText)
         reopened.select(0)
         assertEquals("最近还拍照吗", reopened.selectedText)
@@ -66,7 +66,7 @@ class TopicTest {
         assertTrue(c.acceptTopics(context, topics, key(), null))
         val shown = mutableSetOf(c.selectedText)
         repeat(4) {
-            c = ReplyComposition(c.result)
+            c = ReplyComposition(c.result, ReplyIdentitySetting(c.result!!.relationship, c.result!!.customRelationship))
             assertTrue(c.nextTopic(key()))
             assertTrue(shown.add(c.selectedText))
         }

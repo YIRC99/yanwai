@@ -7,6 +7,14 @@ class ReplyCompositionTest {
     private val context = ReplyContext("alice", listOf(ReplyMessage(1, "对方", 1, "明天见")))
     private val suggestion = ReplySuggestion(listOf("好呀", "明天见"), "回应约定")
 
+    @Test fun `old reply is not a source of contact identity`() {
+        val old = RememberedReply(context, suggestion, relationship = ReplyRelationship.FRIEND)
+        val reopened = ReplyComposition(old)
+        assertEquals(ReplyRelationship.UNSPECIFIED, reopened.relationship)
+        assertFalse(reopened.canUse)
+        assertEquals(ReplyRelationship.FRIEND, reopened.result!!.relationship)
+    }
+
     @Test fun `opening and selecting a role leave the composer waiting for explicit generation`() {
         val composer = ReplyComposition()
         assertEquals(ReplyRelationship.UNSPECIFIED, composer.relationship)

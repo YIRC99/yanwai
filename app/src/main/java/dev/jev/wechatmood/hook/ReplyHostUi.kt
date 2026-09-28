@@ -24,6 +24,7 @@ import android.widget.*
 import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
+import dev.jev.wechatmood.core.ReplyIdentityBridge
 import dev.jev.wechatmood.reply.*
 import kotlinx.coroutines.*
 
@@ -34,6 +35,8 @@ class ReplyHostUi(private val activity: Activity) {
     private val history = ReplyHistory.process
     private var job: Job? = null
     private var historyJob: Job? = null
+    private var openingJob: Job? = null
+    private var ownerEpoch: String? = null
     private var talker: String? = null
     private var dialog: Dialog? = null
     private var snapshot: ReplyContext? = null
@@ -41,7 +44,9 @@ class ReplyHostUi(private val activity: Activity) {
     private var invalidateRequest: (() -> Unit)? = null
 
     fun update(currentTalker: String?) {
-        if (talker != currentTalker) { hide(); talker = currentTalker }
+        if (talker != currentTalker || ownerEpoch?.let { it != ReplyDatabaseHistory.pendingAccountScope() } == true) {
+            hide(); talker = currentTalker
+        }
         if (currentTalker == null) return
         if (dialog?.isShowing == true) {
             if ((!ModulePrefs.replyConsent || !ModulePrefs.replySettings().isConfigured) &&
@@ -66,15 +71,46 @@ class ReplyHostUi(private val activity: Activity) {
     fun open(focusMessageId: Long? = null): Boolean {
         val selectedTalker = talker ?: return false
         if (MessageSniffer.currentReplyTalker() != selectedTalker) return false
-        if (dialog?.isShowing == true) return true
-        val remembered = history.recall(selectedTalker, focusMessageId)
-        val composition = ReplyComposition(remembered)
+        if (dialog?.isShowing == true || openingJob?.isActive == true) return true
+        val epoch = ReplyDatabaseHistory.pendingAccountScope()
+        ownerEpoch = epoch
+        val live = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
+            toast(it.message ?: "读取聊天失败"); return true
+        }
+        if (live.talker != selectedTalker) return false
+        openingJob = scope.launch {
+            try {
+                val account = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(live) }
+                val owner = ReplyIdentityOwner(epoch, account, selectedTalker)
+                val identity = owner.key?.let { ReplyIdentityBridge.load(activity, it) } ?: ReplyIdentitySetting()
+                ensureActive()
+                if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())) return@launch
+                val latestPage = MessageSniffer.replyContext(requireBottom = false)
+                val latestAccount = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(latestPage) }
+                if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
+                    !owner.acceptsAccount(latestAccount)) return@launch
+                // All reads finish before the editor is created, so a late load cannot erase typed text.
+                openResolved(focusMessageId, live, owner, identity)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) {
+                if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker)
+                    toast("身份读取失败，请重新打开重试")
+            }
+        }
+        return true
+    }
+
+    private fun openResolved(focusMessageId: Long?, live: ReplyContext, owner: ReplyIdentityOwner,
+        identity: ReplyIdentitySetting): Boolean {
+        val selectedTalker = owner.talker
+        val remembered = history.recall(selectedTalker, focusMessageId, owner.historyScope)
+        val group = selectedTalker.endsWith("@chatroom")
+        val composition = ReplyComposition(remembered, if (group) ReplyIdentitySetting(
+            remembered?.relationship ?: ReplyRelationship.UNSPECIFIED, remembered?.customRelationship.orEmpty()) else identity)
         val reference = ReplyHistorySelection(selectedTalker, remembered?.context)
         if (remembered == null && !canGenerate()) { configure(); return true }
         // Reopening saved content must not depend on scrolling to the latest message or text input mode.
-        val captured = remembered?.context ?: runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
-            toast(it.message ?: "读取聊天失败"); return true
-        }
+        val captured = remembered?.context ?: live
         if (captured.talker != selectedTalker) return false
         val initialEditor = editor()
         if (remembered == null && initialEditor == null) { toast("请先切换到文字输入"); return true }
@@ -91,6 +127,13 @@ class ReplyHostUi(private val activity: Activity) {
         fun line() = View(activity).apply { setBackgroundColor(theme.border) }
         val window = Dialog(activity)
         dialog = window
+        fun ownsDrawer() = window === dialog && owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())
+        suspend fun verifyAccount(): Boolean {
+            if (!ownsDrawer()) return false
+            val currentPage = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrNull() ?: return false
+            val account = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(currentPage) }
+            return ownsDrawer() && owner.acceptsAccount(account)
+        }
         fun fitWindow() {
             val available = activity.window.decorView.height.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
             window.window?.setLayout(-1, minOf(dp(if (composition.result == null) 360 else 560), (available * 0.78f).toInt()))
@@ -283,11 +326,26 @@ class ReplyHostUi(private val activity: Activity) {
             if (reason.text.isBlank()) reason.visibility = View.GONE
             reasonToggle.text = if (reason.visibility == View.VISIBLE) "收起理由 ▴" else if (batch != null) "为什么聊这个 ▾" else "为什么这样回 ▾"
         }
+        var saveRevision = 0L
+        fun saveIdentity() {
+            if (group || !ownsDrawer()) return
+            if (owner.key == null) { toast("账号或联系人尚未确认，本次身份不会保存"); return }
+            val revision = ++saveRevision
+            val value = ReplyIdentitySetting(composition.relationship, composition.customRelationship)
+            // The immutable owner and original verified page remain attached even after closing/switching.
+            ReplyIdentityBridge.save(activity, owner, value, { ReplyDatabaseHistory.replyAccount(live) }) { saved ->
+                activity.runOnUiThread {
+                    if (ownsDrawer() && revision == saveRevision && !saved) toast("身份保存失败，请重新选择后重试")
+                }
+            }
+        }
         customRole.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
+                if (!ownsDrawer()) return
                 composition.customRelationship = s?.toString().orEmpty()
+                saveIdentity()
                 failed = false; renderParts(); controls(busy)
             }
         })
@@ -298,9 +356,14 @@ class ReplyHostUi(private val activity: Activity) {
                 }
                 menu.setGroupCheckable(0, true, true)
                 setOnMenuItemClickListener { item ->
-                    if (!busy) {
+                    if (!busy && ownsDrawer()) {
                         val wasEditingCustomRole = customRole.hasFocus()
                         composition.relationship = ReplyRelationship.entries[item.itemId]
+                        if (composition.relationship == ReplyRelationship.UNSPECIFIED) {
+                            composition.customRelationship = ""
+                            customRole.setText("")
+                        }
+                        saveIdentity()
                         failed = false
                         renderParts(); controls(false)
                         val keyboard = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -318,11 +381,11 @@ class ReplyHostUi(private val activity: Activity) {
         }
         invalidateRequest = { reference.cancel(); state.text = "请重新配置回复模型"; failed = true; controls(false) }
         fun remember() {
-            composition.result?.let(history::remember)
+            if (ownsDrawer()) composition.result?.let { history.remember(it, owner.historyScope) }
         }
         fun prepareHistory(limit: Int) {
             if (busy) return
-            if (MessageSniffer.currentReplyTalker() != selectedTalker) { window.dismiss(); return }
+            if (!ownsDrawer()) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
             historyJob?.cancel()
             NativeVoiceBridge.retryFailures()
@@ -338,6 +401,7 @@ class ReplyHostUi(private val activity: Activity) {
             if (loaded.talker != selectedTalker) { reference.cancel(); window.dismiss(); return }
             historyJob = scope.launch {
                 try {
+                    if (!verifyAccount()) { window.dismiss(); return@launch }
                     val pending = ReplyDatabaseHistory.load(loaded, limit)
                     val voiceCount = pending.messages.count { it.voice != null }
                     var voiceIndex = 0
@@ -345,11 +409,12 @@ class ReplyHostUi(private val activity: Activity) {
                         ensureActive()
                         state.text = "正在转写语音 ${++voiceIndex}/$voiceCount…"
                         NativeVoiceBridge.transcribe(source) {
-                            window === dialog && ModulePrefs.replyConsent && reference.isCurrent(ticket)
+                            ownsDrawer() && ModulePrefs.replyConsent && reference.isCurrent(ticket)
                         }
                     }
                     ensureActive()
-                    if (window !== dialog || !ModulePrefs.replyConsent) return@launch
+                    if (!ownsDrawer() || !ModulePrefs.replyConsent) return@launch
+                    if (!verifyAccount()) { window.dismiss(); return@launch }
                     if (current.messages.isEmpty() || current.messages.all { it.voiceState == VoiceState.FAILED }) {
                         reference.fail(ticket)
                         state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
@@ -367,9 +432,9 @@ class ReplyHostUi(private val activity: Activity) {
                     updateNotice()
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) {
-                    if (reference.isCurrent(ticket) && window === dialog) state.text = "历史读取失败，请重试"
+                    if (reference.isCurrent(ticket) && ownsDrawer()) state.text = "历史读取失败，请重试"
                 } finally {
-                    if (reference.isCurrent(ticket) && window === dialog) { reference.fail(ticket); controls(busy) }
+                    if (reference.isCurrent(ticket) && ownsDrawer()) { reference.fail(ticket); controls(busy) }
                 }
             }
         }
@@ -394,7 +459,7 @@ class ReplyHostUi(private val activity: Activity) {
         fun generate(direction: String = "", findTopics: Boolean = false) {
             if (busy || reference.loading) return
             if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return }
-            if (MessageSniffer.currentReplyTalker() != selectedTalker) { window.dismiss(); return }
+            if (!ownsDrawer()) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
             val current = reference.context ?: run { prepareHistory(composition.historyLimit); return }
             val latest = MessageSniffer.replyBoundary()
@@ -427,10 +492,11 @@ class ReplyHostUi(private val activity: Activity) {
             controls(true)
             job = scope.launch {
                 try {
+                    if (!verifyAccount()) { window.dismiss(); return@launch }
                     val knowledge = withContext(Dispatchers.IO) { ReplyKnowledge.load(activity, relationship) }
                     // Upload only the prepared evidence, after rechecking consent, conversation and settings.
                     ensureActive()
-                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || window !== dialog || !ModulePrefs.replyConsent) return@launch
+                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.replyConsent) return@launch
                     val beforeSend = ModulePrefs.replySettings()
                     if (beforeSend.endpoint != config.endpoint || beforeSend.model != config.model || beforeSend.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
@@ -440,7 +506,8 @@ class ReplyHostUi(private val activity: Activity) {
                         requireNotNull(time), previousTopics, customRelationship) else null
                     val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction, knowledge, previous, focusId, relationship, customRelationship)
                     val activeConfig = ModulePrefs.replySettings()
-                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || window !== dialog || !ModulePrefs.replyConsent) return@launch
+                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.replyConsent) return@launch
+                    if (!verifyAccount()) { window.dismiss(); return@launch }
                     if (activeConfig.endpoint != config.endpoint || activeConfig.model != config.model || activeConfig.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
                     }
@@ -453,14 +520,14 @@ class ReplyHostUi(private val activity: Activity) {
                     remember(); updateNotice()
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) {
-                    if (session.accepts(ticket, MessageSniffer.currentReplyTalker()) && window === dialog) {
+                    if (session.accepts(ticket, MessageSniffer.currentReplyTalker()) && ownsDrawer()) {
                         failed = true
                         state.text = "${if (findTopics) "找话题" else "生成"}失败${if (composition.result == null) "" else " · 保留上次建议"}"
                         state.setTextColor(theme.error)
                         toast(e.message ?: "暂时无法生成，请重试")
                     }
                 } finally {
-                    if (session.accepts(ticket, talker) && window === dialog) controls(false)
+                    if (session.accepts(ticket, talker) && ownsDrawer()) controls(false)
                 }
             }
         }
@@ -521,6 +588,7 @@ class ReplyHostUi(private val activity: Activity) {
             .putExtra("reply_tab", true))
     }.onFailure { toast("请从桌面打开言外，进入回复建议") }
     fun hide() {
+        openingJob?.cancel(); ownerEpoch = null
         dialog?.dismiss(); job?.cancel(); historyJob?.cancel(); session.cancel()
         talker = null
     }

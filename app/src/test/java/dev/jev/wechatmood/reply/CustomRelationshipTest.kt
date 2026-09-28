@@ -52,7 +52,7 @@ class CustomRelationshipTest {
         assertFalse(c.canUse)
         assertEquals("前同事", c.result!!.customRelationship)
         assertFalse(c.accept(context, ReplySuggestion("旧请求", ""), "", null, ReplyRelationship.OTHER, "前同事"))
-        val reopened = ReplyComposition(c.result)
+        val reopened = ReplyComposition(c.result, ReplyIdentitySetting(c.result!!.relationship, c.result!!.customRelationship))
         assertEquals("前同事", reopened.customRelationship)
         assertTrue(reopened.canUse)
         c.customRelationship = "   "
@@ -73,7 +73,7 @@ class CustomRelationshipTest {
         assertFalse(c.nextTopic(key.copy(customRelationship = "相亲对象")))
         assertFalse(c.acceptTopics(context, topics, key, null))
         assertTrue(c.acceptTopics(context, topics, key.copy(customRelationship = "相亲对象"), null))
-        assertEquals("相亲对象", ReplyComposition(c.result).customRelationship)
+        assertEquals("相亲对象", ReplyComposition(c.result, ReplyIdentitySetting(c.result!!.relationship, c.result!!.customRelationship)).customRelationship)
         assertEquals(1, c.result!!.topics!!.shownCount)
     }
 

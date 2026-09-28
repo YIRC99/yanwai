@@ -8,13 +8,13 @@ data class RememberedReply(val context: ReplyContext, val suggestion: ReplySugge
 /** Successful replies only. Never persisted, logged, or shared across conversations. */
 class ReplyHistory(private val capacity: Int = 12) {
     init { require(capacity > 0) }
-    private val replies = LinkedHashMap<String, RememberedReply>(capacity, 0.75f, true)
-    fun remember(reply: RememberedReply) {
-        replies[reply.context.talker] = reply
+    private val replies = LinkedHashMap<Pair<String, String>, RememberedReply>(capacity, 0.75f, true)
+    fun remember(reply: RememberedReply, accountScope: String = "") {
+        replies[accountScope to reply.context.talker] = reply
         while (replies.size > capacity) replies.remove(replies.keys.first())
     }
-    fun recall(talker: String, focusMessageId: Long? = null): RememberedReply? =
-        replies[talker]?.takeIf { focusMessageId == null || it.focusMessageId == focusMessageId }
+    fun recall(talker: String, focusMessageId: Long? = null, accountScope: String = ""): RememberedReply? =
+        replies[accountScope to talker]?.takeIf { focusMessageId == null || it.focusMessageId == focusMessageId }
     fun clear() { replies.clear() }
     companion object { val process = ReplyHistory() }
 }

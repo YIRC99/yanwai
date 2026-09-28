@@ -1,9 +1,9 @@
 package dev.jev.wechatmood.reply
 
 /** Local editor state. Opening, selecting and changing roles never initiate a request. */
-class ReplyComposition(remembered: RememberedReply? = null) {
-    var relationship = remembered?.relationship ?: ReplyRelationship.UNSPECIFIED
-    var customRelationship = remembered?.customRelationship.orEmpty()
+class ReplyComposition(remembered: RememberedReply? = null, identity: ReplyIdentitySetting = ReplyIdentitySetting()) {
+    var relationship = identity.relationship
+    var customRelationship = identity.customText
     val activeCustomRelationship: String get() = relationship.customValue(customRelationship)
     val hasValidRelationship: Boolean get() = relationship != ReplyRelationship.OTHER || activeCustomRelationship.isNotBlank()
     var historyLimit = remembered?.context?.requestedMessages ?: ReplyContext.MAX_MESSAGES

@@ -24,6 +24,7 @@ class SettingsProvider : ContentProvider() {
             throw SecurityException("Caller is not allowed: uid=$caller")
         }
         return when (method) {
+            "reply_identity_get", "reply_identity_put" -> ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
             "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
             "config" -> snapshot(ctx)
             "report" -> {
