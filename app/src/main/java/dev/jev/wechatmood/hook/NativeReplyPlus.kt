@@ -22,6 +22,7 @@ import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.reply.ReplyPlusItems
 import dev.jev.wechatmood.reply.ReplyPlusLabels
 import dev.jev.wechatmood.reply.ReplyPlusOwnership
+import dev.jev.wechatmood.reply.ReplyPlusRebuildGuard
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -37,7 +38,7 @@ internal object NativeReplyPlus {
     private val ownership = ReplyPlusOwnership()
     private var installed = false
     private val replyViews = WeakHashMap<View, Boolean>()
-    private val blockedPanels = WeakHashMap<Any, Boolean>()
+    private val rebuildGuard = ReplyPlusRebuildGuard()
     private val reportedPanels = WeakHashMap<Any, Boolean>()
 
     private fun owns(item: Any?): Boolean = ownership.owns(item)
@@ -62,7 +63,7 @@ internal object NativeReplyPlus {
         }
     }
 
-    private data class Build(val native: ArrayList<Any>?, val expected: List<Any>)
+    private data class Build(val expected: List<Any>)
 
     @Synchronized fun install(context: Context) {
         if (installed) return
@@ -115,7 +116,8 @@ internal object NativeReplyPlus {
             hooks += XposedBridge.hookMethod(c.rebuild, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val panel = param.args[0] ?: return
-                    if (blockedPanels.containsKey(panel)) return
+                    if (!rebuildGuard.begin(panel)) return
+                    param.setObjectExtra("${KEY}_active", true)
                     runCatching {
                         if (c.width.getInt(panel) <= 0 || c.height.getInt(panel) <= 0) return
                         val config = c.panelConfig.get(panel) ?: return
@@ -132,28 +134,42 @@ internal object NativeReplyPlus {
                             return
                         }
                         val items = ReplyPlusItems.appendOnce(original, ::owns, c::newItem)
-                        val native = raw?.let { ArrayList(original.filterNot(::owns)) }
                         c.setItems.invoke(panel, items)
-                        param.setObjectExtra(KEY, Build(native, other + items))
+                        param.setObjectExtra(KEY, Build(other + items))
                     }.onFailure { MoodLog.e("REPLY_PLUS_SKIP", it) }
                 }
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    val build = param.getObjectExtra(KEY) as? Build ?: return
+                    if (param.getObjectExtra("${KEY}_active") != true) return
                     val panel = param.args[0]
-                    val verified = !param.hasThrowable() && runCatching { verify(c, panel, build) }.getOrDefault(false)
-                    if (verified) {
-                        if (reportedPanels.put(panel, true) == null) {
-                            MoodLog.i("REPLY_PLUS_ATTACHED total=${c.totalCount.getInt(panel)} pages=${(c.grids.get(panel) as List<*>).size}")
+                    var unsafe = false
+                    try {
+                        val build = param.getObjectExtra(KEY) as? Build ?: return
+                        val mismatch = if (param.hasThrowable()) {
+                            MoodLog.e("REPLY_PLUS_HOST_REBUILD_FAILED", param.throwable)
+                            "host_exception"
+                        } else runCatching { mismatch(c, panel, build) }.getOrElse {
+                            MoodLog.e("REPLY_PLUS_VERIFY_FAILED", it)
+                            "verify_exception"
                         }
-                        return
+                        if (mismatch == null) {
+                            if (reportedPanels.put(panel, true) == null) {
+                                MoodLog.i("REPLY_PLUS_ATTACHED total=${c.totalCount.getInt(panel)} pages=${(c.grids.get(panel) as List<*>).size}")
+                            }
+                            return
+                        }
+                        reportedPanels.remove(panel)
+                        // Keep the guard active through rollback, including nested native callbacks.
+                        // Read current native data so a refresh during rebuild is not overwritten.
+                        val restored = runCatching {
+                            val current = c.dynamicItems.get(c.panelConfig.get(panel)) as? ArrayList<*>
+                            c.setItems.invoke(panel, current?.let { ArrayList(it.filterNot(::owns)) })
+                            param.result = XposedBridge.invokeOriginalMethod(c.rebuild, null, arrayOf(panel))
+                        }.onFailure { MoodLog.e("REPLY_PLUS_ROLLBACK_FAILED", it) }.isSuccess
+                        unsafe = !restored
+                        MoodLog.w("REPLY_PLUS_SKIPPED reason=$mismatch restored=$restored retryOnHostRebuild=$restored")
+                    } finally {
+                        rebuildGuard.finish(panel, unsafe)
                     }
-                    blockedPanels[panel] = true
-                    // Rebuild once with the exact native item order, never leave a half-added item.
-                    runCatching {
-                        c.setItems.invoke(panel, build.native)
-                        param.result = XposedBridge.invokeOriginalMethod(c.rebuild, null, arrayOf(panel))
-                    }.onFailure { MoodLog.e("REPLY_PLUS_ROLLBACK_FAILED", it) }
-                    MoodLog.w("REPLY_PLUS_SKIPPED native grid contract mismatch; panel disabled for this instance")
                 }
             })
             installed = true
@@ -164,21 +180,33 @@ internal object NativeReplyPlus {
         }
     }
 
-    private fun verify(c: Contract, panel: Any, build: Build): Boolean {
-        val grids = c.grids.get(panel) as? List<*> ?: return false
-        if (grids.isEmpty()) return false
+    private fun mismatch(c: Contract, panel: Any, build: Build): String? {
+        val grids = c.grids.get(panel) as? List<*> ?: return "missing_grids"
+        if (grids.isEmpty()) return "empty_grids"
         val actual = mutableListOf<Any>()
+        val pageCounts = mutableListOf<Int>()
         var count = 0
-        for (view in grids) {
-            val grid = view as? GridView ?: return false
-            val adapter = grid.adapter ?: return false
-            if (adapter.javaClass != c.getView.declaringClass || adapter.count !in 1..1000) return false
-            count += adapter.count
-            for (position in 0 until adapter.count) adapter.getItem(position)?.let(actual::add)
+        for ((page, view) in grids.withIndex()) {
+            val grid = view as? GridView ?: return "grid_type page=$page"
+            val adapter = grid.adapter ?: return "missing_adapter page=$page"
+            if (adapter.javaClass != c.getView.declaringClass) return "adapter_type page=$page class=${adapter.javaClass.name}"
+            val size = adapter.count
+            if (size !in 1..1000) return "page_count page=$page count=$size"
+            pageCounts += size
+            count += size
+            for (position in 0 until size) adapter.getItem(position)?.let(actual::add)
         }
-        return count == c.totalCount.getInt(panel) && count == c.localCount.getInt(panel) + build.expected.size &&
+        val total = c.totalCount.getInt(panel)
+        val local = c.localCount.getInt(panel)
+        val valid = count == total && count == local + build.expected.size &&
             actual.size == build.expected.size && actual.indices.all { actual[it] === build.expected[it] } &&
             actual.count(::owns) == 1 && owns(actual.lastOrNull())
+        if (valid) return null
+        val firstMismatch = (0 until maxOf(actual.size, build.expected.size)).firstOrNull {
+            actual.getOrNull(it) !== build.expected.getOrNull(it)
+        }
+        return "mapping total=$total local=$local pages=$pageCounts expected=${build.expected.size} " +
+            "actual=${actual.size} owned=${actual.count(::owns)} firstMismatch=$firstMismatch"
     }
 
     private fun resolve(loader: ClassLoader): Contract {
