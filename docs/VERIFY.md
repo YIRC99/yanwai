@@ -1,3 +1,13 @@
+# 2.1.10 加号面板安全回退（2026-09-28）
+
+- 删除 `ReplyPlusEntry` 及 `ReplyHostUi` 中的创建、刷新与清理接线，停止重挂载、挤压原生面板内容。保留标题与消息菜单的回复入口，生成流程不变。调查覆盖测量参数、触摸区域、700ms 扫描时机和隐藏/复用分支；完整点击失效原因仍待真机确认。原生新增格子尚未实现，缺少当前版本功能数据、分页和点击映射证据，详见 [调查记录](REPLY_PLUS_RESEARCH.md)。
+- 新增 3 项源码接线回归；旧实现先出现 2 项预期失败，回退后全部通过。全量离线测试 293 项，0 failures/errors/skipped；Debug 构建成功。命令：`& .\tools\gradle.ps1 :app:testDebugUnitTest :app:assembleDebug --offline --no-daemon '-Pkotlin.compiler.execution.strategy=in-process'`。现有 SDK/AGP 兼容提示及弃用警告未扩展处理；首次调用因 PowerShell 拆分未加引号的参数失败，改正后正常执行。
+- 用 `tools/bump-version.ps1` 升为 2.1.10 / 43，并启用 `.githooks` 版本提交守卫。`aapt dump badging` 确认 Debug APK 的包名 `dev.jev.wechatmood`、版本 2.1.10 / 43 及 debuggable 标记；产物 `app/build/outputs/apk/debug/app-debug.apk`，18,638,780 字节，SHA-256 `5b961ae93021f5cc3de95e4d3c0efc9b2f012f36659078f49c1d9439a7152fdd`。
+- 未安装、未操作手机、未调用真实模型。手机需覆盖安装并彻底重启微信，再验证反复展开、翻页、键盘/表情及联系人切换后的原生按钮与保留入口；本版加号内不应出现回复横条或新增格子。离线接线测试不能替代宿主触摸验收。
+- 构建已退出，进程检查未发现项目服务或 Gradle/Kotlin 编译进程残留。保留原有未跟踪文件 `docs/releases/2.1.1.md`，本轮仅范围内本地提交，不推送、不发布。
+
+---
+
 # 2.1.7 发布准备（2026-09-27）
 
 - 版本统一提升至 2.1.7 / 40，补齐本轮正式 Release 说明并更新 README 入口，汇总双线路分析、紧凑彩色情绪圆环、零概率隐藏、滚动稳定、引用文字回复及仅复制操作。

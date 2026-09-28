@@ -32,7 +32,6 @@ class ReplyHostUi(private val activity: Activity) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val session = ReplySession()
     private val history = ReplyHistory.process
-    private val plusEntry = ReplyPlusEntry(activity) { open() }
     private var job: Job? = null
     private var historyJob: Job? = null
     private var talker: String? = null
@@ -44,7 +43,6 @@ class ReplyHostUi(private val activity: Activity) {
     fun update(currentTalker: String?) {
         if (talker != currentTalker) { hide(); talker = currentTalker }
         if (currentTalker == null) return
-        runCatching { plusEntry.update(footer()) }.onFailure { MoodLog.w("REPLY_PLUS_UPDATE_FAILED ${it.javaClass.simpleName}") }
         if (dialog?.isShowing == true) {
             if ((!ModulePrefs.replyConsent || !ModulePrefs.replySettings().isConfigured) &&
                 (job?.isActive == true || historyJob?.isActive == true)) {
@@ -524,7 +522,7 @@ class ReplyHostUi(private val activity: Activity) {
     }.onFailure { toast("请从桌面打开言外，进入回复建议") }
     fun hide() {
         dialog?.dismiss(); job?.cancel(); historyJob?.cancel(); session.cancel()
-        plusEntry.clear(); talker = null
+        talker = null
     }
     fun dispose() { hide(); scope.cancel() }
     private fun views(root: View): List<View> = buildList {
