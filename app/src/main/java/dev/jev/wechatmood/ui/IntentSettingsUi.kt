@@ -14,9 +14,11 @@ import dev.jev.wechatmood.reply.*
 import kotlinx.coroutines.*
 
 class IntentSettingsUi(private val activity: AppCompatActivity, private val binding: IntentSettingsBinding,
-    private val scope: CoroutineScope, openUrl: (String) -> Unit, private val routeChanged: (IntentRoute) -> Unit) {
+    private val scope: CoroutineScope, openUrl: (String) -> Unit,
+    private val probeChanged: (ProbeState) -> Unit, private val routeChanged: (EmotionSource) -> Unit) {
     private val prefs = activity.getSharedPreferences(ModulePrefs.FILE_NAME, Context.MODE_PRIVATE)
     private var route = IntentRoute.resolve(prefs.getString(IntentSettings.KEY_ROUTE, null))
+    private var emotion = EmotionSettings.load { prefs.getString(it, null) }
     private var provider = ReplyProvider.resolve(prefs.getString(IntentProfiles.KEY_PROVIDER, null),
         prefs.getString(IntentSettings.KEY_ENDPOINT, "").orEmpty()).let {
         if (prefs.getString(IntentSettings.KEY_ENDPOINT, "").isNullOrBlank()) ReplyProvider.DEEPSEEK else it
@@ -46,9 +48,19 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
         }
         binding.provider.setSimpleItems(ReplyProvider.entries.map { it.label }.toTypedArray())
         showProvider()
+        binding.emotionGroup.check(if (emotion.source == EmotionSource.LLM) R.id.emotionLlm else R.id.emotionJev)
+        binding.emotionConfigGroup.check(if (emotion.reuseReply) R.id.useReplyConfig else R.id.useAnalysisConfig)
         binding.routeGroup.check(if (route == IntentRoute.LLM) R.id.routeLlm else R.id.routeJev)
         showRoute()
-        status("当前：${route.label}" + if (route == IntentRoute.LLM) " · 尚未检测" else "", R.color.status_neutral)
+        status("当前情绪来源：${emotion.source.label} · 尚未检测", R.color.status_neutral)
+        binding.emotionGroup.setOnCheckedChangeListener { _, checked ->
+            emotion = emotion.copy(source = if (checked == R.id.emotionLlm) EmotionSource.LLM else EmotionSource.JEV)
+            showRoute(); dirty()
+        }
+        binding.emotionConfigGroup.setOnCheckedChangeListener { _, checked ->
+            emotion = emotion.copy(reuseReply = checked == R.id.useReplyConfig)
+            showRoute(); dirty()
+        }
         binding.routeGroup.setOnCheckedChangeListener { _, checked ->
             route = if (checked == R.id.routeLlm) IntentRoute.LLM else IntentRoute.JEV
             showRoute(); dirty()
@@ -72,18 +84,29 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
             binding.model.requestFocus(); binding.model.showDropDown()
         }
         binding.saveIntent.setOnClickListener {
-            if (save()) result(if (route == IntentRoute.JEV) "已使用 JEV 决策模型。" else
+            if (save()) result(if (emotion.source == EmotionSource.LLM) "已使用 LLM 完整分析，不调用 JEV。" else if (route == IntentRoute.JEV) "已使用 JEV 决策模型。" else
                 "已开启智能分析；情绪概率仍使用 JEV。可分别检测两种连接。")
         }
         binding.testIntent.setOnClickListener { test() }
+        binding.testSelected.setOnClickListener { test() }
     }
 
     private fun showRoute() {
-        binding.llmPanel.visibility = if (route == IntentRoute.LLM) View.VISIBLE else View.GONE
+        val pure = emotion.source == EmotionSource.LLM
+        binding.emotionConfigGroup.visibility = if (pure) View.VISIBLE else View.GONE
+        binding.intentRouteTitle.visibility = if (pure) View.GONE else View.VISIBLE
+        binding.routeGroup.visibility = if (pure) View.GONE else View.VISIBLE
+        binding.routeHint.visibility = if (pure) View.GONE else View.VISIBLE
+        binding.testSelected.visibility = if (pure) View.VISIBLE else View.GONE
+        binding.testIntent.visibility = if (pure) View.GONE else View.VISIBLE
+        binding.emotionHint.text = if (pure) "一次请求生成情绪标签、意图解析、可能在意和情绪倾向，不需要 JEV。情绪是定性参考，不是概率。" +
+            if (emotion.reuseReply) "\n复用回复配置，更改回复模型也会影响此处；不会修改回复设置。" else "\n复用已有分析配置，也可在下方修改。"
+            else "保留 JEV 情绪判断及原有意图解读方式。"
+        binding.llmPanel.visibility = if (pure && !emotion.reuseReply || !pure && route == IntentRoute.LLM) View.VISIBLE else View.GONE
         binding.routeHint.text = if (route == IntentRoute.JEV)
             "从内置选项中判断意图，响应较快；不会自由生成对方在意的点。下方只需连接 JEV。" else
             "结合前文解释意图、可能在意的点和情绪倾向。等待更久，解读也可能有误；先显示 JEV 情绪，再补充解读。"
-        routeChanged(route)
+        routeChanged(emotion.source)
     }
 
     private fun showProvider() {
@@ -104,6 +127,7 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
     }
 
     private fun dirty() {
+        probeChanged(ProbeState.UNTESTED)
         status("有未保存修改 · 保存后用于微信", R.color.status_warning)
         binding.intentResult.visibility = View.GONE
     }
@@ -121,16 +145,24 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
     }
 
     private fun save(): Boolean {
-        val values = if (route == IntentRoute.LLM) {
+        val pure = emotion.source == EmotionSource.LLM
+        if (pure && emotion.reuseReply && !ModulePrefs.replySettings().isConfigured) {
+            result("「帮我回」尚未配置模型，请先配置或改用下方分析配置。", true); return false
+        }
+        val values = if (pure && !emotion.reuseReply || !pure && route == IntentRoute.LLM) {
             val settings = read() ?: return false
             IntentProfiles.valuesToSave(provider, settings) { prefs.getString(it, null) }
         } else emptyMap()
         if (!SettingsProvider.save(activity) {
             putString(IntentSettings.KEY_ROUTE, route.id)
+            putString(EmotionSettings.KEY_SOURCE, emotion.source.id)
+            putString(EmotionSettings.KEY_REUSE_REPLY, emotion.reuseReply.toString())
             values.forEach { (key, value) -> putString(key, value) }
         }) { result("保存失败，请重试", true); return false }
         ModulePrefs.reload(force = true)
-        status("已保存：${route.label}" + if (route == IntentRoute.LLM) " · 尚未检测" else "", R.color.status_neutral)
+        probeChanged(ProbeState.UNTESTED)
+        status("已保存情绪来源：${emotion.source.label} · 尚未检测", R.color.status_neutral)
+        routeChanged(emotion.source)
         return true
     }
 
@@ -158,25 +190,47 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
 
     private fun test() {
         if (busy) return
-        val settings = read() ?: return
         if (!save()) return
+        val settings = if (emotion.source == EmotionSource.LLM && emotion.reuseReply) ModulePrefs.replySettings() else read() ?: return
+        val snapshot = requireNotNull(ModulePrefs.analysisSettings())
         setBusy(true)
-        status("正在检测意图解读…", R.color.status_neutral)
+        if (emotion.source == EmotionSource.LLM) probeChanged(ProbeState.CHECKING)
+        status("正在检测${if (emotion.source == EmotionSource.LLM) "LLM 完整分析" else "意图解读"}…", R.color.status_neutral)
         result("使用示例聊天检测，不读取微信消息。")
         scope.launch {
             try {
                 val input = AnalysisInput("睡吧睡吧", "sample", listOf(ContextMessage("我", "累了一天，终于躺下了。")))
-                val reading = ReplyHttpClient().request(settings, IntentProtocol.payload(input, settings), IntentProtocol::parse)
-                status("意图模型检测通过", R.color.status_success)
-                result("示例解读\n\n${reading.display()}\n\n此检测仅验证 LLM；情绪的 JEV 连接请在下方单独检测。")
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { status("意图检测失败", R.color.status_error); result(e.message ?: "检测失败，请重试", true) }
+                if (emotion.source == EmotionSource.LLM) {
+                    val mood = dev.jev.wechatmood.analysis.AnalysisRouter.analyze(input, snapshot,
+                        { error("纯 LLM 检测不应调用 JEV") }, { config, payload -> ReplyHttpClient().request(config, payload) { it } })
+                    if (ModulePrefs.analysisSettings()?.sameAnalysis(snapshot) != true) return@launch
+                    status("LLM 完整分析检测通过", R.color.status_success)
+                    probeChanged(ProbeState.PASSED)
+                    result("${mood.detail}\n\n${dev.jev.wechatmood.analysis.AnalysisThinking.description(settings)}")
+                } else {
+                    val reading = ReplyHttpClient().request(settings, IntentProtocol.payload(input, settings), IntentProtocol::parse)
+                    if (ModulePrefs.analysisSettings()?.sameAnalysis(snapshot) != true) return@launch
+                    status("意图模型检测通过", R.color.status_success)
+                    result("示例解读\n\n${reading.display()}\n\n此检测仅验证 LLM；情绪的 JEV 连接请在下方单独检测。")
+                }
+            } catch (e: CancellationException) {
+                if (ModulePrefs.analysisSettings()?.sameAnalysis(snapshot) == true && emotion.source == EmotionSource.LLM)
+                    probeChanged(ProbeState.UNTESTED)
+                throw e
+            }
+            catch (e: Exception) {
+                if (ModulePrefs.analysisSettings()?.sameAnalysis(snapshot) != true) return@launch
+                if (emotion.source == EmotionSource.LLM) probeChanged(ProbeState.FAILED)
+                status("${if (emotion.source == EmotionSource.LLM) "LLM 分析" else "意图"}检测失败", R.color.status_error)
+                result(e.message ?: "检测失败，请重试", true)
+            }
             finally { setBusy(false) }
         }
     }
     private fun setBusy(value: Boolean) {
         busy = value
-        listOf(binding.routeJev, binding.routeLlm, binding.providerLayout, binding.endpointLayout, binding.keyLayout,
+        listOf(binding.emotionJev, binding.emotionLlm, binding.useAnalysisConfig, binding.useReplyConfig, binding.testSelected,
+            binding.routeJev, binding.routeLlm, binding.providerLayout, binding.endpointLayout, binding.keyLayout,
             binding.modelLayout, binding.testIntent, binding.saveIntent, binding.fetchModels, binding.referenceModels)
             .forEach { it.isEnabled = !value }
         binding.progressIntent.visibility = if (value) View.VISIBLE else View.GONE

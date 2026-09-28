@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var selectedProvider = JevProvider.TYPESAFE
     private var bindingInputs = false
     private var probeState = ProbeState.UNTESTED
+    private var overviewFingerprint: String? = null
     private val refreshAfterSettings = Runnable { if (!isFinishing && !isDestroyed) refresh() }
     private val stateListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         // Saving one profile updates several keys. Render once after the entire edit.
@@ -98,8 +99,14 @@ class MainActivity : AppCompatActivity() {
         binding.inputProvider.setSimpleItems(JevProvider.entries.map { it.label }.toTypedArray())
         showProvider()
         binding.toggleJevConfig.setOnClickListener { showJevConfig(binding.jevConfigPanel.visibility != View.VISIBLE) }
-        dev.jev.wechatmood.ui.IntentSettingsUi(this, binding.intentSettings, uiScope, ::openHelp) { route ->
-            showJevConfig(route == dev.jev.wechatmood.core.IntentRoute.JEV || !ModulePrefs.apiSettings().isConfigured)
+        dev.jev.wechatmood.ui.IntentSettingsUi(this, binding.intentSettings, uiScope, ::openHelp,
+            { state -> probeState = state; renderOverview() }) { source ->
+            val pure = source == dev.jev.wechatmood.core.EmotionSource.LLM
+            binding.toggleJevConfig.visibility = if (pure) View.GONE else View.VISIBLE
+            binding.modelSection.visibility = if (pure) View.GONE else View.VISIBLE
+            binding.jevSectionHint.visibility = if (pure) View.GONE else View.VISIBLE
+            showJevConfig(!pure)
+            renderOverview()
         }
         binding.inputProvider.setOnItemClickListener { _, _, position, _ ->
             drafts[selectedProvider] = ApiDraft(binding.inputApiBase.text.toString(), binding.inputApiKey.text.toString(),
@@ -302,12 +309,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun testModel() {
+        if (ModulePrefs.analysisSettings()?.emotion?.source == dev.jev.wechatmood.core.EmotionSource.LLM) {
+            scrollTo(binding.intentSettings.root)
+            binding.intentSettings.testSelected.performClick()
+            return
+        }
         if (!saveApiSettings()) return
         if (ModulePrefs.apiKey.isBlank()) {
             binding.layoutApiKey.error = "请先填写 API Key"
             binding.inputApiKey.requestFocus()
             return
         }
+        val testedSettings = ModulePrefs.analysisSettings() ?: return
         binding.buttonTestModel.isEnabled = false
         binding.buttonSaveApi.isEnabled = false
         binding.layoutProvider.isEnabled = false
@@ -324,11 +337,13 @@ class MainActivity : AppCompatActivity() {
                 val mood = SignalAnalyzer.requestMood("这还差不多。", listOf(
                     dev.jev.wechatmood.core.ContextMessage("对方", "你是不是忘了周末吃饭的事？"),
                     dev.jev.wechatmood.core.ContextMessage("我", "记得，这次我来安排，明天把餐厅和时间告诉你。")))
+                if (ModulePrefs.analysisSettings()?.sameAnalysis(testedSettings) != true) return@launch
                 probeState = ProbeState.PASSED
-                showResult("${selectedProvider.label} 检测通过\n${mood.detail}\n\n模型连接正常，微信模块是否生效请查看下方运行记录。", StatusTone.SUCCESS)
+                showResult("${testedSettings.emotion.source.label} 检测通过\n${mood.detail}\n\n模型连接正常，微信模块是否生效请查看下方运行记录。", StatusTone.SUCCESS)
                 MoodLog.i("模型连接检测成功")
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
+                if (ModulePrefs.analysisSettings()?.sameAnalysis(testedSettings) != true) return@launch
                 probeState = ProbeState.FAILED
                 showResult("检测失败\n${e.message}\n\n修正配置或检查网络后，点击「重试连接检测」。", StatusTone.ERROR)
                 MoodLog.e("模型连接检测失败：${e.message}")
@@ -347,6 +362,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun draftDirty(): Boolean {
+        if (ModulePrefs.analysisSettings()?.emotion?.source == dev.jev.wechatmood.core.EmotionSource.LLM) return false
         val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
         val draft = runCatching { ApiSettings.fromInput(binding.inputApiBase.text.toString(),
             binding.inputApiKey.text.toString(), selectedProvider.id, binding.inputApiModel.text.toString()) }.getOrNull() ?: return true
@@ -357,11 +373,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun overview() = SetupPresenter.resolve(
-        !getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE).getString(ModulePrefs.KEY_API_KEY, "").isNullOrBlank(),
+        ModulePrefs.analysisSettings()?.canAnalyze == true,
         draftDirty(), probeState,
         getSharedPreferences(SettingsProvider.RUNTIME_FILE, MODE_PRIVATE).getLong("last_seen", 0), System.currentTimeMillis())
 
     private fun renderOverview() {
+        val fingerprint = ModulePrefs.analysisSettings()?.analysisFingerprint()
+        if (overviewFingerprint != fingerprint) {
+            overviewFingerprint = fingerprint
+            probeState = ProbeState.UNTESTED
+        }
         val state = overview()
         binding.textOverviewTitle.text = state.title
         binding.textOverviewDescription.text = state.description
@@ -385,6 +406,11 @@ class MainActivity : AppCompatActivity() {
         }
         binding.buttonJumpModel.visibility = if (state.action == SetupAction.CONFIGURE || state.action == SetupAction.TEST) View.GONE else View.VISIBLE
         binding.textDraftStatus.visibility = if (draftDirty()) View.VISIBLE else View.GONE
+        if (ModulePrefs.analysisSettings()?.emotion?.source == dev.jev.wechatmood.core.EmotionSource.LLM) {
+            binding.textModelStatus.text = "当前情绪来源：LLM 大模型，无需 JEV 配置。"
+            binding.textModelBadge.text = "LLM · ${state.modelLabel}"
+            binding.textOverviewDescription.text = "在下方选择并检测 LLM 分析模型；情绪与三项解读一起生成。"
+        }
         tintStatus(binding.textDraftStatus, StatusTone.WARNING)
     }
 
@@ -406,6 +432,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollTo(view: View) {
+        if (view == binding.modelSection && ModulePrefs.analysisSettings()?.emotion?.source == dev.jev.wechatmood.core.EmotionSource.LLM) {
+            scrollTo(binding.intentSettings.root); return
+        }
         if (view == binding.modelSection || view == binding.layoutApiKey || view == binding.inputApiKey || view == binding.textTestResult) showJevConfig(true)
         binding.pageScroll.post {
             val content = binding.pageScroll.getChildAt(0) as android.view.ViewGroup

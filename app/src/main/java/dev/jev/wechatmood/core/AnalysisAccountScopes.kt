@@ -18,7 +18,8 @@ class AnalysisAccountScopes(private val dispatch: (() -> Unit) -> Unit,
     }
 
     fun scope(input: AnalysisInput): String {
-        val identity = input.copy(context = emptyList(), coverage = ContextCoverage(), accountScope = "").key
+        val identity = input.copy(context = emptyList(), coverage = ContextCoverage(), accountScope = "",
+            background = dev.jev.wechatmood.reply.ContactBackground(), backgroundReady = true, settingsFingerprint = "").key
         val generation: String
         val revision: Long
         synchronized(this) {

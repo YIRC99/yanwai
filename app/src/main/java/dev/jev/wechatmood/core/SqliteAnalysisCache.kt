@@ -13,7 +13,7 @@ interface AnalysisCacheDatabase : Closeable {
 data class AnalysisCacheKey(val value: String) {
     companion object {
         // Bump when the meaning of analysis prompts/results changes, not for unrelated UI releases.
-        private const val FORMAT = "analysis-result-v1"
+        private const val FORMAT = "analysis-result-v2"
         fun digest(vararg values: String): String {
             val source = values.joinToString("") { "${it.length}:$it" }
             return MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8))
@@ -21,10 +21,8 @@ data class AnalysisCacheKey(val value: String) {
         }
         fun of(input: AnalysisInput, settings: RuntimeSettings): AnalysisCacheKey? {
             if (!input.accountScope.matches(Regex("[0-9a-f]{64}")) || input.messageId <= 0 || input.createdAt <= 0 || input.talker.isBlank()) return null
-            val identity = input.copy(context = emptyList(), coverage = ContextCoverage()).key
-            return AnalysisCacheKey(digest(FORMAT, identity, settings.generation,
-                settings.api.endpoint, settings.api.model, settings.api.apiKey,
-                settings.intent.route.id, settings.intent.llm.endpoint, settings.intent.llm.model, settings.intent.llm.apiKey))
+            val identity = input.key
+            return AnalysisCacheKey(digest(FORMAT, identity, settings.analysisFingerprint()))
         }
     }
 }

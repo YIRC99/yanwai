@@ -11,6 +11,7 @@ object TopicProtocol {
             .put("task", "find_topics").put("topic_count", TopicBatch.SIZE).put("calendar", time.toJson())
             .put("avoid_topics", JSONArray(previous.takeLast(TopicBatch.SIZE).map { JSONObject().put("title", it.title).put("replies", JSONArray(it.parts)) }))
         val instructions = """
+            ${ContactBackground.GUIDANCE}
             你是言外的聊天话题助手。结合近期文字聊天、用户选择的关系、草稿及 direction 中的补充背景，找 5 个不同的新话题。
             本次身份：${relationship.label}。${relationship.guidance}
             5 个话题是独立候选；每个话题里面的 replies 才是这次可依次发送的短消息。先学“我”最近聊天的用词、句长、称呼和标点。

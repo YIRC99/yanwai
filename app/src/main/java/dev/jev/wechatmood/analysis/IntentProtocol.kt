@@ -15,6 +15,7 @@ object IntentProtocol {
     fun payload(input: AnalysisInput, settings: ReplySettings): JSONObject = JSONObject()
         .put("model", settings.model).put("stream", false).put("messages", JSONArray()
             .put(JSONObject().put("role", "system").put("content", """
+                ${dev.jev.wechatmood.reply.ContactBackground.GUIDANCE}
                 你是言外的聊天解读助手。只解读 message 对应的当前消息，context 是从旧到新的前文。
                 quoted_message 是被引用的旧内容，只作理解回复的依据；不可当作当前发送者的新发言或情绪，也不代表紧邻的上一轮。引用内容为空时不猜测。
                 区分发送者，依据具体原话说明可能的意图、在意的点和文字表达的情绪倾向。
@@ -28,7 +29,9 @@ object IntentProtocol {
                 只返回 JSON：{"intent":"可能的意图及依据","concern":"可能在意的点及依据，或无法判断","tone":"文字情绪倾向及依据"}。
                 不输出 Markdown 或思考过程。
             """.trimIndent()))
-            .put(JSONObject().put("role", "user").put("content", AnalysisState.build(input).toString())))
+            .put(JSONObject().put("role", "user").put("content", AnalysisState.build(input)
+                .put("contact_background", JSONObject(input.background.encode())).toString())))
+        .let { AnalysisThinking.apply(settings, it) }
 
     fun parse(body: String): IntentReading = try {
         val result = ReplyProtocol.responseObject(body)

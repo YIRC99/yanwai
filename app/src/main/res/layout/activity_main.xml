@@ -37,7 +37,7 @@
                 app:cardElevation="0dp" app:strokeWidth="1dp" app:strokeColor="@color/outline_subtle">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:padding="20dp">
-                    <TextView style="@style/Yanwai.Caption" android:text="情绪连接 · JEV"
+                    <TextView style="@style/Yanwai.Caption" android:text="聊天分析连接"
                         android:textColor="@color/brand_primary" android:fontFamily="sans-serif-medium" />
                     <TextView android:id="@+id/textOverviewTitle" style="@style/Yanwai.Body"
                         android:layout_marginTop="10dp" android:textSize="26sp" android:fontFamily="sans-serif-medium"
@@ -48,7 +48,7 @@
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="20dp">
                         <TextView style="@style/Yanwai.Body" android:layout_width="0dp" android:layout_weight="1"
-                            android:text="JEV 连接" android:textColor="@color/text_primary" />
+                            android:text="分析模型" android:textColor="@color/text_primary" />
                         <TextView android:id="@+id/textModelBadge" style="@style/Yanwai.Badge" android:text="未配置" />
                     </LinearLayout>
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -71,7 +71,7 @@
                 android:text="联系人和群聊默认关闭。右上角「分析」开启自动分析，本地会记住选择。也可长按对方文字，选择「翻译意图」单独分析。主动关闭顶部开关会隐藏当前聊天的全部结果，之后仍可重新长按单条分析。" />
 
             <TextView android:id="@+id/modelSection" style="@style/Yanwai.Section" android:text="情绪模型 · JEV" />
-            <TextView style="@style/Yanwai.Caption" android:text="两种意图线路都需要 JEV 提供情绪概率。已有配置可直接使用，需要修改时再展开。" />
+            <TextView android:id="@+id/jevSectionHint" style="@style/Yanwai.Caption" android:text="仅选择 JEV 情绪来源时使用。已有配置继续保留。" />
             <com.google.android.material.button.MaterialButton android:id="@+id/toggleJevConfig"
                 style="@style/Yanwai.Button.Text" android:text="展开 JEV 配置" />
             <LinearLayout android:id="@+id/jevConfigPanel" android:layout_width="match_parent"
@@ -140,7 +140,7 @@
                 android:layout_marginTop="12dp" android:padding="16dp" android:background="@drawable/status_pill"
                 android:accessibilityLiveRegion="polite" android:visibility="gone" />
             <TextView style="@style/Yanwai.Caption" android:layout_marginTop="12dp"
-                android:text="分析会将消息和相关前文发送给 JEV。支持文字与微信语音转写，跳过其他媒体及过长文字，不会自动回复。" />
+                android:text="分析会将消息、相关前文与时间发送给所选服务；LLM 分析还会参考对方背景。支持文字与微信语音转写，不会自动回复。" />
 
             </LinearLayout>
 

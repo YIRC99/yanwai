@@ -6,10 +6,16 @@ class RuntimeSettings(val revision: Long,
     val reply: dev.jev.wechatmood.reply.ReplySettings = dev.jev.wechatmood.reply.ReplySettings.empty(),
     val replyConsent: Boolean = false,
     val intent: IntentSettings = IntentSettings(),
-    val cardDisplay: CardDisplaySettings = CardDisplaySettings()) {
-    val canAnalyze get() = api.isConfigured
-    fun sameAnalysis(other: RuntimeSettings) = generation == other.generation && api.endpoint == other.api.endpoint &&
-        api.apiKey == other.api.apiKey && api.model == other.api.model && intent.sameAs(other.intent)
+    val cardDisplay: CardDisplaySettings = CardDisplaySettings(),
+    val emotion: EmotionSettings = EmotionSettings()) {
+    val emotionLlm get() = if (emotion.reuseReply) reply else intent.llm
+    val canAnalyze get() = if (emotion.source == EmotionSource.LLM) emotionLlm.isConfigured else api.isConfigured
+    private val fingerprint: String by lazy { if (emotion.source == EmotionSource.LLM)
+        AnalysisCacheKey.digest("llm-emotion-v1", generation, emotionLlm.endpoint, emotionLlm.apiKey, emotionLlm.model)
+        else AnalysisCacheKey.digest("jev-intent-v2", generation, api.endpoint, api.apiKey, api.model, intent.route.id,
+            intent.llm.endpoint, intent.llm.apiKey, intent.llm.model) }
+    fun analysisFingerprint(): String = fingerprint
+    fun sameAnalysis(other: RuntimeSettings) = analysisFingerprint() == other.analysisFingerprint()
 }
 
 class SettingsSession(private val onAnalysisChanged: () -> Unit = {}) {

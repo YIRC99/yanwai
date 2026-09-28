@@ -74,6 +74,7 @@ class ReplyHostUi(private val activity: Activity) {
         if (MessageSniffer.currentReplyTalker() != selectedTalker) return false
         if (dialog?.isShowing == true || openingJob?.isActive == true) return true
         val epoch = ReplyDatabaseHistory.pendingAccountScope()
+        val generation = ModulePrefs.analysisSettings()?.generation
         ownerEpoch = epoch
         val live = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
             toast(it.message ?: "读取聊天失败"); return true
@@ -84,15 +85,18 @@ class ReplyHostUi(private val activity: Activity) {
                 val account = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(live) }
                 val owner = ReplyIdentityOwner(epoch, account, selectedTalker)
                 val identity = owner.key?.let { ReplyIdentityBridge.load(activity, it) } ?: ReplyIdentitySetting()
+                val background = owner.key?.let { ReplyIdentityBridge.loadBackground(activity, it) } ?: ContactBackground()
                 val preferredLimit = ReplyLimitBridge.load(activity, account)
                 ensureActive()
+                if (generation != ModulePrefs.analysisSettings()?.generation) return@launch
                 if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())) return@launch
                 val latestPage = MessageSniffer.replyContext(requireBottom = false)
                 val latestAccount = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(latestPage) }
-                if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
+                if (generation != ModulePrefs.analysisSettings()?.generation ||
+                    !owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
                     !owner.acceptsAccount(latestAccount)) return@launch
                 // All reads finish before the editor is created, so a late load cannot erase typed text.
-                openResolved(focusMessageId, live, owner, identity, preferredLimit)
+                openResolved(focusMessageId, live, owner, identity, preferredLimit, background)
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
                 if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker)
@@ -103,15 +107,15 @@ class ReplyHostUi(private val activity: Activity) {
     }
 
     private fun openResolved(focusMessageId: Long?, live: ReplyContext, owner: ReplyIdentityOwner,
-        identity: ReplyIdentitySetting, preferredLimit: Int): Boolean {
+        identity: ReplyIdentitySetting, preferredLimit: Int, contactBackground: ContactBackground): Boolean {
         val selectedTalker = owner.talker
+        val generation = ModulePrefs.analysisSettings()?.generation
         val remembered = history.recall(selectedTalker, focusMessageId, owner.historyScope)
         val group = selectedTalker.endsWith("@chatroom")
         val composition = ReplyComposition(remembered, if (group) ReplyIdentitySetting(
             remembered?.relationship ?: ReplyRelationship.UNSPECIFIED, remembered?.customRelationship.orEmpty()) else identity,
-            preferredLimit)
+            preferredLimit, contactBackground)
         val reference = ReplyHistorySelection(selectedTalker, remembered?.context?.takeIf { it.requestedMessages == preferredLimit })
-        if (remembered == null && !canGenerate()) { configure(); return true }
         // Reopening saved content must not depend on scrolling to the latest message or text input mode.
         val captured = remembered?.context ?: live
         if (captured.talker != selectedTalker) return false
@@ -130,7 +134,8 @@ class ReplyHostUi(private val activity: Activity) {
         fun line() = View(activity).apply { setBackgroundColor(theme.border) }
         val window = Dialog(activity)
         dialog = window
-        fun ownsDrawer() = window === dialog && owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())
+        fun ownsDrawer() = window === dialog && generation == ModulePrefs.analysisSettings()?.generation &&
+            owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())
         suspend fun verifyAccount(): Boolean {
             if (!ownsDrawer()) return false
             val currentPage = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrNull() ?: return false
@@ -170,6 +175,8 @@ class ReplyHostUi(private val activity: Activity) {
         roleRow.addView(rolePicker, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
         roleRow.addView(historyPicker, LinearLayout.LayoutParams(0, -2, 1.2f))
         results.addView(roleRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        val backgroundButton = action("对方背景", quiet = true).apply { visibility = if (group) View.GONE else View.VISIBLE }
+        results.addView(backgroundButton)
         val customRole = EditText(activity).apply {
             hint = "填写对方身份，如：前同事、相亲对象"
             contentDescription = "自定义对方身份，最多 ${ReplyRelationship.MAX_CUSTOM_LENGTH} 字"
@@ -183,7 +190,7 @@ class ReplyHostUi(private val activity: Activity) {
         }
         results.addView(customRole, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         val instruction = EditText(activity).apply {
-            hint = "补充想法（可选）\n回复：如“想委婉拒绝，别太正式”\n找话题：如“她喜欢摄影，10月3日公历生日，最近在准备考试”"
+            hint = "本次补充要求（可选）\n如：想委婉拒绝，别太正式；找个轻松的话题\n长期经历与偏好请填「对方背景」"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
             gravity = Gravity.TOP or Gravity.START; minLines = 2; maxLines = 4; minHeight = dp(48)
             setPadding(dp(10), dp(10), dp(10), dp(10)); background = theme.shape(theme.card, 12, theme.border)
@@ -244,12 +251,14 @@ class ReplyHostUi(private val activity: Activity) {
         var busy = false
         var failed = false
         var findingTopics = false
+        var backgroundSaving = false
         fun topicKey(current: ReplyContext, draft: String, date: String) = TopicKey(current.fingerprint, current.requestedMessages,
             composition.relationship, instruction.text.toString(), draft, date, composition.activeCustomRelationship)
         fun controls(generating: Boolean) {
             val reading = reference.loading
             val ready = reference.context
             busy = generating
+            backgroundButton.isEnabled = !backgroundSaving
             progress.showLoading(when {
                 generating && findingTopics -> "正在准备 5 个新话题…"
                 generating -> "正在根据 ${ready?.messages?.size ?: 0} 条消息生成回复…"
@@ -271,7 +280,7 @@ class ReplyHostUi(private val activity: Activity) {
             shorter.isEnabled = !generating && !reading && ready != null && composition.canUse
             shorter.visibility = if (composition.result == null || composition.result?.topics != null) View.GONE else View.VISIBLE
             val batch = composition.result?.topics
-            val currentTopicKey = ready?.let { topicKey(it, editor()?.text?.toString().orEmpty(), java.time.LocalDate.now().toString()) }
+            val currentTopicKey = ready?.let { topicKey(it.copy(background = composition.background), editor()?.text?.toString().orEmpty(), java.time.LocalDate.now().toString()) }
             val sameTopicInputs = composition.canUse && batch != null && batch.key == currentTopicKey
             topicButton.isEnabled = !generating && !reading && composition.hasValidRelationship
             topicButton.text = when {
@@ -281,7 +290,7 @@ class ReplyHostUi(private val activity: Activity) {
             }
             topicHint.visibility = if (batch == null) View.GONE else View.VISIBLE
             topicHint.text = when {
-                !sameTopicInputs -> "参考内容或补充背景已变化，点「找找话题」生成新的一组"
+                !sameTopicInputs -> "参考内容、对方背景或本次要求已变化，请生成新的一组"
                 batch?.hasNext == true -> "本组还有 ${batch.items.size - batch.shownCount} 个，点「换个话题」立即切换"
                 else -> "本组已看完，再点「换个话题」生成新的一组"
             }
@@ -297,7 +306,8 @@ class ReplyHostUi(private val activity: Activity) {
             copy.text = "复制这条"
             footerActions.visibility = if (composition.result == null) View.GONE else View.VISIBLE
             footerHint.visibility = footerActions.visibility
-            footerHint.text = if (!composition.canUse) "身份或参考范围已改变，请重新生成"
+            backgroundButton.text = if (composition.background.text.isBlank()) "对方背景 · 未填写" else "对方背景 · 已保存"
+            footerHint.text = if (!composition.canUse) "身份、背景或参考范围已改变，请重新生成"
                 else "复制后，请自行粘贴到聊天框发送"
             state.visibility = if (state.text.isBlank()) View.GONE else View.VISIBLE
             if (window.isShowing) fitWindow()
@@ -328,6 +338,55 @@ class ReplyHostUi(private val activity: Activity) {
             reasonToggle.visibility = if (reason.text.isBlank()) View.GONE else View.VISIBLE
             if (reason.text.isBlank()) reason.visibility = View.GONE
             reasonToggle.text = if (reason.visibility == View.VISIBLE) "收起理由 ▴" else if (batch != null) "为什么聊这个 ▾" else "为什么这样回 ▾"
+        }
+        var backgroundDialog: AlertDialog? = null
+        backgroundButton.setOnClickListener {
+            if (!ownsDrawer()) return@setOnClickListener
+            if (backgroundDialog?.isShowing == true) return@setOnClickListener
+            if (owner.key == null) { toast("账号或联系人尚未确认，请稍后重试"); return@setOnClickListener }
+            val panel = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(8)) }
+            val field = EditText(activity).apply {
+                hint = "可填写相处经历、沟通习惯、偏好和需要注意的事情"
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                gravity = Gravity.TOP; minLines = 5; maxLines = 9
+                isSaveEnabled = false; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+                filters = arrayOf(InputFilter.LengthFilter(ContactBackground.MAX_LENGTH))
+                setText(composition.background.text)
+            }
+            val count = theme.label("${field.text.length} / 2000", 12f, theme.muted)
+            field.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, length: Int) { count.text = "${s?.length ?: 0} / 2000" }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+            panel.addView(field); panel.addView(count)
+            panel.addView(theme.label("背景保存在本机，分析或生成时会发送给你配置的模型服务。", 12f, theme.muted))
+            val edit = AlertDialog.Builder(activity).setTitle("对方背景").setView(panel)
+                .setPositiveButton("保存", null).setNegativeButton("取消", null).setNeutralButton("清空", null).create()
+            backgroundDialog = edit
+            edit.setOnShowListener {
+                fun saveBackground(text: String) {
+                    if (!ownsDrawer()) { edit.dismiss(); return }
+                    backgroundSaving = true
+                    job?.cancel(); session.cancel(); controls(true)
+                    listOf(-1, -2, -3).forEach { edit.getButton(it).isEnabled = false }
+                    edit.setCancelable(false)
+                    scope.launch {
+                        try {
+                            val saved = ReplyIdentityBridge.saveBackground(activity, owner, text, { ReplyDatabaseHistory.replyAccount(live) })
+                            if (ownsDrawer()) { composition.background = saved; renderParts(); toast("背景已保存") }
+                            edit.dismiss()
+                        } catch (e: CancellationException) { throw e
+                        } catch (_: Exception) {
+                            if (ownsDrawer()) toast("背景保存失败，请重试")
+                            listOf(-1, -2, -3).forEach { edit.getButton(it).isEnabled = true }; edit.setCancelable(true)
+                        } finally { backgroundSaving = false; if (ownsDrawer()) controls(false) }
+                    }
+                }
+                edit.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { saveBackground(field.text.toString()) }
+                edit.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { saveBackground("") }
+            }
+            edit.show()
         }
         var saveRevision = 0L
         fun saveIdentity() {
@@ -510,7 +569,7 @@ class ReplyHostUi(private val activity: Activity) {
             if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return }
             if (!ownsDrawer()) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
-            val current = reference.context ?: run { prepareHistory(composition.historyLimit); return }
+            val current = reference.context?.copy(background = composition.background) ?: run { prepareHistory(composition.historyLimit); return }
             val latest = MessageSniffer.replyBoundary()
             if (latest != null && latest != current.latestLoadedId && current.messages.none { it.id == latest }) {
                 prepareHistory(composition.historyLimit); toast("聊天有更新，读取完成后再点生成"); return
@@ -532,7 +591,7 @@ class ReplyHostUi(private val activity: Activity) {
             val config = ModulePrefs.replySettings()
             val ticket = session.begin(current.talker, current.fingerprint)
             val previous = if (composition.result?.topics == null) composition.previousText else ""
-            val previousTopics = composition.result?.topics?.items.orEmpty()
+            val previousTopics = composition.result?.takeIf { composition.canUse }?.topics?.items.orEmpty()
             state.text = ""; state.setTextColor(theme.muted)
             failed = false; findingTopics = findTopics
             (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
@@ -545,7 +604,7 @@ class ReplyHostUi(private val activity: Activity) {
                     val knowledge = withContext(Dispatchers.IO) { ReplyKnowledge.load(activity, relationship) }
                     // Upload only the prepared evidence, after rechecking consent, conversation and settings.
                     ensureActive()
-                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.replyConsent) return@launch
+                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.replyConsent || current.background != composition.background) return@launch
                     val beforeSend = ModulePrefs.replySettings()
                     if (beforeSend.endpoint != config.endpoint || beforeSend.model != config.model || beforeSend.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
@@ -594,6 +653,7 @@ class ReplyHostUi(private val activity: Activity) {
         renderParts(); controls(false)
         window.setContentView(body)
         window.setOnDismissListener {
+            backgroundDialog?.dismiss()
             limitDialog?.dismiss()
             if (dialog !== window) return@setOnDismissListener
             remember(); job?.cancel(); historyJob?.cancel(); reference.cancel(); session.cancel()
@@ -608,7 +668,7 @@ class ReplyHostUi(private val activity: Activity) {
         window.show()
         fitWindow()
         body.requestFocus(); updateNotice()
-        if (reference.context == null) prepareHistory(composition.historyLimit)
+        if (reference.context == null && canGenerate()) prepareHistory(composition.historyLimit)
         return true
     }
     private fun canGenerate() = ModulePrefs.replyConsent && ModulePrefs.replySettings().isConfigured

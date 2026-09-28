@@ -19,7 +19,7 @@ class AnalysisCacheWiringTest {
         val analyzer = source("analysis/SignalAnalyzer.kt")
         val lookup = analyzer.indexOf("AnalysisResultCache.find(")
         assertTrue("No persistent lookup in the actual analysis path", lookup >= 0)
-        assertTrue(lookup < analyzer.indexOf("IntentAnalysis.analyze("))
+        assertTrue(lookup < analyzer.indexOf("AnalysisRouter.analyze(", lookup))
         assertTrue(analyzer.contains("AnalysisResultCache.save("))
     }
 

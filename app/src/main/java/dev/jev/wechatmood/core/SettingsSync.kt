@@ -37,10 +37,13 @@ object SettingsSync {
             ModulePrefs.KEY_API_BASE, ModulePrefs.KEY_API_KEY).all(bundle::containsKey))
         val generation = bundle.getString(SettingsProvider.KEY_GENERATION).orEmpty()
         require(generation.isNotBlank())
+        val emotion = EmotionSettings.load { bundle.getString(it) }
+        val api = runCatching { ApiSettings.fromInput(
+            bundle.getString(ModulePrefs.KEY_API_BASE).orEmpty(), bundle.getString(ModulePrefs.KEY_API_KEY).orEmpty(),
+            bundle.getString(ModulePrefs.KEY_API_PROVIDER), bundle.getString(ModulePrefs.KEY_API_MODEL).orEmpty()) }
+            .getOrElse { if (emotion.source == EmotionSource.LLM) ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "") else throw it }
         RuntimeSettings(bundle.getLong(SettingsProvider.KEY_REVISION, 0L),
-            bundle.getBoolean(ModulePrefs.KEY_EXPLORE), ApiSettings.fromInput(
-                bundle.getString(ModulePrefs.KEY_API_BASE).orEmpty(), bundle.getString(ModulePrefs.KEY_API_KEY).orEmpty(),
-                bundle.getString(ModulePrefs.KEY_API_PROVIDER), bundle.getString(ModulePrefs.KEY_API_MODEL).orEmpty()), generation,
+            bundle.getBoolean(ModulePrefs.KEY_EXPLORE), api, generation,
             runCatching { dev.jev.wechatmood.reply.ReplySettings.fromInput(
                 bundle.getString(dev.jev.wechatmood.reply.ReplySettings.KEY_ENDPOINT).orEmpty(),
                 bundle.getString(dev.jev.wechatmood.reply.ReplySettings.KEY_API_KEY).orEmpty(),
@@ -48,6 +51,6 @@ object SettingsSync {
                 .getOrElse { dev.jev.wechatmood.reply.ReplySettings.empty() },
             bundle.getBoolean(dev.jev.wechatmood.reply.ReplySettings.KEY_CONSENT, false),
             IntentSettings.load { bundle.getString(it) },
-            CardDisplaySettings.load { bundle.getBoolean(it, true) })
+            CardDisplaySettings.load { bundle.getBoolean(it, true) }, emotion)
     }.getOrNull()
 }

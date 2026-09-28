@@ -89,7 +89,23 @@ object ModulePrefs {
     fun apiSettings(): ApiSettings = session.current?.api ?: ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")
     fun isChatEnabled(talker: String?) = conversations?.isEnabled(talker) == true
     fun canAnalyze(talker: String?) = isChatEnabled(talker) && session.current?.canAnalyze == true
-    private fun scoped(input: AnalysisInput) = input.copy(accountScope = dev.jev.wechatmood.hook.ReplyDatabaseHistory.accountScope(input))
+    private fun scoped(input: AnalysisInput): AnalysisInput {
+        val account = dev.jev.wechatmood.hook.ReplyDatabaseHistory.accountScope(input)
+        val key = dev.jev.wechatmood.reply.ReplyContactKey.of(account, input.talker)
+        val background = if (key == null) dev.jev.wechatmood.reply.ContactBackground()
+            else context?.let { ReplyIdentityBridge.background(it, key) }
+        return input.copy(accountScope = account, background = background ?: dev.jev.wechatmood.reply.ContactBackground(),
+            backgroundReady = background != null, settingsFingerprint = session.current?.analysisFingerprint().orEmpty())
+    }
+    fun backgroundChanged(talker: String) {
+        dev.jev.wechatmood.analysis.SignalAnalyzer.cancelConversation(talker)
+        analysisSnapshots.clearConversation(talker)
+    }
+    fun backgroundCurrent(input: AnalysisInput): Boolean {
+        val latest = scoped(input)
+        return latest.accountScope == input.accountScope && latest.backgroundReady && latest.background == input.background &&
+            latest.settingsFingerprint == input.settingsFingerprint
+    }
     fun analysisInput(input: AnalysisInput): AnalysisInput {
         val current = scoped(input)
         if (!current.accountScope.startsWith("pending:")) {
@@ -97,13 +113,14 @@ object ModulePrefs {
             if (!current.accountScope.startsWith("memory:"))
                 manualAnalysis.resolveAccount(current, dev.jev.wechatmood.hook.ReplyDatabaseHistory.pendingAccountScope().replace("pending:", "memory:"))
         }
-        return manualAnalysis.selectedInput(current)
-            ?: if (isChatEnabled(current.talker)) analysisSnapshots.resolve(current) else current
+        val selected = manualAnalysis.selectedInput(current)?.copy(background = current.background, backgroundReady = current.backgroundReady,
+            settingsFingerprint = current.settingsFingerprint)
+        return selected ?: if (isChatEnabled(current.talker)) analysisSnapshots.resolve(current) else current
     }
     fun shouldDisplay(input: AnalysisInput): Boolean =
         input.accountScope == dev.jev.wechatmood.hook.ReplyDatabaseHistory.accountScope(input) &&
             manualAnalysis.allows(input, isChatEnabled(input.talker))
-    fun canAnalyze(input: AnalysisInput): Boolean = !input.accountScope.startsWith("pending:") &&
+    fun canAnalyze(input: AnalysisInput): Boolean = input.backgroundReady && backgroundCurrent(input) && !input.accountScope.startsWith("pending:") &&
         shouldDisplay(input) && session.current?.canAnalyze == true
     fun selectMessage(input: AnalysisInput): Boolean = manualAnalysis.select(scoped(input))
     fun setChatEnabled(talker: String?, value: Boolean): Boolean = runCatching {

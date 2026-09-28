@@ -54,6 +54,18 @@ object ReplyAccountIdentity {
 /** Long-lived settings, not an evictable result cache. Opened only by the module provider. */
 class ReplyIdentityStore(private val db: AnalysisCacheDatabase) : Closeable {
     init { db.execute("CREATE TABLE IF NOT EXISTS reply_identities (contact_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)") }
+    init { db.execute("CREATE TABLE IF NOT EXISTS contact_backgrounds (contact_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)") }
+    @Synchronized fun background(key: ReplyContactKey): ContactBackground =
+        db.query("SELECT payload FROM contact_backgrounds WHERE contact_key = ?", listOf(key.value))
+            ?.let(ContactBackground::decode) ?: ContactBackground()
+    @Synchronized fun saveBackground(key: ReplyContactKey, text: String): ContactBackground {
+        require(text.length <= ContactBackground.MAX_LENGTH)
+        val previous = background(key)
+        if (previous.text == text) return previous
+        val value = ContactBackground(text, java.util.UUID.randomUUID().toString())
+        db.execute("INSERT OR REPLACE INTO contact_backgrounds(contact_key, payload) VALUES(?, ?)", listOf(key.value, value.encode()))
+        return value
+    }
     @Synchronized fun find(key: ReplyContactKey): ReplyIdentitySetting {
         val payload = db.query("SELECT payload FROM reply_identities WHERE contact_key = ?", listOf(key.value))
             ?: return ReplyIdentitySetting()

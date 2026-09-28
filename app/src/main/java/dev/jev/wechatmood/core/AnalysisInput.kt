@@ -31,9 +31,12 @@ data class AnalysisInput(
     val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING,
     val quoted: QuotedMessage? = null,
     val accountScope: String = "",
+    val background: dev.jev.wechatmood.reply.ContactBackground = dev.jev.wechatmood.reply.ContactBackground(),
+    val backgroundReady: Boolean = true,
+    val settingsFingerprint: String = "",
 ) {
     val key: String get() = MoodStore.keyOf(text, talker, context, messageId, speaker, createdAt, coverage,
-        zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: ""), quoted, accountScope)
+        zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: "") + "|background:${background.revision}:$backgroundReady|settings:$settingsFingerprint", quoted, accountScope)
 }
 
 object MessagePolicy {

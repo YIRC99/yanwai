@@ -36,7 +36,7 @@ class SettingsProvider : ContentProvider() {
                     Bundle().apply { putBoolean("saved", true) }
                 }
             }
-            "reply_identity_get", "reply_identity_put" -> ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
+            "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
             "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
             "config" -> snapshot(ctx)
             "report" -> {
@@ -79,7 +79,7 @@ class SettingsProvider : ContentProvider() {
                 putString(ModulePrefs.KEY_API_PROVIDER, prefs.getString(ModulePrefs.KEY_API_PROVIDER, null))
                 putString(ModulePrefs.KEY_API_MODEL, prefs.getString(ModulePrefs.KEY_API_MODEL, ""))
                 listOf(IntentSettings.KEY_ROUTE, IntentSettings.KEY_ENDPOINT, IntentSettings.KEY_API_KEY,
-                    IntentSettings.KEY_MODEL).forEach { putString(it, prefs.getString(it, "")) }
+                    IntentSettings.KEY_MODEL, EmotionSettings.KEY_SOURCE, EmotionSettings.KEY_REUSE_REPLY).forEach { putString(it, prefs.getString(it, "")) }
                 listOf(dev.jev.wechatmood.reply.ReplySettings.KEY_ENDPOINT,
                     dev.jev.wechatmood.reply.ReplySettings.KEY_API_KEY,
                     dev.jev.wechatmood.reply.ReplySettings.KEY_MODEL).forEach { putString(it, prefs.getString(it, "")) }

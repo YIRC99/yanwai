@@ -469,7 +469,7 @@ object MessageSniffer {
             !enabled -> if (selected.isEmpty()) "自动分析已关闭，可长按文字或语音翻译意图"
                 else "自动分析已关闭 · 本屏 ${selected.size} 条手动分析"
             !ModulePrefs.bridgeAvailable -> "设置连接失败，点此打开助手后重试"
-            ModulePrefs.apiKey.isBlank() -> "请打开言外填写并保存 API Key"
+            ModulePrefs.analysisSettings()?.canAnalyze != true -> "请打开言外配置所选分析模型"
             records.isEmpty() -> "未识别到消息 · $adapterStatus"
             messages.isEmpty() -> "本屏无可分析的文字或语音，其他媒体及超过 1000 字符的文字已跳过"
             else -> {

@@ -47,6 +47,7 @@ object BubbleDecorator {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
         } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))
             SignalAnalyzer.progress(key) ?: if (message.voice != null || message.context.any { it.voice != null }) "正在准备语音…" else "正在分析…"
+            else if (!message.backgroundReady) "正在读取对方背景；读取失败时会重试"
             else "模型未配置或设置未连接"
         if (state.view.text.toString() != value.toString()) state.view.text = value
         return true

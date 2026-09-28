@@ -31,14 +31,15 @@ class PersistentAnalysisCacheTest {
         override fun close() = connection.close()
     }
 
-    @Test fun `closing and reopening sqlite reuses result despite different page evidence`() {
+    @Test fun `closing and reopening sqlite restores same evidence but not changed context`() {
         val file = folder.newFile("cache.db")
         val key = requireNotNull(AnalysisCacheKey.of(input, settings()))
         SqliteAnalysisCache(Jdbc(file)).use { it.save(key, mood, "{\"context\":\"original evidence\"}") }
         MoodStore.clear()
         val reopened = input.copy(context = emptyList(), coverage = ContextCoverage(scanned = 99, truncated = true))
         SqliteAnalysisCache(Jdbc(file)).use {
-            val restored = requireNotNull(it.find(requireNotNull(AnalysisCacheKey.of(reopened, settings(revision = 20)))))
+            assertNull(it.find(requireNotNull(AnalysisCacheKey.of(reopened, settings(revision = 20)))))
+            val restored = requireNotNull(it.find(requireNotNull(AnalysisCacheKey.of(input, settings(revision = 20)))))
             assertEquals(mood.copy(raw = ""), restored.mood)
             assertTrue(restored.evidence.contains("original evidence"))
         }
@@ -144,7 +145,7 @@ class PersistentAnalysisCacheTest {
             MoodStore.clear()
         }
         visit(input)
-        visit(input.copy(context = emptyList(), coverage = ContextCoverage(scanned = 50)))
+        visit(input.copy())
         assertEquals(1, modelCalls)
         visit(input.copy(accountScope = AnalysisCacheKey.digest("other-account")))
         assertEquals(2, modelCalls)

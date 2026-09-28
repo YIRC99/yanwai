@@ -38,6 +38,13 @@ object Diagnostics {
         appendLine("言外运行诊断 ${Date()}")
         appendLine(environment(context))
         appendLine("verifiedSettings=${ModulePrefs.bridgeAvailable} analysisControl=per_conversation_local")
+        ModulePrefs.analysisSettings()?.let {
+            appendLine("emotionSource=${it.emotion.source.label} analysisConfigured=${it.canAnalyze}")
+            if (it.emotion.source == EmotionSource.LLM) {
+                appendLine("analysisModel=${it.emotionLlm.model} config=${if (it.emotion.reuseReply) "复用回复设置" else "分析设置"}")
+                appendLine(dev.jev.wechatmood.analysis.AnalysisThinking.description(it.emotionLlm))
+            }
+        }
         appendLine("replyConfigured=${ModulePrefs.replySettings().isConfigured} replyConsent=${ModulePrefs.replyConsent}")
         appendLine("bridgeError=${ModulePrefs.lastBridgeError ?: "无已记录错误"}")
         appendLine("--- 当前进程日志（有容量上限，包含重启前保留记录） ---")

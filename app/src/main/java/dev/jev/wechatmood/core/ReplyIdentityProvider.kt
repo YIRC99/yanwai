@@ -27,9 +27,17 @@ object ReplyIdentityProvider {
         } catch (error: Exception) { db.close(); throw error }
     }
     @Synchronized fun call(context: Context, caller: Int, method: String, arg: String?, extras: Bundle?): Bundle {
+        if (method.startsWith("contact_background_")) {
+            val generation = context.getSharedPreferences(ModulePrefs.FILE_NAME, 0).getString(SettingsProvider.KEY_GENERATION, null)
+            check(generation != null && extras?.getString(SettingsProvider.KEY_GENERATION) == generation) { "设置已重置，请重新打开" }
+        }
         val requested = ReplyContactKey(requireNotNull(arg))
         val key = ReplyContactKey(AnalysisCacheKey.digest(caller.toString(), requested.value))
         return when (method) {
+            "contact_background_get" -> Bundle().apply { putString("payload", storage(context).background(key).encode()) }
+            "contact_background_put" -> Bundle().apply {
+                putString("payload", storage(context).saveBackground(key, requireNotNull(extras?.getString("text"))).encode())
+            }
             "reply_identity_get" -> Bundle().apply { putString("payload", storage(context).find(key).encode()) }
             "reply_identity_put" -> {
                 storage(context).save(key, ReplyIdentitySetting.decode(requireNotNull(extras?.getString("payload"))))

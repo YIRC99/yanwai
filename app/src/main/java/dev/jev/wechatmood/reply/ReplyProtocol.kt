@@ -22,6 +22,7 @@ object ReplyProtocol {
         previous: String = "", focusMessageId: Long? = null,
         relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED, customRelationship: String = ""): JSONObject {
         val instructions = """
+            ${ContactBackground.GUIDANCE}
             你是言外的聊天回复助手，回复逻辑来自狗头军师 goutoujunshi。
             结合当前整段对话，替“我”拟本轮可依次发送的自然短消息。恋爱、暧昧、伴侣沟通可以正常讨论。
             先理解双方关系、事实、当前话题与我的目标，再决定本轮一个主动作；贴合我最近消息的口吻、长度和称呼。
@@ -62,6 +63,7 @@ object ReplyProtocol {
             .put("omitted_media", context.omittedMedia).put("context_trimmed", context.trimmed)
             .put("context_source", context.source.name).put("page_only", context.source == ReplyContextSource.LOADED_PAGE)
             .put("requested_message_count", context.requestedMessages).put("actual_message_count", context.messages.size)
+            .put("contact_background", JSONObject(context.background.encode()))
             .put("media_included", false)
             .put("voice_transcripts", context.messages.count { it.voiceState == VoiceState.READY })
             .put("unavailable_voice", context.messages.count { it.voiceState == VoiceState.FAILED })

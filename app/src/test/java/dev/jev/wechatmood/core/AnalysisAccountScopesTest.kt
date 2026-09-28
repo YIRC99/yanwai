@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AnalysisAccountScopesTest {
+    @org.junit.Test fun `settings and contact background cannot change stable account lookup identity`() {
+        var reads = 0
+        val scopes = AnalysisAccountScopes({ it() }, { reads++; "a".repeat(64) })
+        val input = AnalysisInput("你好", "wxid_a", messageId = 1)
+        scopes.scope(input)
+        scopes.scope(input.copy(background = dev.jev.wechatmood.reply.ContactBackground("背景", "v1"), settingsFingerprint = "config"))
+        org.junit.Assert.assertEquals(1, reads)
+    }
     private val input = AnalysisInput("ok", "alice", messageId = 1, createdAt = 1000)
     private val a = AnalysisCacheKey.digest("account-a")
     private val b = AnalysisCacheKey.digest("account-b")
