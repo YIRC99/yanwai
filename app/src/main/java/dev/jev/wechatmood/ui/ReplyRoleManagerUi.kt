@@ -79,7 +79,7 @@ class ReplyRoleManagerUi(private val activity: AppCompatActivity, private val bi
         binding.roleName.setText(role?.name.orEmpty())
         binding.roleBackground.setText(role?.background.orEmpty())
         binding.editorHint.text = if (role?.fromContact == true) "修改当前联系人的角色与背景，重新打开微信回复面板后使用。"
-            else "在微信里选择后，会复制到当前聊天；已保存的聊天背景可在下方单独修改。"
+            else "这个角色有独立的背景。微信中选中它后，会使用这里的名称和背景；两边编辑会同步。"
         binding.editorCard.visibility = View.VISIBLE
         reveal(binding.editorCard)
         binding.roleName.requestFocus()
@@ -160,7 +160,7 @@ class ReplyRoleManagerUi(private val activity: AppCompatActivity, private val bi
         actions.addView(button("查看 / 编辑") { edit(role) }, LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(button("删除") {
             if (!busy) MaterialAlertDialogBuilder(activity).setTitle("删除这个角色？")
-                .setMessage(if (role.fromContact) "会清除该联系人的身份与背景。" else "从角色库移除；已保存到聊天的资料会保留。")
+                .setMessage(if (role.fromContact) "会清除该联系人的身份与背景。" else "从角色库移除；使用它的聊天需要重新选择角色。")
                 .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ -> mutate { ReplyIdentityProvider.deleteRole(activity, role) } }.show()
         }.apply { setTextColor(ContextCompat.getColor(activity, R.color.status_error)) }, LinearLayout.LayoutParams(-2, -2))
         content.addView(actions); card.addView(content)

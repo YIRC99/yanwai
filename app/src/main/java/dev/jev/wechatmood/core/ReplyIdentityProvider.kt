@@ -55,6 +55,7 @@ object ReplyIdentityProvider {
                 Bundle().apply {
                     putString("identity", applied.identity.encode())
                     putString("background", applied.background.encode())
+                    putLong(KEY_ROLE_REVISION, requireNotNull(applied.catalogRevision))
                 }
             }
             "reply_role_apply" -> {
@@ -72,7 +73,9 @@ object ReplyIdentityProvider {
             }
             "reply_identity_get" -> Bundle().apply { putString("payload", storage(context).find(key).encode()) }
             "reply_identity_put" -> {
-                storage(context).save(key, ReplyIdentitySetting.decode(requireNotNull(extras?.getString("payload"))))
+                val identity = ReplyIdentitySetting.decode(requireNotNull(extras?.getString("payload")))
+                storage(context).save(key, identity)
+                if (identity.roleId == null) storage(context).saveBackground(key, "")
                 Bundle().apply { putBoolean("saved", true) }
             }
             else -> throw IllegalArgumentException("Unknown identity method")

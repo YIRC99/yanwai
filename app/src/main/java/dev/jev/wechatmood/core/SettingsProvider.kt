@@ -38,6 +38,7 @@ class SettingsProvider : ContentProvider() {
             }
             "reply_role_list", "reply_role_apply", "reply_role_put", "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> {
                 val result = ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
+                if (method == "reply_role_put") publish(ctx)
                 if (method.endsWith("_put") || method == "reply_role_apply") {
                     // A refresh notification failure must not turn a completed disk write into a save failure.
                     runCatching { ctx.contentResolver.notifyChange(ReplyIdentityProvider.CHANGES_URI, null) }

@@ -6,15 +6,23 @@ import org.json.JSONObject
 import java.io.Closeable
 
 /** Raw editor text is retained, including an unfinished custom identity. */
-data class ReplyIdentitySetting(val relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED, val customText: String = "") {
-    init { require(customText.length <= ReplyRelationship.MAX_CUSTOM_LENGTH) }
-    fun encode(): String = JSONObject().put("format", 1).put("role", relationship.id).put("text", customText).toString()
+data class ReplyIdentitySetting(val relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED, val customText: String = "",
+    val roleId: String? = null, val roleRevision: String? = null) {
+    init {
+        require(customText.length <= ReplyRelationship.MAX_CUSTOM_LENGTH)
+        require((roleId == null) == (roleRevision == null))
+        require(roleId == null || roleId.matches(Regex("role:[0-9a-f-]{36}")))
+        require(roleRevision == null || roleRevision.length in 1..64)
+    }
+    fun encode(): String = JSONObject().put("format", 1).put("role", relationship.id).put("text", customText)
+        .put("roleId", roleId).put("roleRevision", roleRevision).toString()
     companion object {
         fun decode(payload: String): ReplyIdentitySetting {
             require(payload.length <= 1024)
             val json = JSONObject(payload)
             require(json.getInt("format") == 1)
-            return ReplyIdentitySetting(ReplyRelationship.entries.single { it.id == json.getString("role") }, json.getString("text"))
+            return ReplyIdentitySetting(ReplyRelationship.entries.single { it.id == json.getString("role") }, json.getString("text"),
+                json.optString("roleId").takeIf { it.isNotEmpty() }, json.optString("roleRevision").takeIf { it.isNotEmpty() })
         }
     }
 }
@@ -56,22 +64,33 @@ class ReplyIdentityStore(private val db: AnalysisCacheDatabase) : Closeable {
     init { db.execute("CREATE TABLE IF NOT EXISTS reply_identities (contact_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)") }
     init { db.execute("CREATE TABLE IF NOT EXISTS contact_backgrounds (contact_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)") }
     val roles = ReplyRoleStore(db, this)
-    @Synchronized fun background(key: ReplyContactKey): ContactBackground =
+    private fun storedBackground(key: ReplyContactKey): ContactBackground =
         db.query("SELECT payload FROM contact_backgrounds WHERE contact_key = ?", listOf(key.value))
             ?.let(ContactBackground::decode) ?: ContactBackground()
+    @Synchronized fun background(key: ReplyContactKey): ContactBackground {
+        val selected = storedIdentity(key).roleId ?: return storedBackground(key)
+        val role = roles.find(selected) ?: return ContactBackground()
+        return ContactBackground(role.background, role.revision)
+    }
     @Synchronized fun saveBackground(key: ReplyContactKey, text: String): ContactBackground {
         require(text.length <= ContactBackground.MAX_LENGTH)
-        val previous = background(key)
+        val previous = storedBackground(key)
         if (previous.text == text) return previous
         val value = ContactBackground(text, java.util.UUID.randomUUID().toString())
         db.execute("INSERT OR REPLACE INTO contact_backgrounds(contact_key, payload) VALUES(?, ?)", listOf(key.value, value.encode()))
         return value
     }
-    @Synchronized fun find(key: ReplyContactKey): ReplyIdentitySetting {
+    private fun storedIdentity(key: ReplyContactKey): ReplyIdentitySetting {
         val payload = db.query("SELECT payload FROM reply_identities WHERE contact_key = ?", listOf(key.value))
             ?: return ReplyIdentitySetting()
         return runCatching { ReplyIdentitySetting.decode(payload) }.getOrDefault(ReplyIdentitySetting())
     }
+    @Synchronized fun find(key: ReplyContactKey): ReplyIdentitySetting {
+        val stored = storedIdentity(key)
+        val selected = stored.roleId ?: return stored
+        return roles.find(selected)?.identity() ?: ReplyIdentitySetting()
+    }
+    @Synchronized fun hasRoleBinding(key: ReplyContactKey) = storedIdentity(key).roleId != null
     @Synchronized fun save(key: ReplyContactKey, setting: ReplyIdentitySetting) {
         if (setting.relationship == ReplyRelationship.UNSPECIFIED) {
             db.execute("DELETE FROM reply_identities WHERE contact_key = ?", listOf(key.value))

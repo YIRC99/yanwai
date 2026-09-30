@@ -17,6 +17,7 @@ class ReplyRoleStoreTest {
         ReplyIdentityStore(Jdbc(folder.newFile())).use {
             val defaults = ReplyRelationship.entries.filter { r -> r != ReplyRelationship.UNSPECIFIED && r != ReplyRelationship.OTHER }
             assertEquals(defaults.map { r -> r.label }.toSet(), it.roles.templates().map { r -> r.name }.toSet())
+            assertTrue(it.roles.templates().all { r -> r.background.isNotBlank() })
             assertEquals(it.roles.templates().map { r -> r.id }, it.roles.list().map { r -> r.id })
         }
     }
@@ -71,7 +72,7 @@ class ReplyRoleStoreTest {
             assertEquals(ReplyRelationship.FRIEND, it.find(bob).relationship)
         }
     }
-    @Test fun `choosing a library role explicitly copies identity and background to only one contact`() {
+    @Test fun `choosing a library role binds that contact to the current role without affecting unbound contacts`() {
         ReplyIdentityStore(Jdbc(folder.newFile())).use {
             val role = it.roles.save(null, "合作伙伴", "项目沟通简洁")
             val applied = it.roles.apply(role.id, role.revision, alice)
@@ -79,7 +80,7 @@ class ReplyRoleStoreTest {
             assertEquals("项目沟通简洁", applied.background.text)
             assertEquals(ReplyIdentitySetting(), it.find(bob))
             it.roles.save(role.id, "合作伙伴", "新模板背景", role.revision)
-            assertEquals("项目沟通简洁", it.background(alice).text)
+            assertEquals("新模板背景", it.background(alice).text)
         }
     }
     @Test fun `stale edits selections and deletes cannot overwrite newer personal data`() {
@@ -147,8 +148,8 @@ class ReplyRoleStoreTest {
         val file = folder.newFile()
         val identity = ReplyIdentitySetting(ReplyRelationship.OTHER, "球友")
         val id = ReplyIdentityStore(Jdbc(file)).use {
-            it.roles.saveFromChat(alice, identity, "每周打球")
-            assertEquals(identity, it.find(alice))
+            val saved = it.roles.saveFromChat(alice, identity, "每周打球")
+            assertEquals(saved.identity, it.find(alice))
             assertEquals("每周打球", it.background(alice).text)
             val role = it.roles.templates().single { r -> r.name == "球友" }
             assertTrue(it.roles.list().any { r -> r.id == role.id })
@@ -156,7 +157,7 @@ class ReplyRoleStoreTest {
         }
         ReplyIdentityStore(Jdbc(file)).use {
             val old = it.roles.find(id)!!
-            it.roles.saveFromChat(alice, identity, "周末打球")
+            it.roles.saveFromChat(alice, it.find(alice), "周末打球")
             assertEquals(9, it.roles.templates().size)
             assertEquals("周末打球", it.roles.find(id)!!.background)
             assertThrows(IllegalStateException::class.java) { it.roles.apply(id, old.revision, bob) }
@@ -164,9 +165,11 @@ class ReplyRoleStoreTest {
             val applied = it.roles.apply(id, updated.revision, bob)
             assertEquals("老球友", applied.identity.customText)
             assertEquals("喜欢双打", applied.background.text)
-            assertEquals("周末打球", it.background(alice).text)
+            assertEquals("喜欢双打", it.background(alice).text)
             it.roles.delete(id, updated.revision)
             assertFalse(it.roles.templates().any { r -> r.id == id })
+            assertEquals(ReplyIdentitySetting(), it.find(alice))
+            assertEquals("", it.background(alice).text)
         }
     }
 
@@ -203,13 +206,79 @@ class ReplyRoleStoreTest {
         }
     }
 
-    @Test fun `switching to a default relationship keeps the contacts saved background`() {
+    @Test fun `switching to an empty default role clears the previous roles background`() {
         ReplyIdentityStore(Jdbc(folder.newFile())).use {
             it.saveBackground(alice, "认识十年，避免提起旧事")
             val friend = it.roles.templates().single { r -> r.name == "朋友" }
-            val applied = it.roles.apply(friend.id, friend.revision, alice)
-            assertEquals("认识十年，避免提起旧事", applied.background.text)
+            val empty = it.roles.save(friend.id, friend.name, "", friend.revision)
+            val applied = it.roles.apply(empty.id, empty.revision, alice)
+            assertEquals("", applied.background.text)
             assertEquals(applied.background, it.background(alice))
+        }
+    }
+
+    @Test fun `stale drawer cannot overwrite or resurrect an edited or deleted selected role`() {
+        ReplyIdentityStore(Jdbc(folder.newFile())).use {
+            val role = it.roles.save(null, "球友", "原背景")
+            val selected = it.roles.apply(role.id, role.revision, alice)
+            val edited = it.roles.save(role.id, role.name, "APP 新背景", role.revision)
+            assertThrows(IllegalStateException::class.java) { it.roles.saveFromChat(alice, selected.identity, "旧抽屉覆盖") }
+            it.roles.delete(edited.id, edited.revision)
+            assertThrows(IllegalStateException::class.java) { it.roles.saveFromChat(alice, selected.identity, "重新创建") }
+            assertEquals(8, it.roles.templates().size)
+        }
+    }
+
+    @Test fun `new custom roles in one conversation receive independent ids and selection survives reopen`() {
+        val file = folder.newFile()
+        val ids = ReplyIdentityStore(Jdbc(file)).use {
+            val first = it.roles.saveFromChat(alice, ReplyIdentitySetting(ReplyRelationship.OTHER, "同学"), "学生时代")
+            val second = it.roles.saveFromChat(alice, ReplyIdentitySetting(ReplyRelationship.OTHER, "同学"), "培训认识")
+            assertNotEquals(first.identity.roleId, second.identity.roleId)
+            first.identity.roleId!! to second.identity.roleId!!
+        }
+        ReplyIdentityStore(Jdbc(file)).use {
+            assertEquals(ids.second, it.find(alice).roleId)
+            assertEquals("培训认识", it.background(alice).text)
+            assertEquals("学生时代", it.roles.find(ids.first)!!.background)
+            assertEquals(10, it.roles.list().size)
+        }
+    }
+
+    @Test fun `upgrade fills only unchanged empty presets once and preserves deleted or edited roles`() {
+        val file = folder.newFile()
+        ReplyIdentityStore(Jdbc(file)).use {
+            val friend = it.roles.templates().single { r -> r.name == "朋友" }
+            it.roles.save(friend.id, friend.name, "", friend.revision)
+            val colleague = it.roles.templates().single { r -> r.name == "同事" }
+            it.roles.save(colleague.id, colleague.name, "我写的背景", colleague.revision)
+            val elder = it.roles.templates().single { r -> r.name == "长辈" }
+            it.roles.delete(elder.id, elder.revision)
+        }
+        Jdbc(file).use { it.execute("DELETE FROM reply_role_migrations WHERE migration = ?", listOf("defaults-background-v1")) }
+        ReplyIdentityStore(Jdbc(file)).use {
+            val friend = it.roles.templates().single { r -> r.name == "朋友" }
+            assertTrue(friend.background.isNotBlank())
+            assertEquals("我写的背景", it.roles.templates().single { r -> r.name == "同事" }.background)
+            assertFalse(it.roles.templates().any { r -> r.name == "长辈" })
+            it.roles.save(friend.id, friend.name, "", friend.revision)
+        }
+        ReplyIdentityStore(Jdbc(file)).use {
+            assertEquals("", it.roles.templates().single { r -> r.name == "朋友" }.background)
+        }
+    }
+
+    @Test fun `drawer edits the selected role and switching between roles keeps backgrounds separate`() {
+        ReplyIdentityStore(Jdbc(folder.newFile())).use {
+            val a = it.roles.save(null, "甲角色", "甲背景")
+            val b = it.roles.save(null, "乙角色", "乙背景")
+            val selected = it.roles.apply(a.id, a.revision, alice)
+            it.roles.saveFromChat(alice, selected.identity, "甲的新背景")
+            assertEquals("甲的新背景", it.roles.find(a.id)!!.background)
+            assertEquals("乙背景", it.roles.apply(b.id, b.revision, alice).background.text)
+            val latest = it.roles.find(a.id)!!
+            assertEquals("甲的新背景", it.roles.apply(a.id, latest.revision, alice).background.text)
+            assertEquals(10, it.roles.templates().size)
         }
     }
 

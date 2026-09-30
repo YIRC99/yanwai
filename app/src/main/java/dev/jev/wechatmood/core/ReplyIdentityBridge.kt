@@ -93,9 +93,15 @@ object ReplyIdentityBridge {
                         putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, captured.revision)
                         putString("identity", identity.encode()); putString("text", text)
                     }))
-                val background = accept(captured, key, ContactBackground.decode(requireNotNull(response.getString("background"))))
+                val revision = response.getLong(ReplyIdentityProvider.KEY_ROLE_REVISION)
+                // A role edit affects every contact explicitly using that role. Adopt its new catalog
+                // revision before filling the cache, and reject a concurrent newer edit or reset.
+                ModulePrefs.reload(force = true)
+                val updated = generation()
+                check(updated.generation == captured.generation && updated.revision == revision) { "角色或设置已变化，请重新打开" }
+                val background = accept(updated, key, ContactBackground.decode(requireNotNull(response.getString("background"))))
                 ModulePrefs.backgroundChanged(owner.talker)
-                AppliedReplyRole(ReplyIdentitySetting.decode(requireNotNull(response.getString("identity"))), background)
+                AppliedReplyRole(ReplyIdentitySetting.decode(requireNotNull(response.getString("identity"))), background, revision)
             }
             if (c.isActive) c.resumeWith(result)
         }
@@ -136,6 +142,7 @@ object ReplyIdentityBridge {
             val result = context.contentResolver.call(SettingsProvider.URI, "reply_identity_put", key.value,
                 extras().apply { putString("payload", value.encode()) })
             check(result?.getBoolean("saved") == true)
+            readBackground(context, key, captured)
         })
     }
     suspend fun load(context: Context, key: ReplyContactKey): ReplyIdentitySetting = suspendCancellableCoroutine { continuation ->
@@ -144,6 +151,9 @@ object ReplyIdentityBridge {
         }
     }
     fun save(context: Context, owner: ReplyIdentityOwner, value: ReplyIdentitySetting, verify: () -> String?, complete: (Boolean) -> Unit) {
-        queue(context.applicationContext).save(owner, value, verify, complete)
+        queue(context.applicationContext).save(owner, value, verify) { saved ->
+            if (saved) ModulePrefs.backgroundChanged(owner.talker)
+            complete(saved)
+        }
     }
 }
