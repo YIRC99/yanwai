@@ -9,12 +9,33 @@ class ReplyEntrySafetyTest {
     private val sourceRoot = File("src/main/java/dev/jev/wechatmood")
     private fun source(name: String) = File(sourceRoot, "hook/$name.kt").readText()
 
-    @Test fun `production does not install or contain a plus panel integration`() {
+    @Test fun `production does not install native grid injection or the legacy wrapper`() {
         val forbidden = listOf("NativeReplyPlus", "ReplyPlusEntry", "ReplyPlusItems", "ReplyPlusLabels",
             "ReplyPlusOwnership", "ReplyPlusRebuildGuard", "suggestReplyFromPlus")
         sourceRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
             val text = file.readText()
             forbidden.forEach { symbol -> assertFalse("${file.name} still contains $symbol", text.contains(symbol)) }
+        }
+    }
+
+    @Test fun `independent plus row is updated and cleared with its owning chat`() {
+        val reply = source("ReplyHostUi")
+        assertTrue(reply.contains("plusEntry.update(footer())"))
+        assertTrue(reply.substringAfter("fun hide()").contains("plusEntry.clear()"))
+        assertTrue(reply.contains("ReplyPlusRow(activity) { open() }"))
+    }
+
+    @Test fun `plus row preserves native children and requires an expanded panel`() {
+        val file = File(sourceRoot, "hook/ReplyPlusRow.kt")
+        assertTrue("Independent row must be implemented", file.exists())
+        val row = file.readText()
+        assertTrue(row.contains("isShown"))
+        assertTrue(row.contains("WRAP_CONTENT"))
+        assertTrue(row.contains("removeOnGlobalLayoutListener"))
+        assertTrue(row.contains("removeView(row)"))
+        for (operation in listOf("XposedBridge", "setAdapter(", "setOnItemClickListener(",
+            "removeView(content)", "removeView(panel)", "layoutParams =", "translationY =")) {
+            assertFalse("Must not rewrite host layout or grid: $operation", row.contains(operation))
         }
     }
 

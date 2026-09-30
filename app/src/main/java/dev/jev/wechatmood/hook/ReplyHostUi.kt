@@ -34,6 +34,7 @@ class ReplyHostUi(private val activity: Activity) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val session = ReplySession()
     private val history = ReplyHistory.process
+    private val plusEntry = ReplyPlusRow(activity) { open() }
     private var job: Job? = null
     private var historyJob: Job? = null
     private var openingJob: Job? = null
@@ -49,6 +50,7 @@ class ReplyHostUi(private val activity: Activity) {
             hide(); talker = currentTalker
         }
         if (currentTalker == null) return
+        plusEntry.update(footer())
         if (dialog?.isShowing == true) {
             if ((!ModulePrefs.replyConsent || !ModulePrefs.replySettings().isConfigured) &&
                 (job?.isActive == true || historyJob?.isActive == true)) {
@@ -698,6 +700,7 @@ class ReplyHostUi(private val activity: Activity) {
             .putExtra("reply_tab", true))
     }.onFailure { toast("请从桌面打开言外，进入回复建议") }
     fun hide() {
+        plusEntry.clear()
         openingJob?.cancel(); ownerEpoch = null
         dialog?.dismiss(); job?.cancel(); historyJob?.cancel(); session.cancel()
         talker = null
