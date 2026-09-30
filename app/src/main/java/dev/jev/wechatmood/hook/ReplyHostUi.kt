@@ -207,7 +207,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             setText(composition.background.text)
         }
         results.addView(identityBackground, LinearLayout.LayoutParams(-1, -2))
-        val saveIdentityButton = action("保存身份")
+        val saveIdentityButton = action("保存到角色库")
         results.addView(saveIdentityButton, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })
         val instruction = EditText(activity).apply {
             hint = "本次补充要求（可选）\n如：想委婉拒绝，别太正式；找个轻松的话题\n长期经历与偏好请填「对方背景」"
@@ -327,10 +327,10 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             customRole.visibility = if (composition.relationship == ReplyRelationship.OTHER) View.VISIBLE else View.GONE
             val editingIdentity = composition.relationship == ReplyRelationship.OTHER && !group
             identityBackground.visibility = if (editingIdentity) View.VISIBLE else View.GONE
-            saveIdentityButton.visibility = identityBackground.visibility
+            saveIdentityButton.visibility = if (!group && composition.relationship != ReplyRelationship.UNSPECIFIED) View.VISIBLE else View.GONE
             identityBackground.isEnabled = !generating && !backgroundSaving
             saveIdentityButton.isEnabled = !generating && !backgroundSaving && composition.hasValidRelationship
-            saveIdentityButton.text = if (identitySaving) "正在保存…" else "保存身份"
+            saveIdentityButton.text = if (identitySaving) "正在保存…" else "保存到角色库"
             backgroundButton.visibility = if (group || editingIdentity) View.GONE else View.VISIBLE
             rolePicker.text = roleLabel()
             rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.displayLabel(composition.customRelationship)}"
@@ -441,23 +441,18 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return@setOnClickListener }
             if (owner.key == null) { toast("账号或联系人尚未确认，请重新打开后保存"); return@setOnClickListener }
             val identityValue = ReplyIdentitySetting(composition.relationship, composition.customRelationship)
-            val backgroundText = identityBackground.text.toString()
+            val backgroundText = if (composition.relationship == ReplyRelationship.OTHER) identityBackground.text.toString()
+                else composition.background.text
             ++saveRevision
             identitySaving = true; controls(false)
             scope.launch {
                 try {
                     check(verifyAccount()) { "当前聊天或账号已变化" }
-                    val saved = suspendCancellableCoroutine<Boolean> { continuation ->
-                        ReplyIdentityBridge.save(activity, owner, identityValue, { ReplyDatabaseHistory.replyAccount(live) }) {
-                            if (continuation.isActive) continuation.resumeWith(Result.success(it))
-                        }
-                    }
-                    check(saved) { "身份保存失败" }
-                    // Persist the captured owner and background even if the drawer was closed.
-                    val background = ReplyIdentityBridge.saveBackground(activity, owner, backgroundText, { ReplyDatabaseHistory.replyAccount(live) })
+                    val saved = ReplyIdentityBridge.saveRole(activity, owner, identityValue, backgroundText,
+                        { ReplyDatabaseHistory.replyAccount(live) })
                     if (ownsDrawer()) {
-                        composition.background = background
-                        renderParts(); toast("身份和背景已保存")
+                        composition.background = saved.background
+                        renderParts(); toast("已保存到角色库，可在言外 APP 中管理")
                     }
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) { if (ownsDrawer()) toast("身份或背景保存失败，请重试") }
@@ -479,10 +474,13 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 failed = false; renderParts(); controls(busy)
             }
         })
-        fun showRoleMenu(savedRoles: List<ReplyRole>) {
+        fun showRoleMenu(savedRoles: List<ReplyRole>, libraryAvailable: Boolean = true) {
             PopupMenu(activity, rolePicker).apply {
-                ReplyRelationship.entries.forEachIndexed { index, relationship ->
-                    menu.add(0, index, index, relationship.label).isChecked = relationship == composition.relationship
+                // Persisted presets and custom roles share the app's catalog; never resurrect deleted presets.
+                val choices = if (libraryAvailable) listOf(ReplyRelationship.UNSPECIFIED, ReplyRelationship.OTHER)
+                    else ReplyRelationship.entries
+                choices.forEach { relationship ->
+                    menu.add(0, relationship.ordinal, relationship.ordinal, relationship.label).isChecked = relationship == composition.relationship
                 }
                 savedRoles.forEachIndexed { index, role -> menu.add(1, 1000 + index, 1000 + index, "角色库 · " + role.name) }
                 menu.setGroupCheckable(0, true, true)
@@ -540,9 +538,9 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 scope.launch {
                     try {
                         val saved = if (group || owner.key == null) emptyList() else ReplyIdentityBridge.roles(activity)
-                        if (ownsDrawer() && !busy) showRoleMenu(saved)
+                        if (ownsDrawer() && !busy) showRoleMenu(saved, libraryAvailable = !group && owner.key != null)
                     } catch (e: CancellationException) { throw e }
-                    catch (_: Exception) { if (ownsDrawer()) { toast("角色库暂时不可用"); showRoleMenu(emptyList()) } }
+                    catch (_: Exception) { if (ownsDrawer()) { toast("角色库暂时不可用，请稍后重试"); showRoleMenu(emptyList()) } }
                     finally { roleMenuLoading = false }
                 }
             }

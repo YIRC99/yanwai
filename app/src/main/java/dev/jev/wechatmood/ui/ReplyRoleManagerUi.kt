@@ -1,6 +1,9 @@
 package dev.jev.wechatmood.ui
 
 import android.content.Context
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
@@ -8,6 +11,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.widget.doAfterTextChanged
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -28,6 +33,17 @@ class ReplyRoleManagerUi(private val activity: AppCompatActivity, private val bi
     private var load: Job? = null
 
     init {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { onShown() }
+        }
+        activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                activity.contentResolver.registerContentObserver(ReplyIdentityProvider.CHANGES_URI, false, observer)
+            }
+            override fun onStop(owner: LifecycleOwner) {
+                activity.contentResolver.unregisterContentObserver(observer)
+            }
+        })
         binding.addRole.setOnClickListener { edit(null) }
         binding.refreshRoles.setOnClickListener { onShown() }
         binding.searchRoles.doAfterTextChanged { render() }

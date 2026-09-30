@@ -80,6 +80,26 @@ object ReplyIdentityBridge {
             if (c.isActive) c.resumeWith(result)
         }
     }
+    suspend fun saveRole(context: Context, owner: ReplyIdentityOwner, identity: ReplyIdentitySetting, text: String,
+        verify: () -> String?): AppliedReplyRole = suspendCancellableCoroutine { c ->
+        val captured = generation()
+        worker.execute {
+            val result = runCatching {
+                check(owner.acceptsAccount(verify()) && captured.current()) { "账号或角色已变化，请重新打开" }
+                val key = requireNotNull(owner.key)
+                val response = requireNotNull(context.contentResolver.call(SettingsProvider.URI, "reply_role_put", key.value,
+                    Bundle().apply {
+                        putString(SettingsProvider.KEY_GENERATION, captured.generation)
+                        putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, captured.revision)
+                        putString("identity", identity.encode()); putString("text", text)
+                    }))
+                val background = accept(captured, key, ContactBackground.decode(requireNotNull(response.getString("background"))))
+                ModulePrefs.backgroundChanged(owner.talker)
+                AppliedReplyRole(ReplyIdentitySetting.decode(requireNotNull(response.getString("identity"))), background)
+            }
+            if (c.isActive) c.resumeWith(result)
+        }
+    }
     suspend fun applyRole(context: Context, owner: ReplyIdentityOwner, role: ReplyRole, verify: () -> String?): AppliedReplyRole =
         suspendCancellableCoroutine { c ->
             val captured = generation()

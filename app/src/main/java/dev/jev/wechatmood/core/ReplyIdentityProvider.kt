@@ -10,6 +10,7 @@ import java.io.File
 /** SettingsProvider checks the Binder UID before dispatching here. */
 object ReplyIdentityProvider {
     const val KEY_ROLE_REVISION = "reply_roles_revision"
+    val CHANGES_URI: android.net.Uri = SettingsProvider.URI.buildUpon().appendPath("roles").build()
     private var store: ReplyIdentityStore? = null
     private fun storage(context: Context): ReplyIdentityStore {
         check(context.packageName == BuildConfig.APPLICATION_ID)
@@ -47,6 +48,15 @@ object ReplyIdentityProvider {
         val requested = ReplyContactKey(requireNotNull(arg))
         val key = ReplyContactKey(AnalysisCacheKey.digest(caller.toString(), requested.value))
         return when (method) {
+            "reply_role_put" -> {
+                val applied = storage(context).roles.saveFromChat(key,
+                    ReplyIdentitySetting.decode(requireNotNull(extras?.getString("identity"))),
+                    requireNotNull(extras?.getString("text")))
+                Bundle().apply {
+                    putString("identity", applied.identity.encode())
+                    putString("background", applied.background.encode())
+                }
+            }
             "reply_role_apply" -> {
                 check(extras?.getLong(KEY_ROLE_REVISION) == storage(context).roles.revision()) { "角色已变化，请重新选择" }
                 val applied = storage(context).roles.apply(requireNotNull(extras?.getString("role_id")),

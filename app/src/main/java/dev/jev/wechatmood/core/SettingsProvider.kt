@@ -36,7 +36,14 @@ class SettingsProvider : ContentProvider() {
                     Bundle().apply { putBoolean("saved", true) }
                 }
             }
-            "reply_role_list", "reply_role_apply", "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
+            "reply_role_list", "reply_role_apply", "reply_role_put", "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> {
+                val result = ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
+                if (method.endsWith("_put") || method == "reply_role_apply") {
+                    // A refresh notification failure must not turn a completed disk write into a save failure.
+                    runCatching { ctx.contentResolver.notifyChange(ReplyIdentityProvider.CHANGES_URI, null) }
+                }
+                result
+            }
             "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
             "config" -> snapshot(ctx)
             "report" -> {

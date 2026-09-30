@@ -6,7 +6,8 @@ import org.json.JSONObject
 import java.util.UUID
 
 /** Management IDs stay local. Neither names nor backgrounds belong in diagnostic output. */
-class ReplyRole(val id: String, val name: String, val background: String, val revision: String) {
+class ReplyRole(val id: String, val name: String, val background: String, val revision: String,
+    val relationship: ReplyRelationship = ReplyRelationship.OTHER) {
     val fromContact get() = id.startsWith("contact:")
     init {
         require(id.matches(Regex("role:[0-9a-f-]{36}|contact:[0-9a-f]{64}")))
@@ -14,12 +15,14 @@ class ReplyRole(val id: String, val name: String, val background: String, val re
         require(background.length <= ContactBackground.MAX_LENGTH && revision.length in 1..64)
     }
     fun encode(includeBackground: Boolean = true): String = JSONObject().put("id", id).put("name", name)
-        .put("background", if (includeBackground) background else "").put("revision", revision).toString()
+        .put("background", if (includeBackground) background else "").put("revision", revision)
+        .put("relationship", relationship.id).toString()
     companion object {
         fun decode(payload: String): ReplyRole {
             require(payload.length <= 16000)
             val json = JSONObject(payload)
-            return ReplyRole(json.getString("id"), json.getString("name"), json.getString("background"), json.getString("revision"))
+            return ReplyRole(json.getString("id"), json.getString("name"), json.getString("background"), json.getString("revision"),
+                ReplyRelationship.entries.firstOrNull { it.id == json.optString("relationship") } ?: ReplyRelationship.OTHER)
         }
     }
 }
@@ -32,6 +35,17 @@ class ReplyRoleStore(private val db: AnalysisCacheDatabase, private val identiti
         db.execute("CREATE TABLE IF NOT EXISTS reply_roles (role_id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS reply_role_revision (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL)")
         db.execute("INSERT OR IGNORE INTO reply_role_revision(id, revision) VALUES(1, 0)")
+        db.execute("CREATE TABLE IF NOT EXISTS reply_role_migrations (migration TEXT PRIMARY KEY NOT NULL)")
+        if (db.query("SELECT migration FROM reply_role_migrations WHERE migration = ?", listOf("defaults-v1")) == null) {
+            transaction {
+                ReplyRelationship.entries.filter { it != ReplyRelationship.UNSPECIFIED && it != ReplyRelationship.OTHER }.forEach {
+                    val id = "role:${UUID.nameUUIDFromBytes("default-role-v1:${it.id}".toByteArray(Charsets.UTF_8))}"
+                    val role = ReplyRole(id, it.label, "", UUID.randomUUID().toString(), it)
+                    db.execute("INSERT OR IGNORE INTO reply_roles(role_id, payload) VALUES(?, ?)", listOf(id, role.encode()))
+                }
+                db.execute("INSERT INTO reply_role_migrations(migration) VALUES(?)", listOf("defaults-v1"))
+            }
+        }
     }
     fun revision(): Long = synchronized(identities) {
         db.query("SELECT revision FROM reply_role_revision WHERE id = 1", emptyList())!!.toLong()
@@ -79,11 +93,30 @@ class ReplyRoleStore(private val db: AnalysisCacheDatabase, private val identiti
                 identities.save(key, if (clean == previous.name) identity else ReplyIdentitySetting(ReplyRelationship.OTHER, clean))
                 identities.saveBackground(key, background)
             } else {
-                val value = ReplyRole(target, clean, background, UUID.randomUUID().toString())
+                val relationship = previous?.takeIf { it.name == clean }?.relationship ?: ReplyRelationship.OTHER
+                val value = ReplyRole(target, clean, background, UUID.randomUUID().toString(), relationship)
                 db.execute("INSERT OR REPLACE INTO reply_roles(role_id, payload) VALUES(?, ?)", listOf(target, value.encode()))
             }
             db.execute("UPDATE reply_role_revision SET revision = revision + 1 WHERE id = 1")
             requireNotNull(find(target))
+        }
+    }
+    /** Explicit drawer save only: drafts remain contact-private. One reusable role per verified contact. */
+    fun saveFromChat(key: ReplyContactKey, identity: ReplyIdentitySetting, text: String): AppliedReplyRole = synchronized(identities) {
+        require(identity.relationship != ReplyRelationship.UNSPECIFIED)
+        val name = identity.relationship.displayLabel(identity.customText)
+        require(identity.relationship != ReplyRelationship.OTHER || identity.customText.isNotBlank())
+        require(text.length <= ContactBackground.MAX_LENGTH)
+        val id = "role:${UUID.nameUUIDFromBytes("chat-role-v1:${key.value}".toByteArray(Charsets.UTF_8))}"
+        if (find(id) == null) require(templates().size < 100) { "最多保存 100 个角色，请先整理已有角色" }
+        transaction {
+            identities.save(key, identity)
+            val background = identities.saveBackground(key, text)
+            val role = ReplyRole(id, name, text, UUID.randomUUID().toString(), identity.relationship)
+            db.execute("INSERT OR REPLACE INTO reply_roles(role_id, payload) VALUES(?, ?)", listOf(id, role.encode()))
+            // The per-role revision guards selection. Do not invalidate the drawer that is saving itself;
+            // the global revision is for app-side edits which invalidate open host editors and caches.
+            AppliedReplyRole(identity, background)
         }
     }
     fun delete(id: String, expectedRevision: String) = synchronized(identities) {
@@ -104,9 +137,12 @@ class ReplyRoleStore(private val db: AnalysisCacheDatabase, private val identiti
         val role = checkNotNull(find(id)) { "角色已删除，请重新选择" }
         check(role.revision == expectedRevision) { "角色已修改，请重新选择" }
         transaction {
-            val identity = ReplyIdentitySetting(ReplyRelationship.OTHER, role.name)
+            val identity = ReplyIdentitySetting(role.relationship, if (role.relationship == ReplyRelationship.OTHER) role.name else "")
             identities.save(key, identity)
-            AppliedReplyRole(identity, identities.saveBackground(key, role.background))
+            // Switching a preset identity without a template background must not erase personal history.
+            val background = if (role.relationship != ReplyRelationship.OTHER && role.background.isBlank())
+                identities.background(key) else identities.saveBackground(key, role.background)
+            AppliedReplyRole(identity, background)
         }
     }
     private fun <T> transaction(block: () -> T): T {
