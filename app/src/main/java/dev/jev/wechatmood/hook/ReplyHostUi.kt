@@ -185,6 +185,20 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         roleRow.addView(rolePicker, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
         roleRow.addView(historyPicker, LinearLayout.LayoutParams(0, -2, 1.2f))
         results.addView(roleRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        var roleExpanded = composition.relationship == ReplyRelationship.OTHER && composition.customRelationship.isBlank()
+        var instructionExpanded = false
+        val roleToggle = action("角色背景 ▾", quiet = true)
+        val instructionToggle = action("本次补充 ▾", quiet = true)
+        val disclosureRow = LinearLayout(activity)
+        listOf(roleToggle, instructionToggle).forEachIndexed { index, toggle ->
+            toggle.textSize = 12f; toggle.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            toggle.maxLines = 2; toggle.ellipsize = android.text.TextUtils.TruncateAt.END
+            toggle.setPadding(dp(4), dp(4), dp(4), dp(4))
+            disclosureRow.addView(toggle, LinearLayout.LayoutParams(0, -2, 1f).apply { if (index == 0) rightMargin = dp(8) })
+        }
+        results.addView(disclosureRow)
+        val roleEditor = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        results.addView(roleEditor, LinearLayout.LayoutParams(-1, -2))
         val customRole = EditText(activity).apply {
             hint = "填写对方名称或身份，如：小林、前同事"
             contentDescription = "自定义对方身份，最多 ${ReplyRelationship.MAX_CUSTOM_LENGTH} 字"
@@ -196,9 +210,9 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             visibility = if (composition.relationship == ReplyRelationship.OTHER) View.VISIBLE else View.GONE
             setOnFocusChangeListener { _, focused -> background = theme.shape(theme.card, 12, if (focused) theme.accent else theme.border) }
         }
-        results.addView(customRole, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        roleEditor.addView(customRole, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         val identityBackground = EditText(activity).apply {
-            hint = "当前角色的背景（选填）\n切换角色会显示对应背景，编辑后点击保存角色"
+            hint = "这个角色的经历、偏好或相处方式（选填）"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
             gravity = Gravity.TOP or Gravity.START; minLines = 2; maxLines = 4
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -206,11 +220,10 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             setPadding(dp(10), dp(10), dp(10), dp(10)); background = theme.shape(theme.card, 12, theme.border)
             setText(composition.background.text)
         }
-        results.addView(identityBackground, LinearLayout.LayoutParams(-1, -2))
+        roleEditor.addView(identityBackground, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         val saveIdentityButton = action("保存角色")
-        results.addView(saveIdentityButton, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })
         val instruction = EditText(activity).apply {
-            hint = "本次补充要求（可选）\n如：想委婉拒绝，别太正式；找个轻松的话题\n长期经历与偏好请填「对方背景」"
+            hint = "这次想怎么回？如：委婉拒绝、别太正式（选填）"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
             gravity = Gravity.TOP or Gravity.START; minLines = 2; maxLines = 4; minHeight = dp(48)
             setPadding(dp(10), dp(10), dp(10), dp(10)); background = theme.shape(theme.card, 12, theme.border)
@@ -224,8 +237,11 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         val topicButton = action("找找话题")
         val shorter = action("更简短", quiet = true)
         val generationActions = LinearLayout(activity)
-        generationActions.addView(generateButton, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
-        generationActions.addView(topicButton, LinearLayout.LayoutParams(0, -2, 1f))
+        listOf(saveIdentityButton, generateButton, topicButton).forEachIndexed { index, button ->
+            button.textSize = 13f; button.setPadding(dp(4), dp(6), dp(4), dp(6))
+            // Let large system fonts wrap instead of clipping an action or shrinking the touch target.
+            generationActions.addView(button, LinearLayout.LayoutParams(0, -1, 1f).apply { if (index < 2) rightMargin = dp(6) })
+        }
         results.addView(generationActions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         val state = theme.label("", 12f, theme.muted).apply {
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
@@ -279,6 +295,15 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 composition.activeCustomRelationship != selectedIdentity.relationship.customValue(selectedIdentity.customText))
         fun topicKey(current: ReplyContext, draft: String, date: String) = TopicKey(current.fingerprint, current.requestedMessages,
             composition.relationship, instruction.text.toString(), draft, date, composition.activeCustomRelationship)
+        fun preview(text: CharSequence, empty: String) = text.toString().trim().replace(Regex("\\s+"), " ").take(22).ifBlank { empty }
+        fun collapseEditors() {
+            roleExpanded = false; instructionExpanded = false
+            if (customRole.hasFocus() || identityBackground.hasFocus() || instruction.hasFocus()) {
+                body.requestFocus()
+                (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                    ?.hideSoftInputFromWindow(body.windowToken, 0)
+            }
+        }
         fun controls(generatingRequest: Boolean) {
             val generating = generatingRequest || applyingRole || identitySaving
             val reading = reference.loading
@@ -294,15 +319,15 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             })
             generateButton.isEnabled = !generating && !reading && composition.hasValidRelationship && !hasUnsavedIdentityBackground()
             generateButton.text = when {
-                hasUnsavedIdentityBackground() && !generating -> "先保存角色"
-                generating -> if (findingTopics) "生成回复" else "正在生成…"
-                reading -> "正在读取消息…"
-                !composition.hasValidRelationship -> "先填写对方身份"
-                ready == null -> "重新读取消息"
+                hasUnsavedIdentityBackground() && !generating -> "先保存"
+                generating -> if (findingTopics) "生成回复" else "生成中…"
+                reading -> "读取中…"
+                !composition.hasValidRelationship -> "先填身份"
+                ready == null -> "重新读取"
                 failed -> "重试生成"
-                ready.source == ReplyContextSource.LOADED_PAGE -> "按已读取 ${ready.messages.size} 条生成"
+                ready.source == ReplyContextSource.LOADED_PAGE -> "生成回复"
                 composition.result == null || composition.result?.topics != null -> "生成回复"
-                !composition.canUse -> "按新选择生成"
+                !composition.canUse -> "重新生成"
                 else -> "重新生成"
             }
             shorter.isEnabled = !generating && !reading && ready != null && composition.canUse && !hasUnsavedIdentityBackground()
@@ -312,7 +337,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             val sameTopicInputs = composition.canUse && batch != null && batch.key == currentTopicKey
             topicButton.isEnabled = !generating && !reading && composition.hasValidRelationship && !hasUnsavedIdentityBackground()
             topicButton.text = when {
-                generating && findingTopics -> "正在找话题…"
+                generating && findingTopics -> "寻找中…"
                 sameTopicInputs -> "换个话题"
                 else -> "找找话题"
             }
@@ -326,11 +351,23 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             customRole.isEnabled = !generating
             customRole.visibility = if (composition.relationship == ReplyRelationship.OTHER) View.VISIBLE else View.GONE
             val editingIdentity = composition.relationship != ReplyRelationship.UNSPECIFIED && !group
+            val hasRoleDetails = editingIdentity || composition.relationship == ReplyRelationship.OTHER
+            roleToggle.visibility = if (hasRoleDetails) View.VISIBLE else View.GONE
+            roleEditor.visibility = if (hasRoleDetails && roleExpanded) View.VISIBLE else View.GONE
+            instruction.visibility = if (instructionExpanded) View.VISIBLE else View.GONE
+            roleToggle.isEnabled = !generating; instructionToggle.isEnabled = !generating
+            val roleSectionTitle = if (group) "角色名称" else "角色背景"
+            roleToggle.text = "$roleSectionTitle${if (hasUnsavedIdentityBackground()) " · 未保存" else ""} ${if (roleExpanded) "▴" else "▾"}\n" +
+                preview(if (group) customRole.text else identityBackground.text, "未填写，点此编辑")
+            instructionToggle.text = "本次补充 ${if (instructionExpanded) "▴" else "▾"}\n" + preview(instruction.text, "可选，点此填写")
+            roleToggle.contentDescription = "$roleSectionTitle，${if (roleExpanded) "已展开，点击收起" else "已收起，点击展开"}"
+            instructionToggle.contentDescription = "本次补充，${if (instructionExpanded) "已展开，点击收起" else "已收起，点击展开"}"
+            generateButton.contentDescription = "${generateButton.text}，已读取 ${ready?.messages?.size ?: 0} 条消息"
             identityBackground.visibility = if (editingIdentity) View.VISIBLE else View.GONE
             saveIdentityButton.visibility = if (!group && composition.relationship != ReplyRelationship.UNSPECIFIED) View.VISIBLE else View.GONE
             identityBackground.isEnabled = !generating
             saveIdentityButton.isEnabled = !generating && composition.hasValidRelationship
-            saveIdentityButton.text = if (identitySaving) "正在保存…" else "保存角色"
+            saveIdentityButton.text = if (identitySaving) "保存中…" else "保存角色"
             rolePicker.text = roleLabel()
             rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.displayLabel(composition.customRelationship)}"
             historyPicker.isEnabled = !generating
@@ -344,6 +381,20 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 else "复制后，请自行粘贴到聊天框发送"
             state.visibility = if (state.text.isBlank()) View.GONE else View.VISIBLE
             if (window.isShowing) fitWindow()
+        }
+        roleToggle.setOnClickListener {
+            if (!ownsDrawer() || busy) return@setOnClickListener
+            val expand = !roleExpanded
+            collapseEditors(); roleExpanded = expand; controls(false)
+        }
+        instructionToggle.setOnClickListener {
+            if (!ownsDrawer() || busy) return@setOnClickListener
+            val expand = !instructionExpanded
+            collapseEditors(); instructionExpanded = expand; controls(false)
+        }
+        fun revealReply() {
+            collapseEditors(); controls(false)
+            scroll.post { if (ownsDrawer()) scroll.smoothScrollTo(0, replyTitle.top) }
         }
         fun renderParts() {
             parts.removeAllViews()
@@ -408,6 +459,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     if (ownsDrawer()) {
                         selectedIdentity = saved.identity
                         composition.background = saved.background
+                        collapseEditors()
                         renderParts(); toast("角色和背景已保存")
                     }
                 } catch (e: CancellationException) { throw e }
@@ -476,6 +528,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                         composition.background = ContactBackground()
                         customRole.setText("")
                         identityBackground.setText("")
+                        roleExpanded = composition.relationship == ReplyRelationship.OTHER
+                        instructionExpanded = false
                         saveIdentity()
                         failed = false
                         renderParts(); controls(false)
@@ -651,7 +705,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             if (requestedTopicKey != null && composition.nextTopic(requestedTopicKey)) {
                 failed = false; state.text = ""; reason.visibility = View.GONE
                 reasonToggle.text = "为什么这样回 ▾"
-                renderParts(); controls(false); remember(); return
+                renderParts(); revealReply(); remember(); return
             }
             job?.cancel()
             val config = ModulePrefs.replySettings()
@@ -660,6 +714,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             val previousTopics = composition.result?.takeIf { composition.canUse }?.topics?.items.orEmpty()
             state.text = ""; state.setTextColor(theme.muted)
             failed = false; findingTopics = findTopics
+            collapseEditors()
             (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
                 ?.hideSoftInputFromWindow(instruction.windowToken, 0)
             body.requestFocus()
@@ -691,6 +746,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     snapshot = current
                     reason.visibility = View.GONE; reasonToggle.text = "为什么这样回 ▾"; renderParts()
                     state.text = ""
+                    revealReply()
                     remember(); updateNotice()
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) {
