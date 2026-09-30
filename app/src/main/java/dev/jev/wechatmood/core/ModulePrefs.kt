@@ -83,7 +83,7 @@ object ModulePrefs {
     val bridgeAvailable get() = session.current != null
     fun analysisSettings() = session.current
     fun replySettings() = session.current?.reply ?: dev.jev.wechatmood.reply.ReplySettings.empty()
-    val replyConsent get() = session.current?.replyConsent == true
+    val canGenerateReply get() = session.current?.canGenerateReply == true
     val exploreMode get() = session.current?.exploreMode == true
     val apiKey get() = session.current?.api?.apiKey.orEmpty()
     fun apiSettings(): ApiSettings = session.current?.api ?: ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-    <TextView style="@style/Yanwai.PageTitle" android:text="回复与话题" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <TextView style="@style/Yanwai.Section" android:layout_marginTop="20dp" android:text="回复模型" />
     <TextView style="@style/Yanwai.Body" android:text="「帮我回」和「找找话题」共用这份模型配置。" />
     <TextView android:id="@+id/replyStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp" />
     <com.google.android.material.textfield.TextInputLayout android:id="@+id/providerLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="供应商">
@@ -20,9 +20,7 @@
         <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/model" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textVisiblePassword" android:completionThreshold="0" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
     </com.google.android.material.textfield.TextInputLayout>
     <com.google.android.material.button.MaterialButton android:id="@+id/referenceModels" style="@style/Yanwai.Button.Text" android:visibility="gone" android:text="选择官方文档中的参考模型" />
-    <TextView style="@style/Yanwai.Section" android:text="使用许可" />
-    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/replyConsent" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="允许手动生成回复建议" android:saveEnabled="false" />
-    <TextView style="@style/Yanwai.Caption" android:text="开启后仍需手动点击生成。相关聊天、对方背景和本次要求会发送给所选模型；回复只供复制，由你粘贴发送。修改后需保存。" />
+    <TextView style="@style/Yanwai.Caption" android:layout_marginTop="16dp" android:text="点击生成时，相关聊天、对方背景和本次要求会发送给所选模型。建议只供复制，由你粘贴发送。" />
     <com.google.android.material.button.MaterialButton android:id="@+id/testReply" style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测回复" />
     <TextView style="@style/Yanwai.Caption" android:text="检测会发送示例聊天和相关知识资料，可能产生 API 费用，不读取微信消息。列表可见不代表一定能调用。" />
     <com.google.android.material.button.MaterialButton android:id="@+id/saveReply" style="@style/Yanwai.Button.Text" android:text="仅保存配置" />

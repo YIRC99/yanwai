@@ -58,12 +58,34 @@
             </LinearLayout>
             <LinearLayout android:id="@+id/emotionPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                 <TextView style="@style/Yanwai.PageTitle" android:text="聊天分析" />
-                <TextView style="@style/Yanwai.Body" android:text="先选分析方式，再连接需要的模型。" />
+                <TextView style="@style/Yanwai.Body" android:text="选择怎样理解聊天，连接在模型页统一管理。" />
                 <include android:id="@+id/intentSettings" layout="@layout/intent_settings" />
-                <TextView android:id="@+id/modelSection" style="@style/Yanwai.Section" android:text="JEV 连接" />
-                <TextView android:id="@+id/jevSectionHint" style="@style/Yanwai.Caption" android:text="为 JEV 情绪来源单独保存和检测连接。" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/replyPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Yanwai.PageTitle" android:text="回复与话题" />
+                <TextView style="@style/Yanwai.Body" android:text="想好怎么说，再亲自发送。" />
+                <com.google.android.material.card.MaterialCardView style="@style/Yanwai.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                        <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="手动生成，自由选择" />
+                        <TextView style="@style/Yanwai.Body" android:text="在微信聊天中展开「＋」，点击「帮我回 · 找话题」。选择对方身份和参考条数，再点击生成。" />
+                        <TextView style="@style/Yanwai.Caption" android:layout_marginTop="12dp" android:text="不需要额外开启许可。只有点击生成才会发送聊天给模型；建议由你复制、粘贴发送。" />
+                        <TextView android:id="@+id/replySummary" style="@style/Yanwai.Badge" android:layout_marginTop="16dp" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/openReplyModel" style="@style/Yanwai.Button" android:layout_marginTop="12dp" android:text="配置回复模型" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/modelsPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Yanwai.PageTitle" android:text="模型配置" />
+                <TextView style="@style/Yanwai.Body" android:text="连接单独保存，不会切换你的分析方式。" />
+                <com.google.android.material.button.MaterialButtonToggleGroup android:id="@+id/modelTabs" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:singleSelection="true" app:selectionRequired="true" app:checkedButton="@id/modelJev">
+                    <com.google.android.material.button.MaterialButton android:id="@+id/modelJev" style="@style/Yanwai.ModelTab" android:text="JEV" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/modelAnalysis" style="@style/Yanwai.ModelTab" android:text="分析 LLM" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/modelReply" style="@style/Yanwai.ModelTab" android:text="回复 LLM" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+                <LinearLayout android:id="@+id/jevModelPage" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/modelSection" style="@style/Yanwai.Section" android:layout_marginTop="20dp" android:text="JEV 连接" />
+                <TextView android:id="@+id/jevSectionHint" style="@style/Yanwai.Caption" android:text="保存后自动检测，成功显示绿色，失败显示红色。" />
                 <TextView android:id="@+id/textModelStatus" style="@style/Yanwai.Badge" android:text="先选择渠道，再填写对应的 API Key。" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/toggleJevConfig" style="@style/Yanwai.Button.Text" android:text="展开 JEV 配置" />
                 <LinearLayout android:id="@+id/jevConfigPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutProvider" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="服务渠道">
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/inputProvider" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" />
@@ -84,15 +106,18 @@
                         <com.google.android.material.button.MaterialButton android:id="@+id/buttonGetKey" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="前往申请 Key ↗" />
                         <com.google.android.material.button.MaterialButton android:id="@+id/buttonProviderDocs" style="@style/Yanwai.Button.Text" android:text="查看渠道文档 ↗" />
                     </LinearLayout>
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonTestModel" style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测 JEV" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonSaveApi" style="@style/Yanwai.Button.Text" android:text="仅保存 JEV 配置" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonTestModel" style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测连接" />
                     <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progressModel" android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true" android:visibility="gone" app:trackCornerRadius="2dp" android:contentDescription="正在检测模型连接" />
                     <TextView android:id="@+id/textTestResult" style="@style/Yanwai.Body" android:layout_marginTop="12dp" android:padding="16dp" android:background="@drawable/status_pill" android:accessibilityLiveRegion="polite" android:visibility="gone" />
                 </LinearLayout>
+                <TextView style="@style/Yanwai.Caption" android:layout_marginTop="8dp" android:text="检测只发送示例聊天，可能产生 API 费用。" />
+                </LinearLayout>
+                <include android:id="@+id/analysisModelSettings" layout="@layout/analysis_model_settings" />
+                <include android:id="@+id/replySettings" layout="@layout/reply_settings" />
             </LinearLayout>
-            <include android:id="@+id/replySettings" layout="@layout/reply_settings" />
             <LinearLayout android:id="@+id/aboutPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                 <TextView style="@style/Yanwai.PageTitle" android:text="更多" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/openAllModels" style="@style/Yanwai.Button.Outline" android:text="模型配置" app:icon="@drawable/ic_settings" />
                 <TextView style="@style/Yanwai.Section" android:text="分析卡片显示" android:layout_marginTop="20dp" />
                 <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showIntent" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="显示意图解析" android:saveEnabled="false" />
                 <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showConcern" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="显示可能在意" android:saveEnabled="false" />
@@ -139,5 +164,5 @@
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-    <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@+id/navigation" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="64dp" android:background="@color/panel_surface" app:menu="@menu/settings_navigation" app:labelVisibilityMode="labeled" app:itemIconTint="@color/navigation_item" app:itemTextColor="@color/navigation_item" app:itemHorizontalTranslationEnabled="false" />
+    <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@+id/navigation" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="80dp" android:background="@color/panel_surface" app:itemIconSize="24dp" app:itemPaddingTop="12dp" app:itemPaddingBottom="12dp" app:itemTextAppearanceActive="@style/Yanwai.NavigationLabel" app:itemTextAppearanceInactive="@style/Yanwai.NavigationLabel" app:itemActiveIndicatorStyle="@style/Yanwai.NavigationIndicator" app:menu="@menu/settings_navigation" app:labelVisibilityMode="labeled" app:itemIconTint="@color/navigation_item" app:itemTextColor="@color/navigation_item" app:itemHorizontalTranslationEnabled="false" />
 </LinearLayout>

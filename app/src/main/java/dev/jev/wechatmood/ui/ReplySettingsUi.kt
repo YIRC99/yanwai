@@ -29,7 +29,6 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
     init {
         binding.provider.setSimpleItems(ReplyProvider.entries.map { it.label }.toTypedArray())
         showProvider()
-        binding.replyConsent.isChecked = prefs.getBoolean(ReplySettings.KEY_CONSENT, false)
         status(if (prefs.getString(ReplySettings.KEY_MODEL, "").isNullOrBlank()) "尚未配置" else "已保存 · 尚未检测", R.color.status_neutral)
         listOf(binding.endpoint, binding.apiKey, binding.model).forEach { input -> input.doAfterTextChanged {
             if (!checking && !rendering) {
@@ -52,7 +51,6 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
             SettingsStatus.show(binding.modelsStatus, "文档参考模型，不代表账户可用；选择后请检测。", R.color.status_warning)
             showModelChoices()
         }
-        binding.replyConsent.setOnCheckedChangeListener { _, _ -> markDirty() }
         binding.saveReply.setOnClickListener {
             save()?.let {
                 binding.replyResult.visibility = View.GONE
@@ -95,6 +93,7 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
     }
 
     private fun showModelChoices() {
+        if (!binding.root.isShown || activity.isFinishing || activity.isDestroyed) return
         binding.model.requestFocus()
         binding.model.showDropDown()
     }
@@ -115,19 +114,16 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
     }
 
     private fun save(): ReplySettings? {
-        // Allow incomplete saved configuration only when manual generation is disabled.
-        val settings = if (binding.replyConsent.isChecked) readSettings(true) ?: return null else try {
-            ReplySettings.fromInput(binding.endpoint.text.toString(), binding.apiKey.text.toString(), binding.model.text.toString())
-        } catch (e: IllegalArgumentException) { result(e.message.orEmpty(), true); return null }
+        val settings = readSettings(true) ?: return null
         MoodLog.protect(settings.apiKey)
         val values = ReplyProfiles.valuesToSave(provider, settings) { prefs.getString(it, null) }
         val saved = SettingsProvider.save(activity) {
             values.forEach { (key, value) -> putString(key, value) }
-            putBoolean(ReplySettings.KEY_CONSENT, binding.replyConsent.isChecked)
+            putBoolean(ReplySettings.KEY_CONSENT, true) // Compatibility with older running host processes.
         }
         if (!saved) { result("保存失败，请重试", true); return null }
         ModulePrefs.reload(force = true)
-        status(if (binding.replyConsent.isChecked) "已保存 · 允许手动生成" else "已保存 · 手动生成未开启", R.color.status_neutral)
+        status("已保存 · 可在微信中手动生成", R.color.status_neutral)
         return settings
     }
 
@@ -170,25 +166,30 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
                     ReplyMessage(1, "我", System.currentTimeMillis() - 60000, "最近忙完了，周末想出去走走。"),
                     ReplyMessage(2, "对方", System.currentTimeMillis(), "好呀，你有什么想去的地方吗？")))
                 val suggestion = ReplyHttpClient().generate(settings, example, "想去公园", "自然简短", knowledge)
-                status(if (binding.replyConsent.isChecked) "回复检测通过 · 手动生成已开启" else "检测通过 · 手动生成仍关闭",
-                    if (binding.replyConsent.isChecked) R.color.status_success else R.color.status_warning)
+                status("回复连接成功 · 可手动生成", R.color.status_success)
                 val preview = suggestion.parts.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n\n")
                 result("示例回复（${suggestion.parts.size} 条）：\n$preview\n\n${suggestion.reason}\n\n接口和回复格式可用，聊天入口请在微信中体验。")
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { status("检测失败", R.color.status_error); result(e.message ?: "检测失败，请重试", true) }
-            finally { setBusy(false); binding.testReply.text = "保存并检测回复" }
+            finally { setBusy(false) }
         }
     }
     private fun setBusy(busy: Boolean) {
         checking = busy
         listOf(binding.endpointLayout, binding.keyLayout, binding.modelLayout, binding.providerLayout,
-            binding.replyConsent, binding.saveReply, binding.testReply, binding.fetchModels, binding.referenceModels)
+            binding.saveReply, binding.testReply, binding.fetchModels, binding.referenceModels)
             .forEach { it.isEnabled = !busy }
         binding.modelLayout.isEndIconVisible = modelOptions.isNotEmpty()
         binding.progressReply.visibility = if (busy) View.VISIBLE else View.GONE
     }
     private fun status(text: String, color: Int) {
         SettingsStatus.show(binding.replyStatus, text, color)
+        SettingsStatus.show(binding.testReply, when (color) {
+            R.color.status_success -> "连接成功 · 重新检测"
+            R.color.status_error -> "连接失败 · 点击重试"
+            R.color.status_info -> "正在检测…"
+            else -> "保存并检测回复"
+        }, color)
     }
     private fun result(text: String, error: Boolean = false) {
         binding.replyResult.visibility = View.VISIBLE; binding.replyResult.text = text

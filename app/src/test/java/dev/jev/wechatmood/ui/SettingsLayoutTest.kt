@@ -8,6 +8,17 @@ import org.w3c.dom.Element
 
 /** Resource contracts: choices remain accessible, keys stay out of saved view state. */
 class SettingsLayoutTest {
+    @Test fun analysisPageDoesNotContainCredentialsOrConditionalModelForms() {
+        val nodes = elements("intent_settings")
+        assertFalse("Model credentials belong on a dedicated page", nodes.any {
+            it.getAttribute("android:inputType") == "textPassword"
+        })
+        assertTrue(nodes.any { it.getAttribute("android:id") == "@+id/openModelSettings" })
+    }
+
+    @Test fun manualReplyDoesNotRequireAnExtraPermissionSwitch() {
+        assertFalse(elements("reply_settings").any { it.getAttribute("android:id") == "@+id/replyConsent" })
+    }
     private fun elements(name: String): List<Element> {
         val file = File("src/main/res/layout/$name.xml")
         val nodes = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file).getElementsByTagName("*")
@@ -26,7 +37,7 @@ class SettingsLayoutTest {
     }
 
     @Test fun secretsNeverEnterAndroidSavedViewState() {
-        listOf("activity_main", "intent_settings", "reply_settings").forEach { layout ->
+        listOf("activity_main", "intent_settings", "analysis_model_settings", "reply_settings").forEach { layout ->
             elements(layout).filter { it.getAttribute("android:inputType") == "textPassword" }.forEach {
                 assertEquals("$layout must not persist keys in instance state", "false", it.getAttribute("android:saveEnabled"))
                 assertEquals("no", it.getAttribute("android:importantForAutofill"))

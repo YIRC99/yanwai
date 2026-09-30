@@ -44,9 +44,13 @@ class MainActivity : AppCompatActivity() {
     private var probeState = ProbeState.UNTESTED
     private val pagePositions = mutableMapOf<Int, Int>()
     private var currentPage = R.id.tabHome
+    private var modelsReturnPage = R.id.tabEmotion
     private var intentSettingsUi: dev.jev.wechatmood.ui.IntentSettingsUi? = null
     private val backToHome = object : OnBackPressedCallback(false) {
-        override fun handleOnBackPressed() { binding.navigation.selectedItemId = R.id.tabHome }
+        override fun handleOnBackPressed() {
+            if (currentPage == R.id.modelsPanel) showPage(modelsReturnPage)
+            else binding.navigation.selectedItemId = R.id.tabHome
+        }
     }
     private val refreshAfterSettings = Runnable { if (!isFinishing && !isDestroyed) refresh() }
     private val stateListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -101,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            insets
+            WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(binding.root)
         MoodLog.init(this)
@@ -123,16 +127,17 @@ class MainActivity : AppCompatActivity() {
             prefs.getString(ModulePrefs.KEY_API_MODEL, "").orEmpty())
         binding.inputProvider.setSimpleItems(JevProvider.entries.map { it.label }.toTypedArray())
         showProvider()
-        binding.toggleJevConfig.setOnClickListener { showJevConfig(binding.jevConfigPanel.visibility != View.VISIBLE) }
-        intentSettingsUi = dev.jev.wechatmood.ui.IntentSettingsUi(this, binding.intentSettings, uiScope, ::openHelp,
-            { binding.navigation.selectedItemId = R.id.tabReply }) { source ->
-            val pure = source == dev.jev.wechatmood.core.EmotionSource.LLM
-            binding.toggleJevConfig.visibility = if (pure) View.GONE else View.VISIBLE
-            binding.modelSection.visibility = if (pure) View.GONE else View.VISIBLE
-            binding.jevSectionHint.visibility = if (pure) View.GONE else View.VISIBLE
-            binding.textModelStatus.visibility = if (pure) View.GONE else View.VISIBLE
-            showJevConfig(!pure && prefs.getString(ModulePrefs.KEY_API_KEY, "").isNullOrBlank())
-            renderOverview()
+        intentSettingsUi = dev.jev.wechatmood.ui.IntentSettingsUi(this, binding.intentSettings,
+            binding.analysisModelSettings, uiScope, ::openHelp,
+            { openModels(R.id.modelReply) }, { openModels(R.id.modelJev) }) { renderOverview() }
+        binding.modelTabs.addOnButtonCheckedListener { _, id, checked -> if (checked) showModelTab(id) }
+        binding.openReplyModel.setOnClickListener { openModels(R.id.modelReply) }
+        binding.openAllModels.setOnClickListener { openModels(R.id.modelJev) }
+        binding.toolbar.setNavigationOnClickListener { backToHome.handleOnBackPressed() }
+        showModelTab(savedInstanceState?.getInt("model_tab", R.id.modelJev) ?: R.id.modelJev)
+        if (savedInstanceState?.getBoolean("models_open") == true) {
+            modelsReturnPage = selectedTab
+            showPage(R.id.modelsPanel)
         }
         binding.inputProvider.setOnItemClickListener { _, _, position, _ ->
             drafts[selectedProvider] = ApiDraft(binding.inputApiBase.text.toString(), binding.inputApiKey.text.toString(),
@@ -149,13 +154,6 @@ class MainActivity : AppCompatActivity() {
                     binding.textTestResult.visibility = View.GONE
                     renderOverview()
                 }
-            }
-        }
-        binding.buttonSaveApi.setOnClickListener {
-            if (saveApiSettings()) {
-                probeState = ProbeState.UNTESTED
-                renderOverview()
-                Toast.makeText(this, "JEV 配置已保存", Toast.LENGTH_SHORT).show()
             }
         }
         binding.switchExplore.isChecked = prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false)
@@ -329,6 +327,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun testModel() {
+        if (probeState == ProbeState.CHECKING) return
         if (!saveApiSettings()) return
         if (ModulePrefs.apiKey.isBlank()) {
             binding.layoutApiKey.error = "请先填写 API Key"
@@ -337,7 +336,6 @@ class MainActivity : AppCompatActivity() {
         }
         val testedSettings = ModulePrefs.analysisSettings() ?: return
         binding.buttonTestModel.isEnabled = false
-        binding.buttonSaveApi.isEnabled = false
         binding.layoutProvider.isEnabled = false
         binding.layoutApiBase.isEnabled = false
         binding.layoutApiKey.isEnabled = false
@@ -377,7 +375,6 @@ class MainActivity : AppCompatActivity() {
                     showResult("配置已变化，请重新检测。", StatusTone.WARNING)
                 }
                 binding.buttonTestModel.isEnabled = true
-                binding.buttonSaveApi.isEnabled = true
                 binding.layoutProvider.isEnabled = true
                 binding.layoutApiBase.isEnabled = selectedProvider == JevProvider.CUSTOM
                 binding.layoutApiKey.isEnabled = true
@@ -413,10 +410,18 @@ class MainActivity : AppCompatActivity() {
         binding.textModelStatus.text = "JEV · ${state.modelLabel}"
         tintStatus(binding.textModelStatus, state.modelTone)
         if (probeState == ProbeState.CHECKING) SettingsStatus.show(binding.textModelStatus, "JEV · 正在检测", R.color.status_info)
+        SettingsStatus.show(binding.buttonTestModel, "", when (probeState) {
+            ProbeState.PASSED -> R.color.status_success
+            ProbeState.FAILED -> R.color.status_error
+            ProbeState.CHECKING -> R.color.status_info
+            ProbeState.UNTESTED -> R.color.status_neutral
+        })
+        val reply = ModulePrefs.replySettings()
+        SettingsStatus.show(binding.replySummary, if (reply.isConfigured) "当前模型：" + reply.model else "先连接回复模型", if (reply.isConfigured) R.color.status_neutral else R.color.status_warning)
         binding.buttonTestModel.text = when (probeState) {
             ProbeState.CHECKING -> "正在检测…"
-            ProbeState.FAILED -> "重试 JEV 检测"
-            ProbeState.PASSED -> "重新检测 JEV"
+            ProbeState.FAILED -> "连接失败 · 点击重试"
+            ProbeState.PASSED -> "连接成功 · 重新检测"
             ProbeState.UNTESTED -> "保存并检测 JEV"
         }
     }
@@ -431,7 +436,12 @@ class MainActivity : AppCompatActivity() {
         if (id == R.id.tabEmotion) intentSettingsUi?.onShown()
         binding.homePanel.visibility = if (id == R.id.tabHome) View.VISIBLE else View.GONE
         binding.emotionPanel.visibility = if (id == R.id.tabEmotion) View.VISIBLE else View.GONE
-        binding.replySettings.root.visibility = if (id == R.id.tabReply) View.VISIBLE else View.GONE
+        binding.replyPanel.visibility = if (id == R.id.tabReply) View.VISIBLE else View.GONE
+        binding.modelsPanel.visibility = if (id == R.id.modelsPanel) View.VISIBLE else View.GONE
+        binding.navigation.visibility = if (id == R.id.modelsPanel) View.GONE else View.VISIBLE
+        binding.toolbar.navigationIcon = if (id == R.id.modelsPanel) androidx.core.content.ContextCompat.getDrawable(this, R.drawable.ic_back) else null
+        binding.toolbar.navigationContentDescription = "返回上一页"
+        if (id == R.id.modelsPanel) intentSettingsUi?.onShown()
         binding.aboutPanel.visibility = if (id == R.id.tabAbout) View.VISIBLE else View.GONE
         binding.pageScroll.post { if (currentPage == id) binding.pageScroll.scrollTo(0, pagePositions[id] ?: 0) }
     }
@@ -476,7 +486,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollTo(view: View) {
-        if (view == binding.modelSection || view == binding.layoutApiKey || view == binding.inputApiKey || view == binding.textTestResult) showJevConfig(true)
         binding.pageScroll.post {
             val content = binding.pageScroll.getChildAt(0) as android.view.ViewGroup
             val bounds = Rect()
@@ -486,9 +495,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showJevConfig(open: Boolean) {
-        binding.jevConfigPanel.visibility = if (open) View.VISIBLE else View.GONE
-        binding.toggleJevConfig.text = if (open) "收起 JEV 配置" else "查看 / 修改 JEV 配置"
+    private fun openModels(tab: Int) {
+        if (currentPage != R.id.modelsPanel) modelsReturnPage = currentPage
+        showModelTab(tab)
+        pagePositions[R.id.modelsPanel] = 0
+        showPage(R.id.modelsPanel)
+    }
+
+    private fun showModelTab(id: Int) {
+        val tab = id.takeIf { it in listOf(R.id.modelJev, R.id.modelAnalysis, R.id.modelReply) } ?: R.id.modelJev
+        if (binding.modelTabs.checkedButtonId != tab) binding.modelTabs.check(tab)
+        binding.jevModelPage.visibility = if (tab == R.id.modelJev) View.VISIBLE else View.GONE
+        binding.analysisModelSettings.root.visibility = if (tab == R.id.modelAnalysis) View.VISIBLE else View.GONE
+        binding.replySettings.root.visibility = if (tab == R.id.modelReply) View.VISIBLE else View.GONE
+        currentFocus?.clearFocus()
+        (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+            .hideSoftInputFromWindow(binding.root.windowToken, 0)
+        binding.pageScroll.post { if (currentPage == R.id.modelsPanel) binding.pageScroll.scrollTo(0, 0) }
     }
 
     private fun showSetupGuide(open: Boolean) {
@@ -509,6 +532,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("selected_tab", binding.navigation.selectedItemId)
+        outState.putBoolean("models_open", currentPage == R.id.modelsPanel)
+        outState.putInt("model_tab", binding.modelTabs.checkedButtonId)
         super.onSaveInstanceState(outState)
     }
     override fun onDestroy() { uiScope.cancel(); super.onDestroy() }

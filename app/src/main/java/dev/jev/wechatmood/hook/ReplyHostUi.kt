@@ -52,7 +52,7 @@ class ReplyHostUi(private val activity: Activity) {
         if (currentTalker == null) return
         plusEntry.update(footer())
         if (dialog?.isShowing == true) {
-            if ((!ModulePrefs.replyConsent || !ModulePrefs.replySettings().isConfigured) &&
+            if (!ModulePrefs.canGenerateReply &&
                 (job?.isActive == true || historyJob?.isActive == true)) {
                 job?.cancel(); historyJob?.cancel(); session.cancel(); invalidateRequest?.invoke()
             }
@@ -473,11 +473,11 @@ class ReplyHostUi(private val activity: Activity) {
                         ensureActive()
                         state.text = "正在转写语音 ${++voiceIndex}/$voiceCount…"
                         NativeVoiceBridge.transcribe(source) {
-                            ownsDrawer() && ModulePrefs.replyConsent && reference.isCurrent(ticket)
+                            ownsDrawer() && ModulePrefs.canGenerateReply && reference.isCurrent(ticket)
                         }
                     }
                     ensureActive()
-                    if (!ownsDrawer() || !ModulePrefs.replyConsent) return@launch
+                    if (!ownsDrawer() || !ModulePrefs.canGenerateReply) return@launch
                     if (!verifyAccount()) { window.dismiss(); return@launch }
                     if (current.messages.isEmpty() || current.messages.all { it.voiceState == VoiceState.FAILED }) {
                         reference.fail(ticket)
@@ -604,9 +604,9 @@ class ReplyHostUi(private val activity: Activity) {
                 try {
                     if (!verifyAccount()) { window.dismiss(); return@launch }
                     val knowledge = withContext(Dispatchers.IO) { ReplyKnowledge.load(activity, relationship) }
-                    // Upload only the prepared evidence, after rechecking consent, conversation and settings.
+                    // Upload only the prepared evidence, after rechecking configuration, conversation and settings.
                     ensureActive()
-                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.replyConsent || current.background != composition.background) return@launch
+                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.canGenerateReply || current.background != composition.background) return@launch
                     val beforeSend = ModulePrefs.replySettings()
                     if (beforeSend.endpoint != config.endpoint || beforeSend.model != config.model || beforeSend.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
@@ -616,7 +616,7 @@ class ReplyHostUi(private val activity: Activity) {
                         requireNotNull(time), previousTopics, customRelationship) else null
                     val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction, knowledge, previous, focusId, relationship, customRelationship)
                     val activeConfig = ModulePrefs.replySettings()
-                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.replyConsent) return@launch
+                    if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.canGenerateReply) return@launch
                     if (!verifyAccount()) { window.dismiss(); return@launch }
                     if (activeConfig.endpoint != config.endpoint || activeConfig.model != config.model || activeConfig.apiKey != config.apiKey) {
                         state.text = "配置已改变，请重试"; return@launch
@@ -673,10 +673,10 @@ class ReplyHostUi(private val activity: Activity) {
         if (reference.context == null && canGenerate()) prepareHistory(composition.historyLimit)
         return true
     }
-    private fun canGenerate() = ModulePrefs.replyConsent && ModulePrefs.replySettings().isConfigured
+    private fun canGenerate() = ModulePrefs.canGenerateReply
     private fun configure() {
         AlertDialog.Builder(activity).setTitle("先连接回复模型")
-            .setMessage("打开言外「回复建议」，配置模型并允许手动生成。")
+            .setMessage("打开言外「回复」，进入模型配置，保存回复模型后即可手动生成。")
             .setPositiveButton("去配置") { _, _ -> openSettings() }.setNegativeButton("稍后", null).show()
     }
     private fun contextSummary(context: ReplyContext): String {

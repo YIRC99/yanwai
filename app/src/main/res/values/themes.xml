@@ -3,6 +3,8 @@
     <style name="Theme.WeChatMood" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorOnPrimary">@color/brand_on_primary</item>
+        <item name="colorSecondaryContainer">@color/status_success_bg</item>
+        <item name="colorOnSecondaryContainer">@color/brand_primary</item>
         <item name="colorSecondary">@color/brand_primary</item>
         <item name="colorOnSecondary">@color/brand_on_primary</item>
         <item name="android:colorBackground">@color/page_background</item>

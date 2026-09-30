@@ -4,6 +4,31 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SettingsSessionTest {
+    @Test fun `configured replies work even with an old disabled consent preference`() {
+        val reply = dev.jev.wechatmood.reply.ReplySettings.fromInput("https://example.com", "reply-key", "m")
+        val state = RuntimeSettings(1, false, ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, ""), "a", reply, false)
+        assertTrue(state.canGenerateReply)
+        assertFalse(state.canAnalyze)
+    }
+
+    @Test fun `legacy consent cannot enable incomplete reply configuration`() {
+        val reply = dev.jev.wechatmood.reply.ReplySettings.fromInput("https://example.com", "", "m")
+        val state = RuntimeSettings(1, false, ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, ""), "a", reply, true)
+        assertFalse(state.canGenerateReply)
+    }
+
+    @Test fun `reset and revoked reply keys disable manual generation`() {
+        val session = SettingsSession()
+        val reply = dev.jev.wechatmood.reply.ReplySettings.fromInput("https://example.com", "reply-key", "m")
+        val api = ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "")
+        session.accept(RuntimeSettings(1, false, api, "a", reply, false))
+        assertTrue(session.current!!.canGenerateReply)
+        session.accept(RuntimeSettings(2, false, api, "a"))
+        session.accept(null)
+        assertFalse(session.current!!.canGenerateReply)
+        assertFalse(session.accept(RuntimeSettings(1, false, api, "b", reply), fromProvider = false))
+        assertNull(session.current)
+    }
     @Test fun `reply only setup remains available independently of Jev and revoke persists`() {
         val reply = dev.jev.wechatmood.reply.ReplySettings.fromInput("https://example.com", "reply-key", "m")
         val session = SettingsSession()

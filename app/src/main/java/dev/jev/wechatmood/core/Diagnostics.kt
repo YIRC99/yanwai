@@ -45,7 +45,7 @@ object Diagnostics {
                 appendLine(dev.jev.wechatmood.analysis.AnalysisThinking.description(it.emotionLlm))
             }
         }
-        appendLine("replyConfigured=${ModulePrefs.replySettings().isConfigured} replyConsent=${ModulePrefs.replyConsent}")
+        appendLine("replyConfigured=${ModulePrefs.replySettings().isConfigured} manualReplyReady=${ModulePrefs.canGenerateReply}")
         appendLine("bridgeError=${ModulePrefs.lastBridgeError ?: "无已记录错误"}")
         appendLine("--- 当前进程日志（有容量上限，包含重启前保留记录） ---")
         appendLine(MoodLog.read().ifBlank { "尚无记录" })

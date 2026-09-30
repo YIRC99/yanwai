@@ -4,11 +4,12 @@ package dev.jev.wechatmood.core
 class RuntimeSettings(val revision: Long,
     val exploreMode: Boolean, val api: ApiSettings, val generation: String,
     val reply: dev.jev.wechatmood.reply.ReplySettings = dev.jev.wechatmood.reply.ReplySettings.empty(),
-    val replyConsent: Boolean = false,
+    val replyConsent: Boolean = false, // Legacy wire field; manual generation no longer depends on it.
     val intent: IntentSettings = IntentSettings(),
     val cardDisplay: CardDisplaySettings = CardDisplaySettings(),
     val emotion: EmotionSettings = EmotionSettings()) {
     val emotionLlm get() = if (emotion.reuseReply) reply else intent.llm
+    val canGenerateReply get() = reply.isConfigured
     val canAnalyze get() = if (emotion.source == EmotionSource.LLM) emotionLlm.isConfigured else api.isConfigured
     private val fingerprint: String by lazy { if (emotion.source == EmotionSource.LLM)
         AnalysisCacheKey.digest("llm-emotion-v1", generation, emotionLlm.endpoint, emotionLlm.apiKey, emotionLlm.model)
