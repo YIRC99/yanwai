@@ -2,62 +2,55 @@ package dev.jev.wechatmood.hook
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.text.TextUtils
-import android.view.Gravity
+import android.content.res.ColorStateList
 import android.view.View
-import android.view.ViewGroup
-import android.widget.FrameLayout
+
 import android.widget.Switch
-import android.widget.TextView
+
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.AnalysisInput
 import dev.jev.wechatmood.core.Diagnostics
 
-/** Add controls to the existing header; never replace the chat's content or action bar. */
+/** Owns chat actions; the analysis switch is mounted only in the expanded plus row. */
 class HostUi(private val activity: Activity) {
-    private val replyUi = ReplyHostUi(activity)
+    private val replyUi = ReplyHostUi(activity) { createAnalysisControl() }
     private var control: Switch? = null
     private var syncing = false
     private var status = ""
     private var messages = emptyList<AnalysisInput>()
     private var talker: String? = null
     private var dialog: AlertDialog? = null
-    private var title: TextView? = null
-    private var oldTitleWidth = Int.MAX_VALUE
-    private var oldEllipsize: TextUtils.TruncateAt? = null
-
     fun showStatus(value: String, current: List<AnalysisInput>, currentTalker: String? = null) {
         if (talker != currentTalker) dialog?.dismiss()
         talker = currentTalker
-        replyUi.update(currentTalker)
         status = value
         messages = current
-        ensureControl()
+        replyUi.update(currentTalker)
+        syncControl()
+    }
+
+    private fun syncControl() {
         syncing = true
         control?.apply {
             visibility = View.VISIBLE
             isChecked = ModulePrefs.isChatEnabled(talker)
             isEnabled = talker != null
-            contentDescription = "当前聊天分析开关，本地记住选择；$value；长按打开帮我回、找话题与设置"
+            contentDescription = "当前聊天分析开关，本地记住选择；$status；长按打开菜单与设置"
         }
         syncing = false
     }
 
-    private fun ensureControl() {
-        val decor = activity.window.decorView
-        val all = descendants(decor)
-        val chat = all.firstOrNull { it.javaClass.name.endsWith(".ChattingUILayout") && it.isShown }
-        val scope = if (chat != null) descendants(chat) else all
-        val header = scope.firstOrNull {
-            it.isShown && it.javaClass.name == "androidx.appcompat.widget.ActionBarContainer"
-        } as? FrameLayout
-        if (header != null && control?.parent === header && control?.isShown == true) return
+    private fun createAnalysisControl(): View {
         removeControl()
-        if (header == null) return
+        val theme = ReplyTheme(activity)
         val toggle = Switch(activity).apply {
             text = "分析"
-            textSize = 12f
+            textSize = 14f
+            setTextColor(theme.ink)
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            thumbTintList = ColorStateList(states, intArrayOf(theme.accent, theme.muted))
+            trackTintList = ColorStateList(states, intArrayOf(theme.soft, theme.border))
             switchPadding = dp(3)
             minHeight = dp(48)
             setPadding(dp(4), 0, dp(4), 0)
@@ -75,26 +68,18 @@ class HostUi(private val activity: Activity) {
             setOnLongClickListener { showActions(); true }
         }
         control = toggle
-        val headerPos = IntArray(2).also { header.getLocationOnScreen(it) }
-        val menuLeft = descendants(header).filter { it.isShown && it.isClickable && it.width in 1..(header.width / 3) }
-            .map { view -> IntArray(2).also { view.getLocationOnScreen(it) }[0] - headerPos[0] }
-            .filter { it > header.width * 0.7 }.minOrNull()
-        val menuSpace = menuLeft?.let { header.width - it + dp(4) } ?: dp(60)
-        header.addView(toggle, FrameLayout.LayoutParams(-2, dp(48), Gravity.END or Gravity.CENTER_VERTICAL).apply {
-            rightMargin = menuSpace
+        syncControl()
+        toggle.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) {
+                control = toggle
+                syncControl()
+            }
+            override fun onViewDetachedFromWindow(view: View) {
+                // The host can temporarily detach and reuse the same panel and switch.
+                if (control === view) control = null
+            }
         })
-        toggle.post {
-            if (control !== toggle || !toggle.isAttachedToWindow) return@post
-            title = descendants(header).filterIsInstance<TextView>().firstOrNull {
-                it !== toggle && it.isShown && it.text.isNotBlank() && it.width > dp(90)
-            }
-            title?.let {
-                oldTitleWidth = it.maxWidth
-                oldEllipsize = it.ellipsize
-                it.maxWidth = (header.width - 2 * (toggle.width + menuSpace)).coerceAtLeast(dp(60))
-                it.ellipsize = TextUtils.TruncateAt.END
-            }
-        }
+        return toggle
     }
 
     private fun showActions() {
@@ -129,20 +114,9 @@ class HostUi(private val activity: Activity) {
     fun hide() { replyUi.hide(); removeControl(); dialog?.dismiss(); messages = emptyList(); talker = null }
     fun dispose() { hide(); replyUi.dispose() }
     private fun removeControl() {
-        control?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        control?.setOnCheckedChangeListener(null)
+        control?.setOnLongClickListener(null)
         control = null
-        title?.let { it.maxWidth = oldTitleWidth; it.ellipsize = oldEllipsize }
-        title = null
-    }
-    private fun descendants(root: View): List<View> {
-        val result = mutableListOf<View>()
-        fun walk(view: View, depth: Int) {
-            if (depth > 40 || result.size > 4000 || view.visibility != View.VISIBLE) return
-            result += view
-            if (view is ViewGroup) for (i in 0 until view.childCount) walk(view.getChildAt(i), depth + 1)
-        }
-        walk(root, 0)
-        return result
     }
     private fun dp(n: Int) = (n * activity.resources.displayMetrics.density).toInt()
 }

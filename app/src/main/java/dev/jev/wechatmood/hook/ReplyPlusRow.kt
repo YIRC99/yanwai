@@ -1,10 +1,6 @@
 package dev.jev.wechatmood.hook
 
 import android.app.Activity
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RectF
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -13,7 +9,7 @@ import android.widget.LinearLayout
 import dev.jev.wechatmood.core.MoodLog
 
 /** Restores the in-panel mounting from 1a8f1f1; original tiles/listeners are retained. */
-internal class ReplyPlusRow(private val activity: Activity, private val open: () -> Boolean) {
+internal class ReplyPlusRow(private val activity: Activity, private val createAnalysisControl: () -> View, private val open: () -> Boolean) {
     private var panel: ViewGroup? = null
     private var wrapper: LinearLayout? = null
     private var original: View? = null
@@ -75,30 +71,15 @@ internal class ReplyPlusRow(private val activity: Activity, private val open: ()
         val theme = ReplyTheme(activity)
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(theme.dp(16), 0, theme.dp(12), 0)
-            background = theme.action("", quiet = true) {}.background
-            isClickable = true; isFocusable = true
-            contentDescription = "帮我回，打开言外回复建议"
-            setOnClickListener {
-                if (panel === found && found.isShown && found.isAttachedToWindow) runCatching(open).onFailure { MoodLog.w("REPLY_PLUS_OPEN_FAILED ${it.javaClass.simpleName}") }
-            }
+            setPadding(theme.dp(8), 0, theme.dp(8), 0)
         }
-        val icon = object : View(activity) {
-            private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-            override fun onDraw(canvas: Canvas) {
-                super.onDraw(canvas)
-                val unit = width / 32f
-                canvas.save(); canvas.scale(unit, unit)
-                paint.color = theme.accent; paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.8f
-                canvas.drawRoundRect(RectF(6f, 6f, 26f, 23f), 5f, 5f, paint)
-                canvas.drawPath(Path().apply { moveTo(11f, 23f); lineTo(10f, 27f); lineTo(16f, 23f) }, paint)
-                canvas.drawLine(11f, 12f, 21f, 12f, paint); canvas.drawLine(11f, 17f, 18f, 17f, paint)
-                canvas.restore()
+        row.addView(createAnalysisControl(), LinearLayout.LayoutParams(-2, -1))
+        row.addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f))
+        row.addView(theme.action("帮我回 · 找话题", quiet = true) {
+            if (panel === found && found.isShown && found.isAttachedToWindow) {
+                runCatching(open).onFailure { MoodLog.w("REPLY_PLUS_OPEN_FAILED " + it.javaClass.simpleName) }
             }
-        }.apply { background = theme.shape(theme.soft, 10); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-        row.addView(icon, LinearLayout.LayoutParams(theme.dp(32), theme.dp(32)))
-        row.addView(theme.label("帮我回 · 找话题", 14f, bold = true), LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = theme.dp(10) })
-        row.addView(theme.label("言外  ›", 12f, theme.muted))
+        }, LinearLayout.LayoutParams(-2, -1))
         val host = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         val params = content.layoutParams
         panel = found; original = content; originalParams = params; wrapper = host; this.row = row

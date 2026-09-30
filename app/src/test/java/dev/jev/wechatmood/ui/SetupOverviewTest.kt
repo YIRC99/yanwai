@@ -36,7 +36,7 @@ class SetupOverviewTest {
     }
     @Test fun `ready state directs users to the per chat analysis switch`() {
         val value = state(probe = ProbeState.PASSED, seen = 999_999)
-        assertTrue(value.description.contains("右上角「分析」"))
+        assertTrue(value.description.contains("「＋」横条左侧「分析」"))
         assertTrue(value.description.contains("默认关闭"))
     }
 }

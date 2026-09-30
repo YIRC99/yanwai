@@ -22,7 +22,7 @@ class ReplyEntrySafetyTest {
         val reply = source("ReplyHostUi")
         assertTrue(reply.contains("plusEntry.update(footer())"))
         assertTrue(reply.substringAfter("fun hide()").contains("plusEntry.clear()"))
-        assertTrue(reply.contains("ReplyPlusRow(activity) { open() }"))
+        assertTrue(reply.contains("ReplyPlusRow(activity, createAnalysisControl) { open() }"))
     }
 
     @Test fun `plus row uses the historical inner panel mount and restores native content`() {
@@ -44,8 +44,11 @@ class ReplyEntrySafetyTest {
         }
     }
 
-    @Test fun `header long press still opens replies without enabling automatic analysis`() {
+    @Test fun `analysis control lives in plus row and retains long press actions`() {
         val host = source("HostUi")
+        assertFalse(host.contains("ActionBarContainer"))
+        assertFalse(host.contains("header.addView"))
+        assertTrue(source("ReplyPlusRow").contains("row.addView(createAnalysisControl()"))
         assertTrue(host.contains("setOnLongClickListener { showActions(); true }"))
         assertTrue(host.contains("帮我回 / 上次建议"))
         assertTrue(host.contains("0 -> replyUi.open()"))
@@ -54,10 +57,11 @@ class ReplyEntrySafetyTest {
         assertTrue(source("MessageSniffer").contains("ui?.suggestReply(target.messageId) == true"))
     }
 
-    @Test fun `app guide directs users to the available header entry`() {
+    @Test fun `app guide directs users to the plus row analysis control`() {
         val guide = File("src/main/res/layout/activity_main.xml").readText()
         assertFalse(guide.contains("点微信「＋」里的「帮我回」"))
-        assertTrue(guide.contains("长按右上角「分析」"))
+        assertFalse(guide.contains("右上角「分析」"))
+        assertTrue(guide.contains("长按横条左侧「分析」"))
         assertTrue(guide.contains("帮我回 / 上次建议"))
     }
 }

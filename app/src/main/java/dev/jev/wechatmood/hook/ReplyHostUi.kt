@@ -30,11 +30,11 @@ import dev.jev.wechatmood.reply.*
 import kotlinx.coroutines.*
 
 /** Native widgets only: module resource IDs are not valid inside the host's resource table. */
-class ReplyHostUi(private val activity: Activity) {
+class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> View) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val session = ReplySession()
     private val history = ReplyHistory.process
-    private val plusEntry = ReplyPlusRow(activity) { open() }
+    private val plusEntry = ReplyPlusRow(activity, createAnalysisControl) { open() }
     private var job: Job? = null
     private var historyJob: Job? = null
     private var openingJob: Job? = null
@@ -152,7 +152,7 @@ class ReplyHostUi(private val activity: Activity) {
         }
         fun fitWindow() {
             val available = activity.window.decorView.height.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
-            window.window?.setLayout(-1, minOf(dp(if (composition.result == null) 360 else 560), (available * 0.78f).toInt()))
+            window.window?.setLayout(-1, ReplyDrawerSizing.height(available, dp(if (composition.result == null) 360 else 560)))
         }
         val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(10))
@@ -186,7 +186,7 @@ class ReplyHostUi(private val activity: Activity) {
         val backgroundButton = action("对方背景", quiet = true).apply { visibility = if (group) View.GONE else View.VISIBLE }
         results.addView(backgroundButton)
         val customRole = EditText(activity).apply {
-            hint = "填写对方身份，如：前同事、相亲对象"
+            hint = "填写对方名称或身份，如：小林、前同事"
             contentDescription = "自定义对方身份，最多 ${ReplyRelationship.MAX_CUSTOM_LENGTH} 字"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
             inputType = InputType.TYPE_CLASS_TEXT; setSingleLine(true); minHeight = dp(48)
@@ -197,6 +197,18 @@ class ReplyHostUi(private val activity: Activity) {
             setOnFocusChangeListener { _, focused -> background = theme.shape(theme.card, 12, if (focused) theme.accent else theme.border) }
         }
         results.addView(customRole, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        val identityBackground = EditText(activity).apply {
+            hint = "对方背景与补充（可选）\n如：对方的经历、偏好，以及你对这段关系的感受"
+            textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
+            gravity = Gravity.TOP or Gravity.START; minLines = 2; maxLines = 4
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            filters = arrayOf(InputFilter.LengthFilter(2000)); isSaveEnabled = false
+            setPadding(dp(10), dp(10), dp(10), dp(10)); background = theme.shape(theme.card, 12, theme.border)
+            setText(composition.background.text)
+        }
+        results.addView(identityBackground, LinearLayout.LayoutParams(-1, -2))
+        val saveIdentityButton = action("保存身份")
+        results.addView(saveIdentityButton, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })
         val instruction = EditText(activity).apply {
             hint = "本次补充要求（可选）\n如：想委婉拒绝，别太正式；找个轻松的话题\n长期经历与偏好请填「对方背景」"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
@@ -261,23 +273,28 @@ class ReplyHostUi(private val activity: Activity) {
         var findingTopics = false
         var backgroundSaving = false
         var applyingRole = false
+        var identitySaving = false
+        fun hasUnsavedIdentityBackground() = !group && composition.relationship == ReplyRelationship.OTHER &&
+            identityBackground.text.toString().trim() != composition.background.text.trim()
         fun topicKey(current: ReplyContext, draft: String, date: String) = TopicKey(current.fingerprint, current.requestedMessages,
             composition.relationship, instruction.text.toString(), draft, date, composition.activeCustomRelationship)
         fun controls(generatingRequest: Boolean) {
-            val generating = generatingRequest || applyingRole
+            val generating = generatingRequest || applyingRole || identitySaving
             val reading = reference.loading
             val ready = reference.context
             busy = generating
             backgroundButton.isEnabled = !backgroundSaving && !applyingRole
             progress.showLoading(when {
+                identitySaving -> "正在保存身份…"
                 applyingRole -> "正在应用角色…"
                 generating && findingTopics -> "正在准备 5 个新话题…"
                 generating -> "正在根据 ${ready?.messages?.size ?: 0} 条消息生成回复…"
                 reading -> "正在读取最近 ${composition.historyLimit} 条消息…"
                 else -> null
             })
-            generateButton.isEnabled = !generating && !reading && composition.hasValidRelationship
+            generateButton.isEnabled = !generating && !reading && composition.hasValidRelationship && !hasUnsavedIdentityBackground()
             generateButton.text = when {
+                hasUnsavedIdentityBackground() && !generating -> "先保存身份"
                 generating -> if (findingTopics) "生成回复" else "正在生成…"
                 reading -> "正在读取消息…"
                 !composition.hasValidRelationship -> "先填写对方身份"
@@ -288,12 +305,12 @@ class ReplyHostUi(private val activity: Activity) {
                 !composition.canUse -> "按新选择生成"
                 else -> "重新生成"
             }
-            shorter.isEnabled = !generating && !reading && ready != null && composition.canUse
+            shorter.isEnabled = !generating && !reading && ready != null && composition.canUse && !hasUnsavedIdentityBackground()
             shorter.visibility = if (composition.result == null || composition.result?.topics != null) View.GONE else View.VISIBLE
             val batch = composition.result?.topics
             val currentTopicKey = ready?.let { topicKey(it.copy(background = composition.background), editor()?.text?.toString().orEmpty(), java.time.LocalDate.now().toString()) }
             val sameTopicInputs = composition.canUse && batch != null && batch.key == currentTopicKey
-            topicButton.isEnabled = !generating && !reading && composition.hasValidRelationship
+            topicButton.isEnabled = !generating && !reading && composition.hasValidRelationship && !hasUnsavedIdentityBackground()
             topicButton.text = when {
                 generating && findingTopics -> "正在找话题…"
                 sameTopicInputs -> "换个话题"
@@ -308,6 +325,13 @@ class ReplyHostUi(private val activity: Activity) {
             instruction.isEnabled = !generating; rolePicker.isEnabled = !generating; stale.isEnabled = !generating
             customRole.isEnabled = !generating
             customRole.visibility = if (composition.relationship == ReplyRelationship.OTHER) View.VISIBLE else View.GONE
+            val editingIdentity = composition.relationship == ReplyRelationship.OTHER && !group
+            identityBackground.visibility = if (editingIdentity) View.VISIBLE else View.GONE
+            saveIdentityButton.visibility = identityBackground.visibility
+            identityBackground.isEnabled = !generating && !backgroundSaving
+            saveIdentityButton.isEnabled = !generating && !backgroundSaving && composition.hasValidRelationship
+            saveIdentityButton.text = if (identitySaving) "正在保存…" else "保存身份"
+            backgroundButton.visibility = if (group || editingIdentity) View.GONE else View.VISIBLE
             rolePicker.text = roleLabel()
             rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.displayLabel(composition.customRelationship)}"
             historyPicker.isEnabled = !generating
@@ -385,7 +409,7 @@ class ReplyHostUi(private val activity: Activity) {
                     scope.launch {
                         try {
                             val saved = ReplyIdentityBridge.saveBackground(activity, owner, text, { ReplyDatabaseHistory.replyAccount(live) })
-                            if (ownsDrawer()) { composition.background = saved; renderParts(); toast("背景已保存") }
+                            if (ownsDrawer()) { composition.background = saved; identityBackground.setText(saved.text); renderParts(); toast("背景已保存") }
                             edit.dismiss()
                         } catch (e: CancellationException) { throw e
                         } catch (_: Exception) {
@@ -412,6 +436,39 @@ class ReplyHostUi(private val activity: Activity) {
                 }
             }
         }
+        saveIdentityButton.setOnClickListener {
+            if (!ownsDrawer() || busy || backgroundSaving || group) return@setOnClickListener
+            if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return@setOnClickListener }
+            if (owner.key == null) { toast("账号或联系人尚未确认，请重新打开后保存"); return@setOnClickListener }
+            val identityValue = ReplyIdentitySetting(composition.relationship, composition.customRelationship)
+            val backgroundText = identityBackground.text.toString()
+            ++saveRevision
+            identitySaving = true; controls(false)
+            scope.launch {
+                try {
+                    check(verifyAccount()) { "当前聊天或账号已变化" }
+                    val saved = suspendCancellableCoroutine<Boolean> { continuation ->
+                        ReplyIdentityBridge.save(activity, owner, identityValue, { ReplyDatabaseHistory.replyAccount(live) }) {
+                            if (continuation.isActive) continuation.resumeWith(Result.success(it))
+                        }
+                    }
+                    check(saved) { "身份保存失败" }
+                    // Persist the captured owner and background even if the drawer was closed.
+                    val background = ReplyIdentityBridge.saveBackground(activity, owner, backgroundText, { ReplyDatabaseHistory.replyAccount(live) })
+                    if (ownsDrawer()) {
+                        composition.background = background
+                        renderParts(); toast("身份和背景已保存")
+                    }
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { if (ownsDrawer()) toast("身份或背景保存失败，请重试") }
+                finally { identitySaving = false; if (ownsDrawer()) controls(false) }
+            }
+        }
+        identityBackground.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) { if (ownsDrawer()) controls(busy) }
+        })
         customRole.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -443,6 +500,7 @@ class ReplyHostUi(private val activity: Activity) {
                                     composition.relationship = applied.identity.relationship
                                     composition.customRelationship = applied.identity.customText
                                     composition.background = applied.background
+                                    identityBackground.setText(applied.background.text)
                                     customRole.setText(applied.identity.customText)
                                     failed = false; renderParts()
                                 } catch (e: CancellationException) { throw e }
@@ -614,6 +672,7 @@ class ReplyHostUi(private val activity: Activity) {
         }
         fun generate(direction: String = "", findTopics: Boolean = false) {
             if (busy || reference.loading) return
+            if (hasUnsavedIdentityBackground()) { toast("请先保存身份和背景"); return }
             if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return }
             if (!ownsDrawer()) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
