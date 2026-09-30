@@ -39,6 +39,7 @@ class ReplyHostUi(private val activity: Activity) {
     private var historyJob: Job? = null
     private var openingJob: Job? = null
     private var ownerEpoch: String? = null
+    private var drawerRolesRevision: Long? = null
     private var talker: String? = null
     private var dialog: Dialog? = null
     private var snapshot: ReplyContext? = null
@@ -46,6 +47,7 @@ class ReplyHostUi(private val activity: Activity) {
     private var invalidateRequest: (() -> Unit)? = null
 
     fun update(currentTalker: String?) {
+        if (dialog?.isShowing == true && drawerRolesRevision != ModulePrefs.analysisSettings()?.rolesRevision) hide()
         if (talker != currentTalker || ownerEpoch?.let { it != ReplyDatabaseHistory.pendingAccountScope() } == true) {
             hide(); talker = currentTalker
         }
@@ -77,6 +79,7 @@ class ReplyHostUi(private val activity: Activity) {
         if (dialog?.isShowing == true || openingJob?.isActive == true) return true
         val epoch = ReplyDatabaseHistory.pendingAccountScope()
         val generation = ModulePrefs.analysisSettings()?.generation
+        val rolesRevision = ModulePrefs.analysisSettings()?.rolesRevision
         ownerEpoch = epoch
         val live = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
             toast(it.message ?: "读取聊天失败"); return true
@@ -90,11 +93,11 @@ class ReplyHostUi(private val activity: Activity) {
                 val background = owner.key?.let { ReplyIdentityBridge.loadBackground(activity, it) } ?: ContactBackground()
                 val preferredLimit = ReplyLimitBridge.load(activity, account)
                 ensureActive()
-                if (generation != ModulePrefs.analysisSettings()?.generation) return@launch
+                if (generation != ModulePrefs.analysisSettings()?.generation || rolesRevision != ModulePrefs.analysisSettings()?.rolesRevision) return@launch
                 if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())) return@launch
                 val latestPage = MessageSniffer.replyContext(requireBottom = false)
                 val latestAccount = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(latestPage) }
-                if (generation != ModulePrefs.analysisSettings()?.generation ||
+                if (generation != ModulePrefs.analysisSettings()?.generation || rolesRevision != ModulePrefs.analysisSettings()?.rolesRevision ||
                     !owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
                     !owner.acceptsAccount(latestAccount)) return@launch
                 // All reads finish before the editor is created, so a late load cannot erase typed text.
@@ -112,6 +115,7 @@ class ReplyHostUi(private val activity: Activity) {
         identity: ReplyIdentitySetting, preferredLimit: Int, contactBackground: ContactBackground): Boolean {
         val selectedTalker = owner.talker
         val generation = ModulePrefs.analysisSettings()?.generation
+        val rolesRevision = ModulePrefs.analysisSettings()?.rolesRevision
         val remembered = history.recall(selectedTalker, focusMessageId, owner.historyScope)
         val group = selectedTalker.endsWith("@chatroom")
         val composition = ReplyComposition(remembered, if (group) ReplyIdentitySetting(
@@ -136,7 +140,9 @@ class ReplyHostUi(private val activity: Activity) {
         fun line() = View(activity).apply { setBackgroundColor(theme.border) }
         val window = Dialog(activity)
         dialog = window
+        drawerRolesRevision = rolesRevision
         fun ownsDrawer() = window === dialog && generation == ModulePrefs.analysisSettings()?.generation &&
+            rolesRevision == ModulePrefs.analysisSettings()?.rolesRevision &&
             owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())
         suspend fun verifyAccount(): Boolean {
             if (!ownsDrawer()) return false
@@ -254,14 +260,17 @@ class ReplyHostUi(private val activity: Activity) {
         var failed = false
         var findingTopics = false
         var backgroundSaving = false
+        var applyingRole = false
         fun topicKey(current: ReplyContext, draft: String, date: String) = TopicKey(current.fingerprint, current.requestedMessages,
             composition.relationship, instruction.text.toString(), draft, date, composition.activeCustomRelationship)
-        fun controls(generating: Boolean) {
+        fun controls(generatingRequest: Boolean) {
+            val generating = generatingRequest || applyingRole
             val reading = reference.loading
             val ready = reference.context
             busy = generating
-            backgroundButton.isEnabled = !backgroundSaving
+            backgroundButton.isEnabled = !backgroundSaving && !applyingRole
             progress.showLoading(when {
+                applyingRole -> "正在应用角色…"
                 generating && findingTopics -> "正在准备 5 个新话题…"
                 generating -> "正在根据 ${ready?.messages?.size ?: 0} 条消息生成回复…"
                 reading -> "正在读取最近 ${composition.historyLimit} 条消息…"
@@ -407,19 +416,42 @@ class ReplyHostUi(private val activity: Activity) {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
-                if (!ownsDrawer()) return
+                if (applyingRole || !ownsDrawer()) return
                 composition.customRelationship = s?.toString().orEmpty()
                 saveIdentity()
                 failed = false; renderParts(); controls(busy)
             }
         })
-        rolePicker.setOnClickListener {
+        fun showRoleMenu(savedRoles: List<ReplyRole>) {
             PopupMenu(activity, rolePicker).apply {
                 ReplyRelationship.entries.forEachIndexed { index, relationship ->
                     menu.add(0, index, index, relationship.label).isChecked = relationship == composition.relationship
                 }
+                savedRoles.forEachIndexed { index, role -> menu.add(1, 1000 + index, 1000 + index, "角色库 · " + role.name) }
                 menu.setGroupCheckable(0, true, true)
                 setOnMenuItemClickListener { item ->
+                    if (item.groupId == 1) {
+                        if (!busy && ownsDrawer() && !group) {
+                            val selected = savedRoles[item.itemId - 1000]
+                            applyingRole = true
+                            job?.cancel(); session.cancel(); controls(true)
+                            scope.launch {
+                                try {
+                                    if (!verifyAccount()) return@launch
+                                    val applied = ReplyIdentityBridge.applyRole(activity, owner, selected, { ReplyDatabaseHistory.replyAccount(live) })
+                                    if (!ownsDrawer()) return@launch
+                                    composition.relationship = applied.identity.relationship
+                                    composition.customRelationship = applied.identity.customText
+                                    composition.background = applied.background
+                                    customRole.setText(applied.identity.customText)
+                                    failed = false; renderParts()
+                                } catch (e: CancellationException) { throw e }
+                                catch (_: Exception) { if (ownsDrawer()) toast("角色应用失败，请重新选择") }
+                                finally { applyingRole = false; if (ownsDrawer()) controls(false) }
+                            }
+                        }
+                        return@setOnMenuItemClickListener true
+                    }
                     if (!busy && ownsDrawer()) {
                         val wasEditingCustomRole = customRole.hasFocus()
                         composition.relationship = ReplyRelationship.entries[item.itemId]
@@ -442,6 +474,20 @@ class ReplyHostUi(private val activity: Activity) {
                     true
                 }
             }.show()
+        }
+        var roleMenuLoading = false
+        rolePicker.setOnClickListener {
+            if (!roleMenuLoading && !busy && ownsDrawer()) {
+                roleMenuLoading = true
+                scope.launch {
+                    try {
+                        val saved = if (group || owner.key == null) emptyList() else ReplyIdentityBridge.roles(activity)
+                        if (ownsDrawer() && !busy) showRoleMenu(saved)
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { if (ownsDrawer()) { toast("角色库暂时不可用"); showRoleMenu(emptyList()) } }
+                    finally { roleMenuLoading = false }
+                }
+            }
         }
         invalidateRequest = { reference.cancel(); state.text = "请重新配置回复模型"; failed = true; controls(false) }
         fun remember() {

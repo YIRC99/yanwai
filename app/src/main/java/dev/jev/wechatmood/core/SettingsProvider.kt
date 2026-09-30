@@ -36,7 +36,7 @@ class SettingsProvider : ContentProvider() {
                     Bundle().apply { putBoolean("saved", true) }
                 }
             }
-            "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
+            "reply_role_list", "reply_role_apply", "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
             "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
             "config" -> snapshot(ctx)
             "report" -> {
@@ -72,6 +72,7 @@ class SettingsProvider : ContentProvider() {
             return Bundle().apply {
                 putString(KEY_GENERATION, generation)
                 putLong(KEY_REVISION, prefs.getLong(KEY_REVISION, 0L))
+                putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, ReplyIdentityProvider.rolesRevision(context))
                 putBoolean(ModulePrefs.KEY_EXPLORE, prefs.getBoolean(ModulePrefs.KEY_EXPLORE, false))
                 CardDisplaySettings.KEYS.forEach { putBoolean(it, prefs.getBoolean(it, true)) }
                 putString(ModulePrefs.KEY_API_BASE, prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT))

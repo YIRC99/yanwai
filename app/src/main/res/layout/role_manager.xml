@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <TextView style="@style/Yanwai.Section" android:text="角色与背景" android:layout_marginTop="24dp" />
+    <TextView style="@style/Yanwai.Caption" android:text="添加常用角色，或管理聊天中已保存的角色。" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/addRole" style="@style/Yanwai.Button" android:layout_marginTop="12dp" android:text="＋ 添加角色" />
+    <com.google.android.material.textfield.TextInputLayout style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="搜索角色或背景" app:endIconMode="clear_text">
+        <com.google.android.material.textfield.TextInputEditText android:id="@+id/searchRoles" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:singleLine="true" android:inputType="text" android:saveEnabled="false" android:importantForAutofill="no" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <com.google.android.material.card.MaterialCardView android:id="@+id/editorCard" style="@style/Yanwai.SettingsCard" android:visibility="gone">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+            <TextView android:id="@+id/editorTitle" style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="添加角色" />
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/nameLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="角色名称，如：前同事" app:counterEnabled="true" app:counterMaxLength="40">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/roleName" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="text" android:singleLine="true" android:maxLength="40" android:saveEnabled="false" android:importantForAutofill="no" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/backgroundLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:hint="角色背景（选填）" app:helperText="相处经历、沟通习惯、偏好或需要注意的事情。" app:counterEnabled="true" app:counterMaxLength="2000">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/roleBackground" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textMultiLine|textCapSentences" android:minLines="4" android:maxLines="8" android:maxLength="2000" android:gravity="top" android:saveEnabled="false" android:importantForAutofill="no" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <TextView android:id="@+id/editorHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" android:text="在微信里选择角色后，名称和背景会保存到当前聊天。" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/saveRole" style="@style/Yanwai.Button" android:layout_marginTop="12dp" android:text="保存角色" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/cancelEdit" style="@style/Yanwai.Button.Text" android:text="取消" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/roleProgress" android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="12dp" android:indeterminate="true" android:visibility="gone" android:contentDescription="正在读取或保存角色" />
+    <TextView android:id="@+id/roleStatus" style="@style/Yanwai.Caption" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/refreshRoles" style="@style/Yanwai.Button.Text" android:text="刷新角色列表" />
+    <LinearLayout android:id="@+id/roleList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+</LinearLayout>

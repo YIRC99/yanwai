@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private val pagePositions = mutableMapOf<Int, Int>()
     private var currentPage = R.id.tabHome
     private var modelsReturnPage = R.id.tabEmotion
+    private var roleManagerUi: dev.jev.wechatmood.ui.ReplyRoleManagerUi? = null
     private var intentSettingsUi: dev.jev.wechatmood.ui.IntentSettingsUi? = null
     private val backToHome = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -121,6 +122,8 @@ class MainActivity : AppCompatActivity() {
             .values.filterIsInstance<String>().forEach(MoodLog::protect)
         ModulePrefs.init(this)
         SettingsProvider.publish(this)
+        roleManagerUi = dev.jev.wechatmood.ui.ReplyRoleManagerUi(this, binding.roleManager, uiScope, ::scrollTo)
+        if (currentPage == R.id.tabReply) roleManagerUi?.onShown()
         val savedEndpoint = prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT).orEmpty()
         selectedProvider = JevProvider.resolve(prefs.getString(ModulePrefs.KEY_API_PROVIDER, null), savedEndpoint)
         drafts[selectedProvider] = ApiDraft(savedEndpoint, prefs.getString(ModulePrefs.KEY_API_KEY, "").orEmpty(),
@@ -284,6 +287,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refresh()
+        if (currentPage == R.id.tabReply) roleManagerUi?.onShown()
         // Lifecycle dispatch finishes after onResume; cached notices also need RESUMED.
         binding.root.post {
             if (!isFinishing && !isDestroyed && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -434,6 +438,7 @@ class MainActivity : AppCompatActivity() {
         currentPage = id
         backToHome.isEnabled = id != R.id.tabHome
         if (id == R.id.tabEmotion) intentSettingsUi?.onShown()
+        if (id == R.id.tabReply) roleManagerUi?.onShown()
         binding.homePanel.visibility = if (id == R.id.tabHome) View.VISIBLE else View.GONE
         binding.emotionPanel.visibility = if (id == R.id.tabEmotion) View.VISIBLE else View.GONE
         binding.replyPanel.visibility = if (id == R.id.tabReply) View.VISIBLE else View.GONE

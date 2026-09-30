@@ -8,6 +8,19 @@ import org.w3c.dom.Element
 
 /** Resource contracts: choices remain accessible, keys stay out of saved view state. */
 class SettingsLayoutTest {
+    @Test fun analysisOptionsUsePlainModelNames() {
+        val source = File("src/main/java/dev/jev/wechatmood/ui/IntentSettingsUi.kt").readText()
+        assertFalse(source.contains("情绪与意图一起分析"))
+        assertTrue(source.contains("决策模型（JEV）"))
+        assertTrue(source.contains("智能模型（LLM）"))
+    }
+
+    @Test fun replyPageOffersRoleManagementAndKeepsOnlyUsefulInstructions() {
+        val nodes = elements("activity_main")
+        assertFalse(nodes.any { it.getAttribute("android:text").contains("不需要额外开启许可") })
+        assertTrue(nodes.any { it.getAttribute("android:text").contains("在微信聊天中展开「＋」") })
+        assertTrue(nodes.any { it.getAttribute("android:id") == "@+id/roleManager" })
+    }
     @Test fun analysisPageDoesNotContainCredentialsOrConditionalModelForms() {
         val nodes = elements("intent_settings")
         assertFalse("Model credentials belong on a dedicated page", nodes.any {

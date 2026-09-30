@@ -4,7 +4,7 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
     <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="分析方式" />
     <TextView android:id="@+id/intentStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" />
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/emotionSourceLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="情绪分析来源">
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/emotionSourceLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="情绪分析">
         <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/emotionSource" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" android:importantForAutofill="no" />
     </com.google.android.material.textfield.TextInputLayout>
     <TextView android:id="@+id/emotionHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />
@@ -15,7 +15,7 @@
         <TextView android:id="@+id/reusedConfigStatus" style="@style/Yanwai.Badge" android:layout_marginTop="12dp" />
         <com.google.android.material.button.MaterialButton android:id="@+id/editReplyConfig" style="@style/Yanwai.Button.Text" android:text="配置回复模型" />
     </LinearLayout>
-    <com.google.android.material.textfield.TextInputLayout android:id="@+id/intentRouteLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="意图解读方式">
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/intentRouteLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="意图解析">
         <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/intentRoute" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" android:importantForAutofill="no" />
     </com.google.android.material.textfield.TextInputLayout>
     <TextView android:id="@+id/routeHint" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" />

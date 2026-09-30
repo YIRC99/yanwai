@@ -4,6 +4,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SettingsSessionTest {
+    @Test fun `role management invalidates analysis and delayed old snapshots cannot restore it`() {
+        var resets = 0
+        val session = SettingsSession { resets++ }
+        val api = ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "key")
+        val old = RuntimeSettings(1, false, api, "a", rolesRevision = 1)
+        val changed = RuntimeSettings(1, false, api, "a", rolesRevision = 2)
+        session.accept(old)
+        session.accept(changed)
+        assertEquals(2, resets)
+        assertFalse(changed.sameAnalysis(old))
+        session.accept(old, fromProvider = false)
+        assertEquals(2L, session.current!!.rolesRevision)
+        assertEquals(2, resets)
+        session.accept(RuntimeSettings(0, false, api, "new-install", rolesRevision = 0))
+        assertEquals(0L, session.current!!.rolesRevision)
+    }
     @Test fun `configured replies work even with an old disabled consent preference`() {
         val reply = dev.jev.wechatmood.reply.ReplySettings.fromInput("https://example.com", "reply-key", "m")
         val state = RuntimeSettings(1, false, ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, ""), "a", reply, false)

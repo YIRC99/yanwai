@@ -7,7 +7,7 @@ class RuntimeSettings(val revision: Long,
     val replyConsent: Boolean = false, // Legacy wire field; manual generation no longer depends on it.
     val intent: IntentSettings = IntentSettings(),
     val cardDisplay: CardDisplaySettings = CardDisplaySettings(),
-    val emotion: EmotionSettings = EmotionSettings()) {
+    val emotion: EmotionSettings = EmotionSettings(), val rolesRevision: Long = 0) {
     val emotionLlm get() = if (emotion.reuseReply) reply else intent.llm
     val canGenerateReply get() = reply.isConfigured
     val canAnalyze get() = if (emotion.source == EmotionSource.LLM) emotionLlm.isConfigured else api.isConfigured
@@ -15,7 +15,8 @@ class RuntimeSettings(val revision: Long,
         AnalysisCacheKey.digest("llm-emotion-v1", generation, emotionLlm.endpoint, emotionLlm.apiKey, emotionLlm.model)
         else AnalysisCacheKey.digest("jev-intent-v2", generation, api.endpoint, api.apiKey, api.model, intent.route.id,
             intent.llm.endpoint, intent.llm.apiKey, intent.llm.model) }
-    fun analysisFingerprint(): String = fingerprint
+    private val scopedFingerprint by lazy { AnalysisCacheKey.digest(fingerprint, rolesRevision.toString()) }
+    fun analysisFingerprint(): String = scopedFingerprint
     fun sameAnalysis(other: RuntimeSettings) = analysisFingerprint() == other.analysisFingerprint()
 }
 
@@ -46,6 +47,7 @@ class SettingsSession(private val onAnalysisChanged: () -> Unit = {}) {
         generation = snapshot.generation
         pendingVerification = false
         retiredGenerations.remove(snapshot.generation)
+        if (snapshot.rolesRevision < (current?.rolesRevision ?: 0L)) return true
         if (snapshot.revision >= (current?.revision ?: -1L)) {
             if (current?.sameAnalysis(snapshot) != true) {
                 // Block new submissions while revoking old jobs and their ownership.

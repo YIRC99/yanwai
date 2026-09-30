@@ -63,16 +63,15 @@
             </LinearLayout>
             <LinearLayout android:id="@+id/replyPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                 <TextView style="@style/Yanwai.PageTitle" android:text="回复与话题" />
-                <TextView style="@style/Yanwai.Body" android:text="想好怎么说，再亲自发送。" />
                 <com.google.android.material.card.MaterialCardView style="@style/Yanwai.SettingsCard">
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-                        <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="手动生成，自由选择" />
+                        <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="在微信里使用" />
                         <TextView style="@style/Yanwai.Body" android:text="在微信聊天中展开「＋」，点击「帮我回 · 找话题」。选择对方身份和参考条数，再点击生成。" />
-                        <TextView style="@style/Yanwai.Caption" android:layout_marginTop="12dp" android:text="不需要额外开启许可。只有点击生成才会发送聊天给模型；建议由你复制、粘贴发送。" />
                         <TextView android:id="@+id/replySummary" style="@style/Yanwai.Badge" android:layout_marginTop="16dp" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/openReplyModel" style="@style/Yanwai.Button" android:layout_marginTop="12dp" android:text="配置回复模型" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/openReplyModel" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="配置回复模型" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
+                <include android:id="@+id/roleManager" layout="@layout/role_manager" />
             </LinearLayout>
             <LinearLayout android:id="@+id/modelsPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                 <TextView style="@style/Yanwai.PageTitle" android:text="模型配置" />

@@ -32,12 +32,12 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
     init {
         modelBinding.provider.setSimpleItems(ReplyProvider.entries.map { it.label }.toTypedArray())
         showProvider()
-        binding.emotionSource.setSimpleItems(arrayOf("JEV · 情绪概率", "LLM · 情绪与意图一起分析"))
+        binding.emotionSource.setSimpleItems(arrayOf("决策模型（JEV）", "智能模型（LLM）"))
         binding.configSource.setSimpleItems(arrayOf("独立分析模型", "复用回复模型"))
-        binding.intentRoute.setSimpleItems(arrayOf("JEV · 快速判断", "LLM · 细致解读"))
-        binding.emotionSource.setText(if (emotion.source == EmotionSource.LLM) "LLM · 情绪与意图一起分析" else "JEV · 情绪概率", false)
+        binding.intentRoute.setSimpleItems(arrayOf("决策模型（JEV）", "智能模型（LLM）"))
+        binding.emotionSource.setText(if (emotion.source == EmotionSource.LLM) "智能模型（LLM）" else "决策模型（JEV）", false)
         binding.configSource.setText(if (emotion.reuseReply) "复用回复模型" else "独立分析模型", false)
-        binding.intentRoute.setText(if (route == IntentRoute.LLM) "LLM · 细致解读" else "JEV · 快速判断", false)
+        binding.intentRoute.setText(if (route == IntentRoute.LLM) "智能模型（LLM）" else "决策模型（JEV）", false)
         showRoute()
         status("已保存的分析方式", R.color.status_neutral)
         modelStatus("尚未检测", R.color.status_neutral)
@@ -88,7 +88,7 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
         renderSharedConfig()
         binding.intentRouteLayout.visibility = if (pure) View.GONE else View.VISIBLE
         binding.routeHint.visibility = if (pure) View.GONE else View.VISIBLE
-        binding.emotionHint.text = if (pure) "一次解读情绪与意图，给出定性参考，不提供概率。" else "用 JEV 判断情绪概率，再选择怎样解读意图。"
+        binding.emotionHint.text = if (pure) "判断文字表达的情绪，仅供参考。" else "给出情绪概率，仅供参考。"
         binding.routeHint.text = if (route == IntentRoute.JEV) "从内置选项快速判断，只需要 JEV。" else "JEV 判断情绪，LLM 结合前文补充解读。"
         routeChanged(emotion.source)
     }

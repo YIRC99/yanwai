@@ -55,6 +55,7 @@ object ReplyAccountIdentity {
 class ReplyIdentityStore(private val db: AnalysisCacheDatabase) : Closeable {
     init { db.execute("CREATE TABLE IF NOT EXISTS reply_identities (contact_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)") }
     init { db.execute("CREATE TABLE IF NOT EXISTS contact_backgrounds (contact_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)") }
+    val roles = ReplyRoleStore(db, this)
     @Synchronized fun background(key: ReplyContactKey): ContactBackground =
         db.query("SELECT payload FROM contact_backgrounds WHERE contact_key = ?", listOf(key.value))
             ?.let(ContactBackground::decode) ?: ContactBackground()
