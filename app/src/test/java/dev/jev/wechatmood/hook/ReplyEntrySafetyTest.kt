@@ -9,7 +9,7 @@ class ReplyEntrySafetyTest {
     private val sourceRoot = File("src/main/java/dev/jev/wechatmood")
     private fun source(name: String) = File(sourceRoot, "hook/$name.kt").readText()
 
-    @Test fun `production does not install native grid injection or the legacy wrapper`() {
+    @Test fun `production does not install native grid injection or duplicate entry implementations`() {
         val forbidden = listOf("NativeReplyPlus", "ReplyPlusEntry", "ReplyPlusItems", "ReplyPlusLabels",
             "ReplyPlusOwnership", "ReplyPlusRebuildGuard", "suggestReplyFromPlus")
         sourceRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
@@ -25,17 +25,22 @@ class ReplyEntrySafetyTest {
         assertTrue(reply.contains("ReplyPlusRow(activity) { open() }"))
     }
 
-    @Test fun `plus row preserves native children and requires an expanded panel`() {
+    @Test fun `plus row uses the historical inner panel mount and restores native content`() {
         val file = File(sourceRoot, "hook/ReplyPlusRow.kt")
         assertTrue("Independent row must be implemented", file.exists())
         val row = file.readText()
         assertTrue(row.contains("isShown"))
-        assertTrue(row.contains("WRAP_CONTENT"))
         assertTrue(row.contains("removeOnGlobalLayoutListener"))
-        assertTrue(row.contains("removeView(row)"))
+        assertTrue(row.contains("found.removeView(content)"))
+        assertTrue(row.contains("originalParams"))
+        assertTrue(row.contains("target.addView(content, originalParams)"))
+        assertTrue(row.contains("host.parent === target && target.childCount == 1"))
+        assertTrue(row.contains("status(\"ATTACHED\")"))
+        assertFalse(row.contains("ChatFooterBottom"))
+        assertFalse(row.contains("getLocalVisibleRect"))
         for (operation in listOf("XposedBridge", "setAdapter(", "setOnItemClickListener(",
-            "removeView(content)", "removeView(panel)", "layoutParams =", "translationY =")) {
-            assertFalse("Must not rewrite host layout or grid: $operation", row.contains(operation))
+            "removeView(panel)", "translationY =")) {
+            assertFalse("Must not rewrite native grid: $operation", row.contains(operation))
         }
     }
 
