@@ -153,10 +153,19 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             return ownsDrawer() && owner.acceptsAccount(account)
         }
         fun fitWindow() {
-            val available = activity.window.decorView.height.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
-            window.window?.setLayout(-1, ReplyDrawerSizing.height(available, dp(if (composition.result == null) 360 else 560)))
+            window.window?.setLayout(-1, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        val body = LinearLayout(activity).apply {
+        val body = object : LinearLayout(activity) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val available = activity.window.decorView.height.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
+                val windowLimit = if (View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.UNSPECIFIED)
+                    available else View.MeasureSpec.getSize(heightMeasureSpec)
+                // AT_MOST lets short content shrink. A wrap-content weighted scroll region absorbs
+                // overflow while the heading and copy action remain outside the scrolling area.
+                val limit = ReplyDrawerSizing.height(available, windowLimit)
+                super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST))
+            }
+        }.apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(10))
             background = theme.shape(theme.surface, 24); elevation = dp(12).toFloat(); isFocusableInTouchMode = true
         }
@@ -268,8 +277,11 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             reason.visibility = if (expanded) View.VISIBLE else View.GONE
             reasonToggle.text = if (expanded) "收起理由 ▴" else if (composition.result?.topics != null) "为什么聊这个 ▾" else "为什么这样回 ▾"
         }
-        results.addView(reasonToggle); results.addView(reason); results.addView(shorter)
-        scroll.addView(results); body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val resultActions = LinearLayout(activity)
+        resultActions.addView(reasonToggle, LinearLayout.LayoutParams(0, -2, 1f))
+        resultActions.addView(shorter, LinearLayout.LayoutParams(0, -2, 1f))
+        results.addView(resultActions); results.addView(reason)
+        scroll.addView(results); body.addView(scroll, LinearLayout.LayoutParams(-1, -2, 1f))
         body.addView(line(), LinearLayout.LayoutParams(-1, dp(1).coerceAtLeast(1)))
         val copy = action("复制这条", primary = true) {
             composition.selectedText?.let { text ->
