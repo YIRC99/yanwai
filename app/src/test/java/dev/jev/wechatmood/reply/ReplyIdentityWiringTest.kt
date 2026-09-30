@@ -29,8 +29,10 @@ class ReplyIdentityWiringTest {
         assertTrue(storage.contains("context.packageName == BuildConfig.APPLICATION_ID"))
         assertTrue(storage.contains("context.noBackupFilesDir"))
         val bridge = source("core/ReplyIdentityBridge.kt")
-        assertTrue(bridge.contains("contentResolver.call(SettingsProvider.URI"))
+        assertTrue(bridge.contains("SettingsTransport.call(context,"))
         assertFalse(bridge.contains("SQLiteDatabase"))
+        val service = source("core/SettingsConnectionService.kt")
+        assertTrue(service.contains("SettingsProvider.dispatch(this@SettingsConnectionService, Binder.getCallingUid()"))
     }
     @Test fun `drawer finishes identity load before creating editor and edits save independently of generation`() {
         val ui = source("hook/ReplyHostUi.kt")

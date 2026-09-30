@@ -27,12 +27,15 @@ class AnalysisCacheWiringTest {
         val client = source("core/AnalysisResultCache.kt")
         assertFalse(client.contains("SQLiteDatabase"))
         assertFalse(client.contains("java.io.File"))
-        assertTrue(client.contains("contentResolver?.call"))
+        assertTrue(client.contains("SettingsTransport.call"))
         val disk = source("core/AnalysisCacheProvider.kt")
         assertTrue(disk.contains("context.packageName == BuildConfig.APPLICATION_ID"))
         assertTrue(disk.contains("context.noBackupFilesDir"))
         val provider = source("core/SettingsProvider.kt")
         assertTrue(provider.indexOf("if (!own && !wechat)") < provider.indexOf("AnalysisCacheProvider.call"))
+        val service = source("core/SettingsConnectionService.kt")
+        assertTrue(service.contains("SettingsProvider.dispatch(this@SettingsConnectionService, Binder.getCallingUid()"))
+        assertFalse(service.contains("clearCallingIdentity"))
     }
 
     @Test fun `disk cache cannot bypass account verification and cancellation checks`() {

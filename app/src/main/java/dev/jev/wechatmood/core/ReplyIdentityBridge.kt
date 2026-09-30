@@ -27,7 +27,7 @@ object ReplyIdentityBridge {
         return value
     }
     private fun readBackground(context: Context, key: ReplyContactKey, generation: BackgroundScope): ContactBackground {
-        val result = context.contentResolver.call(SettingsProvider.URI, "contact_background_get", key.value,
+        val result = SettingsTransport.call(context, "contact_background_get", key.value,
             Bundle().apply { putString(SettingsProvider.KEY_GENERATION, generation.generation) })
         return accept(generation, key, ContactBackground.decode(requireNotNull(result?.getString("payload"))))
     }
@@ -58,7 +58,7 @@ object ReplyIdentityBridge {
                 check(owner.acceptsAccount(verify())) { "账号已变化，请重新打开" }
                 check(generation.current()) { "设置已重置，请重新打开" }
                 val key = requireNotNull(owner.key)
-                val response = context.contentResolver.call(SettingsProvider.URI, "contact_background_put", key.value,
+                val response = SettingsTransport.call(context, "contact_background_put", key.value,
                     Bundle().apply { putString("text", text); putString(SettingsProvider.KEY_GENERATION, generation.generation); putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, generation.revision) })
                 ContactBackground.decode(requireNotNull(response?.getString("payload"))).also {
                     accept(generation, key, it)
@@ -72,7 +72,7 @@ object ReplyIdentityBridge {
         val captured = generation()
         worker.execute {
             val result = runCatching {
-                val response = context.contentResolver.call(SettingsProvider.URI, "reply_role_list", null,
+                val response = SettingsTransport.call(context, "reply_role_list", null,
                     Bundle().apply { putString(SettingsProvider.KEY_GENERATION, captured.generation) })
                 check(captured.current()) { "角色已变化，请重试" }
                 requireNotNull(response?.getStringArrayList("roles")).map(ReplyRole::decode)
@@ -87,7 +87,7 @@ object ReplyIdentityBridge {
             val result = runCatching {
                 check(owner.acceptsAccount(verify()) && captured.current()) { "账号或角色已变化，请重新打开" }
                 val key = requireNotNull(owner.key)
-                val response = requireNotNull(context.contentResolver.call(SettingsProvider.URI, "reply_role_put", key.value,
+                val response = requireNotNull(SettingsTransport.call(context, "reply_role_put", key.value,
                     Bundle().apply {
                         putString(SettingsProvider.KEY_GENERATION, captured.generation)
                         putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, captured.revision)
@@ -113,7 +113,7 @@ object ReplyIdentityBridge {
                 val result = runCatching {
                     check(owner.acceptsAccount(verify()) && captured.current()) { "账号或角色已变化，请重新打开" }
                     val key = requireNotNull(owner.key)
-                    val response = requireNotNull(context.contentResolver.call(SettingsProvider.URI, "reply_role_apply", key.value,
+                    val response = requireNotNull(SettingsTransport.call(context, "reply_role_apply", key.value,
                         Bundle().apply {
                             putString(SettingsProvider.KEY_GENERATION, captured.generation)
                             putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, captured.revision)
@@ -134,12 +134,12 @@ object ReplyIdentityBridge {
             putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, captured.revision)
         }
         return ReplyIdentityQueue({ worker.execute(it) }, { key ->
-            val result = context.contentResolver.call(SettingsProvider.URI, "reply_identity_get", key.value, extras())
+            val result = SettingsTransport.call(context, "reply_identity_get", key.value, extras())
             check(captured.current()) { "角色已变化，请重新打开" }
             ReplyIdentitySetting.decode(requireNotNull(result?.getString("payload")))
         }, { key, value ->
             check(captured.current()) { "角色已变化，请重新打开" }
-            val result = context.contentResolver.call(SettingsProvider.URI, "reply_identity_put", key.value,
+            val result = SettingsTransport.call(context, "reply_identity_put", key.value,
                 extras().apply { putString("payload", value.encode()) })
             check(result?.getBoolean("saved") == true)
             readBackground(context, key, captured)

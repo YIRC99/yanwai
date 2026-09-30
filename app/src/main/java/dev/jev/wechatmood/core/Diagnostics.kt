@@ -70,6 +70,20 @@ object Diagnostics {
             .setNegativeButton("关闭", null).show()
     }
 
+    fun showSettingsConnectionHelp(activity: Activity) {
+        if (activity.isFinishing || activity.isDestroyed) return
+        AlertDialog.Builder(activity).setTitle("暂时无法连接言外")
+            .setMessage("自动连接未成功，不需要反复测试模型。\n\n如果经常出现，请在手机设置中允许言外自启动、关联启动和后台运行；不同手机的入口名称可能不同。\n\n如果使用隐藏应用列表，请不要对 wx 隐藏言外；分身 wx 与言外也需要在同一空间。设置后回到聊天重试。")
+            .setPositiveButton("打开应用设置") { _, _ ->
+                runCatching {
+                    activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:${BuildConfig.APPLICATION_ID}")))
+                }.onFailure { Toast.makeText(activity, "请在系统设置中找到言外，检查后台运行权限", Toast.LENGTH_LONG).show() }
+            }
+            .setNeutralButton("导出日志") { _, _ -> export(activity) }
+            .setNegativeButton("稍后", null).show()
+    }
+
     fun show(activity: Activity) {
         val report = collect(activity)
         val view = TextView(activity).apply {

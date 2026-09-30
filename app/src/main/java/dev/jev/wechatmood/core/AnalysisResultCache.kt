@@ -18,7 +18,7 @@ object AnalysisResultCache {
     fun find(input: AnalysisInput, settings: RuntimeSettings): Mood? {
         val key = AnalysisCacheKey.of(input, settings) ?: return null
         return runCatching {
-            val response = requireNotNull(context?.contentResolver?.call(SettingsProvider.URI, "cache_get", key.value, null))
+            val response = requireNotNull(SettingsTransport.call(requireNotNull(context), "cache_get", key.value, null))
             response.getString("payload")?.let { CachedAnalysisResult.decode(it).mood }
         }.onFailure(::failed).getOrNull()?.also { MoodLog.i("ANALYSIS_CACHE_HIT 已读取言外本地分析结果") }
     }
@@ -29,7 +29,7 @@ object AnalysisResultCache {
             val payload = CachedAnalysisResult(mood, evidence).encode()
             require(payload.toByteArray(Charsets.UTF_8).size <= 256 * 1024)
             val extras = Bundle().apply { putString("payload", payload) }
-            val response = requireNotNull(context?.contentResolver?.call(SettingsProvider.URI, "cache_put", key.value, extras))
+            val response = requireNotNull(SettingsTransport.call(requireNotNull(context), "cache_put", key.value, extras))
             check(response.getBoolean("saved"))
             MoodLog.i("ANALYSIS_CACHE_SAVED 分析结果已保存到言外私有目录")
         }.onFailure(::failed)

@@ -14,59 +14,60 @@ import java.util.UUID
 /** Settings bridge restricted to this app and WeChat, where the model requests run. */
 class SettingsProvider : ContentProvider() {
     override fun onCreate(): Boolean { context?.let(MoodLog::init); return true }
-    override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
-        val ctx = requireNotNull(context)
-        val caller = Binder.getCallingUid()
-        val own = caller == Process.myUid()
-        val wechat = ctx.packageManager.getPackagesForUid(caller)?.contains("com.tencent.mm") == true
-        if (!own && !wechat) {
-            MoodLog.w("PROVIDER_CALL_DENIED uid=$caller method=$method")
-            throw SecurityException("Caller is not allowed: uid=$caller")
-        }
-        return when (method) {
-            "reply_limit_get", "reply_limit_put" -> {
-                val prefs = ctx.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
-                val store = dev.jev.wechatmood.reply.ReplyLimitPreferences(caller,
-                    { key -> runCatching { if (prefs.contains(key)) prefs.getInt(key, 100) else null }.getOrNull() },
-                    { key, value -> check(prefs.edit().putInt(key, value).commit()) })
-                val account = requireNotNull(arg)
-                if (method == "reply_limit_get") Bundle().apply { putInt("limit", store.load(account)) }
-                else {
-                    store.save(account, requireNotNull(extras).getInt("limit", 0))
-                    Bundle().apply { putBoolean("saved", true) }
-                }
-            }
-            "reply_role_list", "reply_role_apply", "reply_role_put", "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> {
-                val result = ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
-                if (method == "reply_role_put") publish(ctx)
-                if (method.endsWith("_put") || method == "reply_role_apply") {
-                    // A refresh notification failure must not turn a completed disk write into a save failure.
-                    runCatching { ctx.contentResolver.notifyChange(ReplyIdentityProvider.CHANGES_URI, null) }
-                }
-                result
-            }
-            "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
-            "config" -> snapshot(ctx)
-            "report" -> {
-                ctx.getSharedPreferences(RUNTIME_FILE, 0).edit()
-                    .putString("status", arg.orEmpty().take(200))
-                    .putLong("last_seen", System.currentTimeMillis()).apply {
-                        extras?.getString("host_log")?.let {
-                            putString("host_log", MoodLog.sanitize(it).takeLast(48 * 1024))
-                            putLong("host_log_at", System.currentTimeMillis())
-                        }
-                    }.apply()
-                Bundle()
-            }
-            else -> throw IllegalArgumentException("Unknown method")
-        }
-    }
+    override fun call(method: String, arg: String?, extras: Bundle?): Bundle =
+        dispatch(requireNotNull(context), Binder.getCallingUid(), method, arg, extras)
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
     override fun getType(uri: Uri): String? = null
     override fun insert(uri: Uri, values: ContentValues?): Uri? = throw UnsupportedOperationException()
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = throw UnsupportedOperationException()
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = throw UnsupportedOperationException()
     companion object {
+        fun dispatch(ctx: Context, caller: Int, method: String, arg: String?, extras: Bundle?): Bundle {
+            val own = caller == Process.myUid()
+            val wechat = ctx.packageManager.getPackagesForUid(caller)?.contains("com.tencent.mm") == true
+            if (!own && !wechat) {
+                MoodLog.w("PROVIDER_CALL_DENIED uid=$caller method=$method")
+                throw SecurityException("Caller is not allowed: uid=$caller")
+            }
+            return when (method) {
+                "reply_limit_get", "reply_limit_put" -> {
+                    val prefs = ctx.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
+                    val store = dev.jev.wechatmood.reply.ReplyLimitPreferences(caller,
+                        { key -> runCatching { if (prefs.contains(key)) prefs.getInt(key, 100) else null }.getOrNull() },
+                        { key, value -> check(prefs.edit().putInt(key, value).commit()) })
+                    val account = requireNotNull(arg)
+                    if (method == "reply_limit_get") Bundle().apply { putInt("limit", store.load(account)) }
+                    else {
+                        store.save(account, requireNotNull(extras).getInt("limit", 0))
+                        Bundle().apply { putBoolean("saved", true) }
+                    }
+                }
+                "reply_role_list", "reply_role_apply", "reply_role_put", "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> {
+                    val result = ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
+                    if (method == "reply_role_put") publish(ctx)
+                    if (method.endsWith("_put") || method == "reply_role_apply") {
+                        // A refresh notification failure must not turn a completed disk write into a save failure.
+                        runCatching { ctx.contentResolver.notifyChange(ReplyIdentityProvider.CHANGES_URI, null) }
+                    }
+                    result
+                }
+                "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
+                "config" -> snapshot(ctx)
+                "report" -> {
+                    ctx.getSharedPreferences(RUNTIME_FILE, 0).edit()
+                        .putString("status", arg.orEmpty().take(200))
+                        .putLong("last_seen", System.currentTimeMillis()).apply {
+                            extras?.getString("host_log")?.let {
+                                putString("host_log", MoodLog.sanitize(it).takeLast(48 * 1024))
+                                putLong("host_log_at", System.currentTimeMillis())
+                            }
+                        }.apply()
+                    Bundle()
+                }
+                else -> throw IllegalArgumentException("Unknown method")
+            }
+        }
+
         val URI: Uri = Uri.parse("content://dev.jev.wechatmood.settings")
         const val RUNTIME_FILE = "wechat_runtime"
         const val KEY_REVISION = "settings_revision"

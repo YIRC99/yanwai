@@ -79,8 +79,6 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         if (MessageSniffer.currentReplyTalker() != selectedTalker) return false
         if (dialog?.isShowing == true || openingJob?.isActive == true) return true
         val epoch = ReplyDatabaseHistory.pendingAccountScope()
-        val generation = ModulePrefs.analysisSettings()?.generation
-        val rolesRevision = ModulePrefs.analysisSettings()?.rolesRevision
         ownerEpoch = epoch
         val live = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
             toast(it.message ?: "读取聊天失败"); return true
@@ -88,6 +86,12 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         if (live.talker != selectedTalker) return false
         openingJob = scope.launch {
             try {
+                // A cold host may not have finished connecting yet. Load before capturing ownership.
+                if (!ModulePrefs.bridgeAvailable) withContext(Dispatchers.IO) { ModulePrefs.reload(force = true) }
+                ensureActive()
+                val generation = ModulePrefs.analysisSettings()?.generation
+                val rolesRevision = ModulePrefs.analysisSettings()?.rolesRevision
+                check(generation != null) { "设置尚未连接" }
                 val account = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(live) }
                 val owner = ReplyIdentityOwner(epoch, account, selectedTalker)
                 val identity = owner.key?.let { ReplyIdentityBridge.load(activity, it) } ?: ReplyIdentitySetting()
@@ -104,9 +108,13 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 // All reads finish before the editor is created, so a late load cannot erase typed text.
                 openResolved(focusMessageId, live, owner, identity, preferredLimit, background)
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) {
-                if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker)
-                    toast("回复设置读取失败，请重新打开重试")
+            catch (error: Exception) {
+                MoodLog.e("REPLY_SETTINGS_READ_FAILED", error)
+                if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker) {
+                    if (error is dev.jev.wechatmood.core.SettingsConnectionUnavailableException || !ModulePrefs.bridgeAvailable)
+                        dev.jev.wechatmood.core.Diagnostics.showSettingsConnectionHelp(activity)
+                    else toast("回复设置读取失败，请重试；长按分析开关可导出日志")
+                }
             }
         }
         return true

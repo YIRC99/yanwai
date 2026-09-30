@@ -19,6 +19,8 @@
             android:grantUriPermissions="true"
             android:exported="true" />
 
+        <service android:name=".core.SettingsConnectionService" android:exported="true" />
+
         <!-- 旧的 Xposed API 用这三个 meta-data；现代 Module API 改用 META-INF/xposed/ -->
         <meta-data
             android:name="xposedmodule"

@@ -74,7 +74,7 @@ object ModulePrefs {
     fun reload(force: Boolean = false) = bridge.reload(force)
 
     private fun readSettings(): RuntimeSettings? = runCatching {
-        val result = requireNotNull(context).contentResolver.call(SettingsProvider.URI, "config", null, null)
+        val result = SettingsTransport.call(requireNotNull(context), "config", null, null)
             ?: error("设置服务无响应或不可见；检查隐藏应用列表规则及微信分身所在空间")
         requireNotNull(SettingsSync.decode(result)) { "设置服务返回的配置不完整" }
             .also { MoodLog.protect(it.api.apiKey); MoodLog.protect(it.reply.apiKey); MoodLog.protect(it.intent.llm.apiKey); connected() }
@@ -139,7 +139,7 @@ object ModulePrefs {
         val includeLog = now - lastReportAt >= 15_000L
         runCatching {
             val extras = if (includeLog) Bundle().apply { putString("host_log", MoodLog.read().takeLast(48 * 1024)) } else null
-            requireNotNull(context?.contentResolver?.call(SettingsProvider.URI, "report", MoodLog.sanitize(status).take(200), extras)) {
+            requireNotNull(SettingsTransport.call(requireNotNull(context), "report", MoodLog.sanitize(status).take(200), extras)) {
                 "运行状态上报服务不可见"
             }
             if (includeLog) lastReportAt = now
