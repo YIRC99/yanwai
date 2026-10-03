@@ -21,9 +21,28 @@ data class AnalysisCacheKey(val value: String) {
         }
         fun of(input: AnalysisInput, settings: RuntimeSettings): AnalysisCacheKey? {
             if (!input.accountScope.matches(Regex("[0-9a-f]{64}")) || input.messageId <= 0 || input.createdAt <= 0 || input.talker.isBlank()) return null
-            val identity = input.key
+            // A completed interpretation belongs to the message and its original evidence.
+            // Adapter history/coverage may change on re-entry, eviction or process restart.
+            val identity = input.copy(context = emptyList(), coverage = ContextCoverage()).key
             return AnalysisCacheKey(digest(FORMAT, identity, settings.analysisFingerprint()))
         }
+        internal fun legacyOf(input: AnalysisInput, settings: RuntimeSettings): AnalysisCacheKey? =
+            of(input, settings)?.let { AnalysisCacheKey(digest(FORMAT, input.key, settings.analysisFingerprint())) }
+    }
+}
+
+/** Upgrade an exact old-format hit without discarding its original evidence or rerunning models. */
+object AnalysisCacheLookup {
+    fun find(input: AnalysisInput, settings: RuntimeSettings,
+        read: (AnalysisCacheKey) -> CachedAnalysisResult?,
+        promote: (AnalysisCacheKey, CachedAnalysisResult) -> Unit): CachedAnalysisResult? {
+        val key = AnalysisCacheKey.of(input, settings) ?: return null
+        read(key)?.let { return it }
+        val legacy = AnalysisCacheKey.legacyOf(input, settings)?.takeIf { it != key } ?: return null
+        val result = read(legacy) ?: return null
+        // A failed best-effort promotion must not turn a usable cached result into a model call.
+        runCatching { promote(key, result) }
+        return result
     }
 }
 

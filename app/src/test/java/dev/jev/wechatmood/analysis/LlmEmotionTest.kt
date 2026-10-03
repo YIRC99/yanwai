@@ -52,9 +52,9 @@ class LlmEmotionTest {
         val unknown = ReplySettings.fromInput("https://custom.example/v1", "k", "deepseek-chat")
         assertFalse(LlmEmotionProtocol.payload(input, unknown).has("thinking"))
     }
-    @Test fun `changed relevant context must invalidate persistent results`() {
+    @Test fun `reloading page history preserves completed LLM analysis for the same message`() {
         val stable = input.copy(accountScope = AnalysisCacheKey.digest("a"), messageId = 1, createdAt = 10)
-        assertNotEquals(AnalysisCacheKey.of(stable, config()),
+        assertEquals(AnalysisCacheKey.of(stable, config()),
             AnalysisCacheKey.of(stable.copy(context = listOf(ContextMessage("我", "明天需要答复"))), config()))
     }
     @Test fun `no instructions or background are added to unsupported JEV state`() {
