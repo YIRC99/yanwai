@@ -27,7 +27,7 @@ internal object JevFixtures {
                 "target" -> "listener"
                 "commitment" -> "pending"
                 "speech_act", "advice_need", "own_fault", "new_topic", "topic_relation", "emotion_shift" -> "unknown"
-                else -> if (key.startsWith("support_")) "yes" else "signal"
+                else -> if (key.startsWith("expression_")) "unknown" else if (key.startsWith("support_")) "yes" else "signal"
             }
             require(criteria.has(choice)) { "Unknown test option $key/$choice" }
             val probabilities = JSONObject()

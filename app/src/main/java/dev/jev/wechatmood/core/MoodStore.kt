@@ -16,6 +16,7 @@ data class Mood(
     val detail: String = label,
     val intentFailed: Boolean = false,
     val emotions: Map<String, Double> = emptyMap(),
+    val expressions: Map<String, Double> = emptyMap(),
 )
 
 /**

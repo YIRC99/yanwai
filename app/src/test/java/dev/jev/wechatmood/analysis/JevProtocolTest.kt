@@ -40,7 +40,7 @@ class JevProtocolTest {
     @Test fun `first pass identifies scene emotion and progress and preserves source`() {
         val body = JevProtocol.payload(input.text, "test", input.context)
         assertEquals(setOf("scene", "emotion", "progress", "target", "speech_act", "advice_need",
-            "commitment", "own_fault", "new_topic", "topic_relation", "emotion_shift"), body.getJSONObject("questions").keys().asSequence().toSet())
+            "commitment", "own_fault", "new_topic", "topic_relation", "emotion_shift") + ExpressionSignals.definitions.keys.map { "expression_$it" }, body.getJSONObject("questions").keys().asSequence().toSet())
         assertEquals(input.text, body.getJSONObject("state").getString("message"))
         assertEquals("我想起来了", body.getJSONObject("state").getJSONArray("context").getJSONObject(0).getString("message"))
         assertEquals("对方", body.getJSONObject("state").getString("speaker"))

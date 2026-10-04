@@ -13,7 +13,7 @@ interface AnalysisCacheDatabase : Closeable {
 data class AnalysisCacheKey(val value: String) {
     companion object {
         // Bump when the meaning of analysis prompts/results changes, not for unrelated UI releases.
-        private const val FORMAT = "analysis-result-v2"
+        private const val FORMAT = "analysis-result-v3"
         fun digest(vararg values: String): String {
             val source = values.joinToString("") { "${it.length}:$it" }
             return MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8))
@@ -51,16 +51,19 @@ data class CachedAnalysisResult(val mood: Mood, val evidence: String) {
     fun encode(): String = JSONObject().put("format", 1).put("label", mood.label).put("score", mood.score)
         .put("risk", mood.risk).put("detail", if (hasHeader) mood.detail.substringAfter('\n', "") else mood.detail)
         .put("version_header", hasHeader).put("emotions", JSONObject(mood.emotions))
-        .put("evidence", evidence).toString()
+        .put("expressions", JSONObject(mood.expressions)).put("evidence", evidence).toString()
     companion object {
         fun decode(payload: String): CachedAnalysisResult {
             require(payload.toByteArray(Charsets.UTF_8).size <= 256 * 1024)
             val json = JSONObject(payload)
             require(json.getInt("format") == 1)
             val emotions = json.getJSONObject("emotions")
+            val expressions = json.optJSONObject("expressions") ?: JSONObject()
             val detail = (if (json.optBoolean("version_header")) dev.jev.wechatmood.analysis.JevProtocol.header + "\n" else "") + json.getString("detail")
             val mood = Mood(json.getString("label"), json.getDouble("score"), json.getInt("risk"), "",
-                detail, emotions = emotions.keys().asSequence().associateWith(emotions::getDouble))
+                detail, emotions = emotions.keys().asSequence().associateWith(emotions::getDouble),
+                expressions = expressions.keys().asSequence().associateWith(expressions::getDouble))
+            require(mood.expressions.values.all { it.isFinite() && it in 0.0..1.0 })
             require(mood.score.isFinite() && mood.emotions.values.all { it.isFinite() && it in 0.0..1.0 })
             return CachedAnalysisResult(mood, json.getString("evidence"))
         }

@@ -73,7 +73,7 @@ class PersistentAnalysisCacheTest {
 
     @Test fun `existing context keyed cache is promoted with original evidence and survives later history changes`() {
         val config = settings()
-        val legacy = AnalysisCacheKey(AnalysisCacheKey.digest("analysis-result-v2", input.key, config.analysisFingerprint()))
+        val legacy = AnalysisCacheKey(AnalysisCacheKey.digest("analysis-result-v3", input.key, config.analysisFingerprint()))
         val stable = requireNotNull(AnalysisCacheKey.of(input, config))
         assertNotEquals(stable, legacy)
         val file = folder.newFile()
@@ -99,7 +99,7 @@ class PersistentAnalysisCacheTest {
 
     @Test fun `legacy promotion failure still reuses completed result and unknown accounts never read storage`() {
         val config = settings()
-        val legacy = AnalysisCacheKey(AnalysisCacheKey.digest("analysis-result-v2", input.key, config.analysisFingerprint()))
+        val legacy = AnalysisCacheKey(AnalysisCacheKey.digest("analysis-result-v3", input.key, config.analysisFingerprint()))
         SqliteAnalysisCache(Jdbc(folder.newFile())).use { store ->
             store.save(legacy, mood, "original evidence")
             val restored = AnalysisCacheLookup.find(input, config, store::find) { _, _ -> error("disk unavailable") }

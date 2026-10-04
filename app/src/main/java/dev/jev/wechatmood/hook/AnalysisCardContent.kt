@@ -22,7 +22,7 @@ object AnalysisCardContent {
             val section = sections.firstOrNull { line.startsWith(it.first) }
             if (section?.second == false || line.startsWith("情绪：") && noVisibleEmotions) return@mapNotNull null
             Line(line, line.matches(Regex("yanwai \\S+")), line.startsWith("情绪："),
-                section?.first ?: listOf("智能分析", "意图：", "事件：", "建议：").firstOrNull(line::startsWith),
+                section?.first ?: listOf("智能分析", "表达（可能）：", "意图：", "事件：", "建议：").firstOrNull(line::startsWith),
                 hasReading && (line == "智能分析" || line == "仅供参考"))
         }
         val hasSections = projected.any { line -> sections.any { it.first == line.label } }

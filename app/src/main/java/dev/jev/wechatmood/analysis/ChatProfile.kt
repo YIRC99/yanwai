@@ -10,6 +10,7 @@ data class ChatProfile(
     val emotion: ChatDecision,
     val progress: ChatDecision,
     val facts: Map<String, ChatDecision> = emptyMap(),
+    val expressionSignals: ExpressionSignals = ExpressionSignals(),
 ) {
     val canSpecialize: Boolean get() = scene.clear && scene.choice != "other"
     fun has(key: String, vararg values: String): Boolean = facts[key]?.let {

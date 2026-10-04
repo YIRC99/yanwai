@@ -43,13 +43,14 @@ object JevProtocol {
 
     fun emotionPayload(input: AnalysisInput, model: String): JSONObject = JSONObject()
         .put("model", model).put("state", AnalysisState.build(input))
-        .put("questions", JSONObject().put("emotion", choice(EMOTION, emotionCriteria)))
+        .put("questions", JSONObject().put("emotion", choice(EMOTION, emotionCriteria)).withExpressions())
 
     fun parseEmotion(body: String): Mood {
         val emotion = readChoice(JSONObject(body).getJSONObject("answers"), "emotion", emotions)
-        val profile = ChatProfile(emotion, emotion, emotion, emptyMap())
-        return Mood("情绪概率", emotionScore(profile), 0, "", "$header\n${emotionProbabilities(profile)}",
-            emotions = displayEmotions(profile))
+        val answers = JSONObject(body).getJSONObject("answers")
+        val profile = ChatProfile(emotion, emotion, emotion, expressionSignals = readExpressions(answers))
+        return Mood("情绪概率", emotionScore(profile), 0, "", listOfNotNull(header, emotionProbabilities(profile), expressionLine(profile)).joinToString("\n"),
+            emotions = displayEmotions(profile), expressions = profile.expressionSignals.labeled())
     }
 
     fun payload(input: AnalysisInput, model: String): JSONObject = JSONObject()
@@ -58,7 +59,7 @@ object JevProtocol {
             .put("scene", choice("当前最适合哪类闲聊解读？按交流方式判断，不按话题名词排除。向朋友聊比赛、奖学金、工作经历仍可属于日常分享。区分抱怨第三方和双方矛盾；事情结束不等于聊天结束，后半句有新话题时优先考虑新话题。", ChatTemplates.scenes))
             .put("emotion", choice(EMOTION, emotionCriteria))
             .put("progress", choice("当前这一步在等待怎样的回应？只依据已经发生的前文，区分等解释、等行动和已接受。已接受指明确接受我方回应或安排，不是接受命运或带条件的假设。事件完成但开始新话题时仍是分享，不是收尾。", progress))
-            .apply { ChatFacts.questions.forEach { (key, q) -> put(key, choice(q.instructions, q.options)) } })
+            .apply { ChatFacts.questions.forEach { (key, q) -> put(key, choice(q.instructions, q.options)) } }.withExpressions())
 
     internal fun choice(instructions: String, options: Map<String, String>) = JSONObject()
         .put("type", "choice").put("instructions", SCOPE + instructions).put("criteria", JSONObject(options))
@@ -67,14 +68,14 @@ object JevProtocol {
         val answers = JSONObject(body).getJSONObject("answers")
         return ChatProfile(readChoice(answers, "scene", ChatTemplates.scenes),
             readChoice(answers, "emotion", emotions), readChoice(answers, "progress", progress),
-            ChatFacts.questions.mapValues { (key, q) -> readChoice(answers, key, q.options) })
+            ChatFacts.questions.mapValues { (key, q) -> readChoice(answers, key, q.options) }, readExpressions(answers))
     }
 
     fun detailPayload(input: AnalysisInput, model: String, profile: ChatProfile): JSONObject {
         val candidates = ChatTemplates.candidates(profile)
         val actions = ChatActions.candidates(profile)
         require(candidates.isNotEmpty() || actions.isNotEmpty())
-        val questions = JSONObject()
+        val questions = JSONObject().withExpressions(review = true)
             .put("emotion_review", choice("独立依据当前原文及前文判断情绪，不从场景、意图或前次观察推导情绪。" + EMOTION, emotionCriteria))
             .put("speech_act_review", choice("重新核对当前明确的交流意图，first_pass 可能有误。" +
                 ChatFacts.questions.getValue("speech_act").instructions, ChatFacts.questions.getValue("speech_act").options))
@@ -118,6 +119,7 @@ object JevProtocol {
         require(candidates.isNotEmpty() || actions.isNotEmpty())
         val answers = JSONObject(body).getJSONObject("answers")
         val reviewed = profile.copy(emotion = readChoice(answers, "emotion_review", emotions),
+            expressionSignals = readExpressions(answers, review = true),
             facts = profile.facts + ("speech_act" to readChoice(answers, "speech_act_review", ChatFacts.questions.getValue("speech_act").options)))
         val focus = if (candidates.isNotEmpty()) readChoice(answers, "focus", focusOptions(candidates)) else null
         val action = if (actions.isNotEmpty()) readChoice(answers, "action", ChatActions.options(profile)) else null
@@ -132,6 +134,7 @@ object JevProtocol {
             candidate.id == action?.takeIf { result -> result.clear }?.choice &&
             supports.getValue(candidate.id).let { it.clear && it.choice == "yes" } }
         val lines = mutableListOf(header, emotionProbabilities(reviewed))
+        expressionLine(reviewed)?.let { lines += it }
         intentLine(reviewed)?.let { lines += it }
         if (card != null && reading != null) {
             lines += "事件：${ChatTemplates.displayScene(card)}"
@@ -145,11 +148,38 @@ object JevProtocol {
             selectedAction != null -> "下一步动作"
             else -> "情绪概率"
         }
-        return Mood(label, emotionScore(reviewed), 0, "", lines.joinToString("\n"), emotions = displayEmotions(reviewed))
+        return Mood(label, emotionScore(reviewed), 0, "", lines.joinToString("\n"), emotions = displayEmotions(reviewed), expressions = reviewed.expressionSignals.labeled())
     }
 
     fun fallback(profile: ChatProfile): Mood = Mood("情绪概率", emotionScore(profile), 0, "",
-        listOfNotNull(header, emotionProbabilities(profile), intentLine(profile)).joinToString("\n"), emotions = displayEmotions(profile))
+        listOfNotNull(header, emotionProbabilities(profile), expressionLine(profile), intentLine(profile)).joinToString("\n"), emotions = displayEmotions(profile), expressions = profile.expressionSignals.labeled())
+
+    private val expressionOptions = linkedMapOf("signal" to "原文及相关前文支持这种解读", "ordinary" to "更符合普通字面解释", "unknown" to "信息不足，无法区分")
+
+    private fun JSONObject.withExpressions(review: Boolean = false): JSONObject = apply {
+        ExpressionSignals.definitions.forEach { (key, definition) ->
+            put("expression_$key" + if (review) "_review" else "", choice(
+                (if (review) "独立复核，前次标签不是证据。" else "") +
+                    "当前文字能否解读为${definition.label}？${definition.criterion}" +
+                    "表达方式不是情绪或真实内心事实；普通解释同样合理时不要强行贴标签。" +
+                    "多个表达信号可以同时成立，每个问题独立判断，不把明确拒绝解读成愿意。", expressionOptions))
+        }
+    }
+
+    private fun readExpressions(answers: JSONObject, review: Boolean = false) = ExpressionSignals(
+        ExpressionSignals.definitions.keys.associateWith {
+            val decision = readChoice(answers, "expression_$it" + if (review) "_review" else "", expressionOptions)
+            // Low-confidence decisions must not surface as strong expression labels.
+            if (decision.confidence >= 0.35) decision.probabilities.getValue("signal") else 0.0
+        })
+
+    private fun expressionLine(profile: ChatProfile): String? {
+        val visible = profile.expressionSignals.labeled().entries.filter { it.value >= 0.5 }
+            .sortedByDescending { it.value }.take(2)
+        return visible.takeIf { it.isNotEmpty() }?.joinToString(" · ", "表达（可能）：") {
+            "${it.key} ${(it.value * 100).roundToInt()}%"
+        }
+    }
 
     private fun displayEmotions(profile: ChatProfile) = profile.emotion.probabilities.mapKeys { emotions.getValue(it.key) }
 

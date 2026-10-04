@@ -20,7 +20,7 @@ class IntentAnalysisTest {
         val mood = IntentAnalysis.analyze(input, ApiSettings.fromInput(ApiSettings.DEFAULT_ENDPOINT, "key"),
             IntentSettings(IntentRoute.LLM, llm), { payload ->
                 jevCalls++
-                assertEquals(setOf("emotion"), payload.getJSONObject("questions").keySet())
+                assertEquals(setOf("emotion") + ExpressionSignals.definitions.keys.map { "expression_$it" }, payload.getJSONObject("questions").keySet())
                 JevFixtures.reply(payload)
             }, { payload ->
                 llmCalls++
