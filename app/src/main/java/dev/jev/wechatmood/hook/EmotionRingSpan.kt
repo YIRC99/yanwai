@@ -11,7 +11,7 @@ import kotlin.math.max
 /** One atomic inline chip, so Android can wrap between emotions, never inside a ring. */
 class EmotionRingSpan(private val emotion: EmotionIndicator, private val density: Float) : ReplacementSpan() {
     private fun labelPaint(paint: Paint) = Paint(paint).apply { textSize *= 0.8f; color = emotion.color }
-    private fun numberPaint(paint: Paint) = Paint(paint).apply { textSize *= 0.65f; color = 0xFFF0F1F5.toInt() }
+    private fun numberPaint(paint: Paint) = Paint(paint).apply { textSize *= 0.65f; color = paint.color }
     private fun diameter(paint: Paint) = max(24f * density, numberPaint(paint).measureText("100%") + 6f * density)
     private fun height(paint: Paint) = max(diameter(paint), paint.fontMetrics.descent - paint.fontMetrics.ascent) + 4f * density
 
