@@ -1,73 +1,125 @@
 package dev.jev.wechatmood.hook
 
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.RelativeLayout
+import android.widget.PopupWindow
+import android.widget.ScrollView
 import android.widget.TextView
-import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.analysis.JevProtocol
+import dev.jev.wechatmood.analysis.SignalAnalyzer
+import dev.jev.wechatmood.core.AnalysisInput
+import dev.jev.wechatmood.core.CardDisplaySettings
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.MoodStore
-import dev.jev.wechatmood.core.AnalysisInput
-import java.util.IdentityHashMap
 
-/** Append a sibling below the real text bubble, without replacing a host row or ViewHolder. */
+/** One host-window popup; never inserts children into WeChat's recycled message rows. */
 object BubbleDecorator {
-    private data class Card(
-        val key: String, val view: TextView, val parent: ViewGroup,
-        val anchor: View, val assignedId: Int?, val detach: View.OnAttachStateChangeListener,
+    private class Card(
+        val key: String,
+        val root: View,
+        val view: TextView,
+        val scroll: ScrollView,
+        val popup: PopupWindow,
+        val width: Int,
+        var x: Int,
+        var y: Int,
+        val detach: View.OnAttachStateChangeListener,
     )
-    private val cards = IdentityHashMap<View, Card>()
-    private val unsupported = mutableSetOf<String>()
+    private val presentation = AnalysisPopupState()
+    private var card: Card? = null
+
+    fun request(key: String) {
+        if (card?.key != key) disposeWindow()
+        presentation.request(key)
+    }
 
     fun show(row: View, message: AnalysisInput?): Boolean {
-        if (message == null || !ModulePrefs.shouldDisplay(message)) { clear(row); return false }
+        if (message == null) return false
+        if (!ModulePrefs.shouldDisplay(message)) {
+            if (card?.key == message.key) clearAll()
+            return false
+        }
         val key = message.key
         val mood = MoodStore.get(key) ?: SignalAnalyzer.partialMood(key)
-        val display = ModulePrefs.analysisSettings()?.cardDisplay ?: dev.jev.wechatmood.core.CardDisplaySettings()
+        val display = ModulePrefs.analysisSettings()?.cardDisplay ?: CardDisplaySettings()
         if (mood != null && AnalysisCardContent.lines(mood, display).isEmpty()) {
-            clear(row)
-            return true // intentionally hidden, not an unsupported host layout
+            if (card?.key == key) clearAll()
+            return true
         }
-        var state = cards[row]
-        if (state != null && (state.key != key || state.view.parent !== state.parent)) {
-            clear(row)
-            state = null
-        }
-        if (state == null) {
-            state = attach(row, key) ?: return false
-            cards[row] = state
+        // A closed or background result is handled, not an unsupported host layout.
+        if (!presentation.offer(key)) return true
+        if (!row.isAttachedToWindow) return false
+        val root = row.rootView
+        val state = card?.takeIf { it.key == key && it.root === root } ?: run {
+            disposeWindow()
+            attach(root, key)?.also { card = it } ?: return false
         }
         val value = mood?.let {
             AnalysisCardText.format(it, row.resources.displayMetrics.density,
-                state.view.layoutParams.width - state.view.paddingLeft - state.view.paddingRight, state.view.paint, display)
+                state.width - state.view.paddingLeft - state.view.paddingRight,
+                state.view.paint, display)
         } ?: SignalAnalyzer.failure(key)?.let {
-            "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
+            "${JevProtocol.header}\n分析失败：$it\n点击内容重试"
         } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))
             SignalAnalyzer.progress(key) ?: if (message.voice != null || message.context.any { it.voice != null }) "正在准备语音…" else "正在分析…"
             else if (!message.backgroundReady) "正在读取对方背景；读取失败时会重试"
             else "模型未配置或设置未连接"
-        if (state.view.text.toString() != value.toString()) state.view.text = value
+        if (state.view.text.toString() != value.toString()) {
+            state.view.text = value
+            resize(state)
+        }
         return true
     }
 
-    private fun attach(row: View, key: String): Card? {
-        val root = row as? ViewGroup ?: return null
-        val anchor = findBubble(root) ?: return null
-        val rowPos = IntArray(2).also { root.getLocationOnScreen(it) }
-        val anchorPos = IntArray(2).also { anchor.getLocationOnScreen(it) }
-        val left = (anchorPos[0] - rowPos[0]).coerceAtLeast(0)
-        val width = minOf(dp(row, 300), root.width - left - dp(row, 16))
-        if (width < dp(row, 100)) return null
-        val card = FrostedAnalysisView(row.context).apply {
-            id = View.generateViewId()
-            textSize = 13f
-            setPadding(dp(row, 12), dp(row, 7), dp(row, 12), dp(row, 7))
-            setLineSpacing(dp(row, 1).toFloat(), 1f)
-            setTextColor(0xFFF0F1F5.toInt())
-            minHeight = dp(row, 48)
+    private fun attach(root: View, key: String): Card? {
+        val context = root.context
+        val width = minOf(dp(root, 380), root.width - dp(root, 32))
+        if (width < dp(root, 100) || root.height <= 0) return null
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(AnalysisPopupPalette.BACKGROUND)
+                setCornerRadius(dp(root, 18).toFloat())
+                setStroke(dp(root, 1), AnalysisPopupPalette.BORDER)
+            }
+        }
+        val header = LinearLayout(context).apply {
+            setGravity(Gravity.CENTER_VERTICAL)
+            setPadding(dp(root, 14), 0, dp(root, 4), 0)
+        }
+        val title = TextView(context).apply {
+            text = "言外 · 意图解读"
+            textSize = 16f
+            gravity = Gravity.CENTER_VERTICAL
+            setTextColor(AnalysisPopupPalette.FOREGROUND)
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            contentDescription = "意图解读，拖动标题可移动悬浮窗"
+        }
+        header.addView(title, LinearLayout.LayoutParams(0, dp(root, 48), 1f))
+        val close = TextView(context).apply {
+            text = "×"
+            textSize = 28f
+            gravity = Gravity.CENTER
+            setTextColor(AnalysisPopupPalette.FOREGROUND)
+            contentDescription = "关闭意图悬浮窗"
+            isFocusable = true
+            setOnClickListener { clearAll() }
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(root, 48), dp(root, 48)))
+        box.addView(header)
+        val text = TextView(context).apply {
+            textSize = 14f
+            setTextColor(AnalysisPopupPalette.FOREGROUND)
+            setPadding(dp(root, 14), dp(root, 8), dp(root, 14), dp(root, 14))
+            setLineSpacing(dp(root, 3).toFloat(), 1f)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             setOnClickListener {
                 if (SignalAnalyzer.failure(key) != null || MoodStore.get(key)?.intentFailed == true) {
@@ -76,100 +128,89 @@ object BubbleDecorator {
                 }
             }
         }
-        var branch: View = anchor
-        var parent = branch.parent as? ViewGroup
-        var target: ViewGroup? = null
-        var assignedId: Int? = null
-        while (parent != null && isInside(parent, root)) {
-            if (parent is LinearLayout && parent.orientation == LinearLayout.VERTICAL &&
-                parent.layoutParams?.height == ViewGroup.LayoutParams.WRAP_CONTENT) {
-                val parentPos = IntArray(2).also { parent.getLocationOnScreen(it) }
-                val lp = LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    leftMargin = (anchorPos[0] - parentPos[0] - parent.paddingLeft).coerceAtLeast(0)
-                    topMargin = dp(row, 3)
-                    bottomMargin = dp(row, 6)
-                }
-                // Append only: do not shift the indexes of the host's original children.
-                parent.addView(card, lp)
-                target = parent
-                break
-            }
-            if (parent === root) break
-            branch = parent
-            parent = branch.parent as? ViewGroup
+        val scroll = ScrollView(context).apply {
+            addView(text, ViewGroup.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        if (target == null && root is RelativeLayout && branch.parent === root &&
-            root.layoutParams?.height == ViewGroup.LayoutParams.WRAP_CONTENT) {
-            val branchParams = branch.layoutParams as? RelativeLayout.LayoutParams ?: return null
-            if (branchParams.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) != 0) return null
-            if (branch.id == View.NO_ID) {
-                assignedId = View.generateViewId()
-                branch.id = assignedId
-            }
-            val lp = RelativeLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                addRule(RelativeLayout.BELOW, branch.id)
-                addRule(RelativeLayout.ALIGN_PARENT_LEFT)
-                leftMargin = left
-                topMargin = dp(row, 3)
-                bottomMargin = dp(row, 6)
-            }
-            root.addView(card, lp)
-            target = root
-        }
-        if (target == null) {
-            val signature = "${root.javaClass.name}/${anchor.parent?.javaClass?.name}"
-            if (unsupported.add(signature)) MoodLog.w("暂不绘制未知气泡布局：$signature")
-            return null
+        box.addView(scroll, LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val popup = PopupWindow(box, width, ViewGroup.LayoutParams.WRAP_CONTENT, false).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            isOutsideTouchable = false
+            elevation = dp(root, 12).toFloat()
+            inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
         }
         val detach = object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) { MessageSniffer.restoreBoundCard(v) }
-            // RecyclerView temporarily detaches rows while scrolling. Keep their measured content.
-            override fun onViewDetachedFromWindow(v: View) {
-                // Older ListView adapters have no verified bind hook to clear recycled content.
-                if (!MessageSniffer.hasBoundMessage(v)) clear(v)
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) { clearAll() }
+        }
+        val state = Card(key, root, text, scroll, popup, width,
+            ((root.width - width) / 2).coerceAtLeast(0), minOf(dp(root, 80), root.height / 4), detach)
+        var startX = 0f
+        var startY = 0f
+        var oldX = 0
+        var oldY = 0
+        title.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX = event.rawX; startY = event.rawY
+                    oldX = state.x; oldY = state.y
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    state.x = (oldX + (event.rawX - startX).toInt()).coerceIn(0, (root.width - width).coerceAtLeast(0))
+                    state.y = (oldY + (event.rawY - startY).toInt()).coerceIn(0, (root.height - box.height).coerceAtLeast(0))
+                    popup.update(state.x, state.y, -1, -1)
+                    true
+                }
+                MotionEvent.ACTION_UP -> { view.performClick(); true }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> false
             }
         }
-        row.addOnAttachStateChangeListener(detach)
-        return Card(key, card, target, branch, assignedId, detach)
+        popup.setOnDismissListener {
+            root.removeOnAttachStateChangeListener(detach)
+            if (card === state) { card = null; presentation.dismiss() }
+        }
+        return try {
+            popup.showAtLocation(root, Gravity.TOP or Gravity.LEFT, state.x, state.y)
+            root.addOnAttachStateChangeListener(detach)
+            state
+        } catch (error: RuntimeException) {
+            popup.setOnDismissListener(null)
+            popup.dismiss()
+            MoodLog.w("意图悬浮窗暂不可用：${error.javaClass.simpleName}")
+            null
+        }
     }
 
-    private fun findBubble(root: ViewGroup): View? {
-        val holder = root.tag
-        if (holder != null) {
-            val method = generateSequence(holder.javaClass as Class<*>) { it.superclass }
-                .flatMap { it.declaredMethods.asSequence() }
-                .firstOrNull { it.name == "getMainContainerView" && it.parameterCount == 0 }
-            val main = runCatching { method?.isAccessible = true; method?.invoke(holder) as? View }.getOrNull()
-            if (main != null && main !== root && main.isShown && isInside(main, root)) return main
+    private fun resize(state: Card) {
+        val maxHeight = (state.root.height / 2).coerceAtLeast(1)
+        state.view.measure(View.MeasureSpec.makeMeasureSpec(state.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        state.scroll.layoutParams = (state.scroll.layoutParams as LinearLayout.LayoutParams).apply {
+            height = minOf(state.view.measuredHeight, maxHeight)
         }
-        fun find(view: View, depth: Int): View? {
-            if (depth > 24 || view.visibility != View.VISIBLE) return null
-            if (view.javaClass.name.endsWith(".MMNeat7extView")) return view
-            if (view is ViewGroup) for (i in 0 until view.childCount) find(view.getChildAt(i), depth + 1)?.let { return it }
-            return null
-        }
-        return find(root, 0)
+        state.popup.update(state.width, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    private fun isInside(view: View, root: View): Boolean {
-        var current: View? = view
-        while (current != null) {
-            if (current === root) return true
-            current = current.parent as? View
-        }
-        return false
+    /** Row recycling must not dismiss a window owned by the chat rather than that row. */
+    fun clear(@Suppress("UNUSED_PARAMETER") row: View) = Unit
+
+    fun clearAll() {
+        presentation.dismiss()
+        disposeWindow()
     }
 
-    fun clear(row: View) {
-        val state = cards.remove(row) ?: return
-        row.removeOnAttachStateChangeListener(state.detach)
-        (state.view.parent as? ViewGroup)?.removeView(state.view)
-        if (state.assignedId != null && state.anchor.id == state.assignedId) state.anchor.id = View.NO_ID
-    }
-    fun clearAll() { cards.keys.toList().forEach(::clear) }
     fun prune() {
-        // Bound retention for recycled rows; leaving the chat still clears every card.
-        cards.keys.filter { !it.isAttachedToWindow }.drop(32).forEach(::clear)
+        if (card?.root?.isAttachedToWindow == false) clearAll()
     }
+
+    private fun disposeWindow() {
+        val old = card ?: return
+        card = null
+        old.root.removeOnAttachStateChangeListener(old.detach)
+        old.popup.setOnDismissListener(null)
+        old.popup.dismiss()
+    }
+
     private fun dp(view: View, n: Int) = (n * view.resources.displayMetrics.density).toInt()
 }
