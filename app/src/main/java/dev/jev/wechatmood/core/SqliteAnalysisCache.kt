@@ -71,6 +71,8 @@ data class CachedAnalysisResult(val mood: Mood, val evidence: String) {
 class SqliteAnalysisCache(private val db: AnalysisCacheDatabase,
     private val capacity: Int = 5000, private val maxBytes: Long = 32L * 1024 * 1024,
     private val now: () -> Long = System::currentTimeMillis) : Closeable {
+    /** 命中的分析结果最多保留 14 天。 */
+    private val CACHE_TTL_MS = 14L * 24 * 60 * 60 * 1000
     init {
         require(capacity > 0 && maxBytes > 0)
         db.execute("CREATE TABLE IF NOT EXISTS analysis_results (cache_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, accessed INTEGER NOT NULL)")
@@ -78,7 +80,9 @@ class SqliteAnalysisCache(private val db: AnalysisCacheDatabase,
     }
 
     @Synchronized fun find(key: AnalysisCacheKey): CachedAnalysisResult? {
-        val payload = db.query("SELECT payload FROM analysis_results WHERE cache_key = ?", listOf(key.value)) ?: return null
+        // 过期结果不再命中：聊天原文不该无限期留在磁盘上。
+        val payload = db.query("SELECT payload FROM analysis_results WHERE cache_key = ? AND accessed >= ?",
+            listOf(key.value, (now() - CACHE_TTL_MS).toString())) ?: return null
         val result = runCatching { CachedAnalysisResult.decode(payload) }.getOrNull()
         if (result == null) db.execute("DELETE FROM analysis_results WHERE cache_key = ?", listOf(key.value))
         else db.execute("UPDATE analysis_results SET accessed = ? WHERE cache_key = ?", listOf(now().toString(), key.value))

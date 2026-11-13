@@ -30,19 +30,38 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
     }
     companion object {
         const val MAX_MESSAGES = 100
-        const val MAX_CHARACTERS = 48000
+        /** 单次请求的聊天正文上限：太长会撞小模型的上下文，也会拖慢响应。 */
+        const val MAX_CHARACTERS = 12000
         fun collect(talker: String, records: List<MessageMetadata>, maxMessages: Int = MAX_MESSAGES): ReplyContext {
             require(maxMessages in 1..MAX_MESSAGES)
             val same = records.filter { it.talker == talker }.distinctBy { if (it.messageId > 0) "id:${it.messageId}" else "${it.createdAt}:${it.isSend}:${it.content}" }
-            val eligible = same.filter { it.isSend in 0..1 && (it.type == 1 && it.content.isNotBlank() || it.voiceSource() != null) }
+            // 引用消息即使解析不出正文也要保留：丢掉它会让模型对着上下文里别的消息作答。
+            val eligible = same.filter { it.isSend in 0..1 &&
+                (it.type == 49 || it.type == 822083633 || it.plainText() != null || it.voiceSource() != null) }
             val text = eligible.takeLast(maxMessages)
             var budget = MAX_CHARACTERS
             var trimmed = eligible.size > maxMessages
             val selected = text.asReversed().mapNotNull { record ->
                 if (budget <= 0) { trimmed = true; return@mapNotNull null }
-                val body = if (record.type == 34) VoiceText.WAITING
-                    else if (record.isSend == 0 && talker.endsWith("@chatroom") && record.content.contains(":\n"))
-                    record.content.substringAfter(":\n") else record.content
+                // 引用消息的 content 是 XML，取解析后的文本，别把标签塞给模型。
+                val body = when {
+                    record.type == 34 -> VoiceText.WAITING
+                    record.type == 49 || record.type == 822083633 -> {
+                        // 引用消息要把「被引用的原文」和「这次新写的话」一起给模型，
+                        // 只留其中一边很容易答非所问；解析失败也要留占位，不能整条丢掉。
+                        val own = record.plainText().orEmpty()
+                        val quoted = record.quotedMessage()
+                        val quotedText = quoted?.text?.takeIf { it.isNotBlank() }?.take(200)
+                        when {
+                            quotedText != null -> "【引用${quoted.displayName?.take(32).orEmpty()}：$quotedText】$own"
+                            own.isNotBlank() -> own
+                            else -> "【引用消息，内容未能解析】"
+                        }
+                    }
+                    record.isSend == 0 && talker.endsWith("@chatroom") && record.content.contains(":\n") ->
+                        record.content.substringAfter(":\n")
+                    else -> record.content
+                }
                 val end = minOf(body.length, budget).let {
                     if (it < body.length && it > 0 && body[it - 1].isHighSurrogate() && body[it].isLowSurrogate()) it - 1 else it
                 }

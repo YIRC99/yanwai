@@ -111,8 +111,9 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             catch (error: Exception) {
                 MoodLog.e("REPLY_SETTINGS_READ_FAILED", error)
                 if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker) {
+                    // 不再弹「去开自启动」的对话框；本地已有回退，失败只记日志。
                     if (error is dev.jev.wechatmood.core.SettingsConnectionUnavailableException || !ModulePrefs.bridgeAvailable)
-                        dev.jev.wechatmood.core.Diagnostics.showSettingsConnectionHelp(activity)
+                        dev.jev.wechatmood.core.MoodLog.w("REPLY_OPEN_WITHOUT_BRIDGE 未能连接言外，已按本地缓存继续")
                     else toast("回复设置读取失败，请重试；长按分析开关可导出日志")
                 }
             }
@@ -291,16 +292,38 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         results.addView(resultActions); results.addView(reason)
         scroll.addView(results); body.addView(scroll, LinearLayout.LayoutParams(-1, -2, 1f))
         body.addView(line(), LinearLayout.LayoutParams(-1, dp(1).coerceAtLeast(1)))
-        val copy = action("复制这条", primary = true) {
+        fun fillIntoEditor(text: String) {
+            val input = editor() ?: run { toast("请先切换到文字输入"); return }
+            val previous = input.text?.toString().orEmpty()
+            if (previous.isNotBlank() && previous != text) {
+                (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                    .setPrimaryClip(ClipData.newPlainText("言外原草稿", previous))
+            }
+            input.setText(text)
+            input.setSelection(text.length)
+            input.requestFocus()
+            runCatching {
+                (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                    ?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            }
+            // 已经写进聊天框，抽屉直接收起，把屏幕还给用户自己改和发；不再弹提示。
+            runCatching { window.dismiss() }
+        }
+        val fill = action("填入聊天框", primary = true) {
+            composition.selectedText?.let { fillIntoEditor(it) }
+        }
+        val copy = action("复制这条") {
             composition.selectedText?.let { text ->
                 (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(ClipData.newPlainText("言外回复建议", text))
-                toast("已复制第 ${composition.selectedPart + 1} 条，请自行粘贴发送")
+                toast("已复制第 ${composition.selectedPart + 1} 个方案")
             }
         }
         val footerActions = LinearLayout(activity).apply { setPadding(0, dp(10), 0, 0) }
-        footerActions.addView(copy, LinearLayout.LayoutParams(-1, -2)); body.addView(footerActions)
-        val footerHint = theme.label("复制后，请自行粘贴到聊天框发送", 11f, theme.muted).apply {
+        footerActions.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+        footerActions.addView(fill, LinearLayout.LayoutParams(0, -2, 1f))
+        body.addView(footerActions)
+        val footerHint = theme.label("填入后可自由修改，发送永远由你点", 11f, theme.muted).apply {
             gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0)
         }
         body.addView(footerHint)
@@ -393,12 +416,13 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             historyPicker.isEnabled = !generating
             historyPicker.text = "参考最近 ${composition.historyLimit} 条 ▾"
             historyPicker.contentDescription = "选择参考聊天消息条数，当前最近 ${composition.historyLimit} 条"
-            copy.isEnabled = !generating && !reading && composition.canUse
+            fill.isEnabled = !generating && !reading && composition.canUse
+            copy.isEnabled = fill.isEnabled
             copy.text = "复制这条"
             footerActions.visibility = if (composition.result == null) View.GONE else View.VISIBLE
             footerHint.visibility = footerActions.visibility
             footerHint.text = if (!composition.canUse) "身份、背景或参考范围已改变，请重新生成"
-                else "复制后，请自行粘贴到聊天框发送"
+                else "填入后可自由修改，发送永远由你点"
             state.visibility = if (state.text.isBlank()) View.GONE else View.VISIBLE
             if (window.isShowing) fitWindow()
         }
@@ -423,17 +447,17 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             val batch = result?.topics
             topicTitle.text = batch?.current?.title.orEmpty()
             topicTitle.visibility = if (batch == null) View.GONE else View.VISIBLE
-            val kind = if (batch == null) "${result?.suggestion?.parts?.size ?: 0} 条建议" else "话题 ${batch.shownCount} / ${batch.items.size}"
+            val kind = if (batch == null) "${result?.suggestion?.parts?.size ?: 0} 个方案" else "话题 ${batch.shownCount} / ${batch.items.size}"
             replyTitle.text = result?.let { "${it.relationship.displayLabel(it.customRelationship)} · $kind${if (!composition.canUse) "（上次结果）" else ""} · 查看依据 ›" }.orEmpty()
             result?.suggestion?.parts?.forEachIndexed { index, text ->
                 val selected = composition.selectedPart == index
                 val row = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); minimumHeight = dp(48)
                     background = theme.shape(if (selected) theme.soft else theme.card, 12, if (selected) theme.accent else theme.border)
-                    addView(theme.label("${index + 1} / ${result.suggestion.parts.size}${if (selected) " · 已选" else " · 点选"}", 12f, theme.muted))
+                    addView(theme.label("候选 ${index + 1} / ${result.suggestion.parts.size}${if (selected) " · 已选" else " · 点选"}", 12f, theme.muted))
                     addView(theme.label(text, 16f).apply { setPadding(0, dp(3), 0, 0) })
                     isClickable = true; isFocusable = true
-                    contentDescription = "第 ${index + 1} 条，共 ${result.suggestion.parts.size} 条${if (selected) "，已选" else ""}，$text"
+                    contentDescription = "第 ${index + 1} 个方案，共 ${result.suggestion.parts.size} 个${if (selected) "，已选" else ""}，$text"
                     setOnClickListener { composition.select(index); renderParts(); controls(busy) }
                 }
                 parts.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
@@ -690,8 +714,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 }
                 menu.add(0, -1, 101, "自定义…").isChecked = composition.historyLimit !in ReplyHistorySelection.OPTIONS
                 menu.setGroupCheckable(0, true, true)
-                reference.context?.let { menu.add(1, 1, 102, "查看已读取的 ${it.messages.size} 条消息") }
-                menu.add(1, 2, 103, "重新读取")
+                reference.context?.let { menu.add(1, 1, 102, "查看参考内容（${it.messages.size} 条）") }
+                menu.add(1, 2, 103, "重新读取聊天记录")
                 setOnMenuItemClickListener { item ->
                     if (ownsDrawer() && !busy) when {
                         item.groupId == 1 && item.itemId == 1 -> reference.context?.let(::showEvidence)
@@ -742,7 +766,10 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             job = scope.launch {
                 try {
                     if (!verifyAccount()) { window.dismiss(); return@launch }
-                    val knowledge = withContext(Dispatchers.IO) { ReplyKnowledge.load(activity, relationship) }
+                    val knowledge = withContext(Dispatchers.IO) {
+                        ReplyKnowledge.loadFor(activity, relationship,
+                            current.messages.joinToString("\n") { it.text } + "\n" + baselineDraft + "\n" + notes)
+                    }
                     // Upload only the prepared evidence, after rechecking configuration, conversation and settings.
                     ensureActive()
                     if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.canGenerateReply || current.background != composition.background) return@launch

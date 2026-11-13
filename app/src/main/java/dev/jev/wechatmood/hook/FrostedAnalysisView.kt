@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.TextView
+import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 
 /** Backdrop only is blurred. Text stays opaque; unsupported host rendering falls back to tint. */
@@ -64,17 +65,22 @@ class FrostedAnalysisView(context: Context) : TextView(context) {
         super.draw(canvas)
     }
 
-    private class Backdrop(private val root: View) : ViewTreeObserver.OnPreDrawListener {
+    private class Backdrop(rootView: View) : ViewTreeObserver.OnPreDrawListener {
+        /** 弱引用宿主根视图：WeakHashMap 的 value 不能强引用 key，否则永远回收不掉。 */
+        private val rootRef = WeakReference(rootView)
         var users = 0
         var bitmap: Bitmap? = null
         private var lastCapture = -200L
         private var disabled = false
-        private val observer = root.viewTreeObserver
+        private val observer = rootView.viewTreeObserver
         init { observer.addOnPreDrawListener(this) }
 
         override fun onPreDraw(): Boolean {
             val now = SystemClock.uptimeMillis()
-            if (disabled || capturing || users == 0 || now - lastCapture < 180 || root.width == 0 || root.height == 0) return true
+            // 背景只是装饰：静止时 1.5 秒抓一次就够，原来 180ms 等于每几帧整窗软件重绘一次。
+            if (disabled || capturing || users == 0 || now - lastCapture < 1500) return true
+            val root = rootRef.get() ?: run { close(); return true }
+            if (root.width == 0 || root.height == 0) return true
             lastCapture = now
             try {
                 // One low-resolution capture per host window, shared by all visible cards.

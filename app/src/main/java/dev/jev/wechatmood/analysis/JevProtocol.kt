@@ -43,7 +43,7 @@ object JevProtocol {
 
     fun emotionPayload(input: AnalysisInput, model: String): JSONObject = JSONObject()
         .put("model", model).put("state", AnalysisState.build(input))
-        .put("questions", JSONObject().put("emotion", choice(EMOTION, emotionCriteria)))
+        .put("questions", JSONObject().put("emotion", choice(EMOTION, emotionCriteria, distribution = true)))
 
     fun parseEmotion(body: String): Mood {
         val emotion = readChoice(JSONObject(body).getJSONObject("answers"), "emotion", emotions)
@@ -56,12 +56,16 @@ object JevProtocol {
         .put("model", model).put("state", AnalysisState.build(input))
         .put("questions", JSONObject()
             .put("scene", choice("当前最适合哪类闲聊解读？按交流方式判断，不按话题名词排除。向朋友聊比赛、奖学金、工作经历仍可属于日常分享。区分抱怨第三方和双方矛盾；事情结束不等于聊天结束，后半句有新话题时优先考虑新话题。", ChatTemplates.scenes))
-            .put("emotion", choice(EMOTION, emotionCriteria))
+            .put("emotion", choice(EMOTION, emotionCriteria, distribution = true))
             .put("progress", choice("当前这一步在等待怎样的回应？只依据已经发生的前文，区分等解释、等行动和已接受。已接受指明确接受我方回应或安排，不是接受命运或带条件的假设。事件完成但开始新话题时仍是分享，不是收尾。", progress))
             .apply { ChatFacts.questions.forEach { (key, q) -> put(key, choice(q.instructions, q.options)) } })
 
-    internal fun choice(instructions: String, options: Map<String, String>) = JSONObject()
-        .put("type", "choice").put("instructions", SCOPE + instructions).put("criteria", JSONObject(options))
+    internal fun choice(instructions: String, options: Map<String, String>, distribution: Boolean = false) = JSONObject()
+        .put("type", "choice")
+        .put("instructions", SCOPE + instructions + if (distribution)
+            "需要完整 probabilities，选中项必须最大且总和为 1。"
+            else "只需输出 choice 与 confidence（0-1 小数），不必给 probabilities，越短越好。")
+        .put("criteria", JSONObject(options))
 
     fun parseProfile(body: String): ChatProfile {
         val answers = JSONObject(body).getJSONObject("answers")
@@ -75,7 +79,7 @@ object JevProtocol {
         val actions = ChatActions.candidates(profile)
         require(candidates.isNotEmpty() || actions.isNotEmpty())
         val questions = JSONObject()
-            .put("emotion_review", choice("独立依据当前原文及前文判断情绪，不从场景、意图或前次观察推导情绪。" + EMOTION, emotionCriteria))
+            .put("emotion_review", choice("独立依据当前原文及前文判断情绪，不从场景、意图或前次观察推导情绪。" + EMOTION, emotionCriteria, distribution = true))
             .put("speech_act_review", choice("重新核对当前明确的交流意图，first_pass 可能有误。" +
                 ChatFacts.questions.getValue("speech_act").instructions, ChatFacts.questions.getValue("speech_act").options))
         if (candidates.isNotEmpty()) questions.put("focus", choice(
@@ -87,7 +91,7 @@ object JevProtocol {
                 "不要重复已经给过的安慰、解释或问题。新话题优先接新话题，吐槽第三方不要求我方道歉。" +
                 "没有明确约定不能建议兑现，没求办法不急着指导。候选都不合适或前提不成立就选 none。",
             ChatActions.options(profile)))
-        for (action in actions) {
+        for (action in actions.take(2)) {
             questions.put("support_${action.id}", choice(
                 "独立核对这一建议的前提是否真的成立，而且尚未做过？只依据原文，不依据 first_pass 的标签。" +
                     "建议：${action.text} 适用前提：${action.condition}。对方已拒绝或要求暂停时，不能建议继续追问、劝说或催促。",
@@ -123,14 +127,14 @@ object JevProtocol {
         val action = if (actions.isNotEmpty()) readChoice(answers, "action", ChatActions.options(profile)) else null
         // Validate every requested answer, even when the focus is none. Partial replies must be retryable failures.
         val readings = candidates.associate { it.id to readChoice(answers, "reading_${it.id}", it.options) }
-        val supports = actions.associate { it.id to readChoice(answers, "support_${it.id}", supportOptions) }
+        val supports = actions.take(2).associate { it.id to readChoice(answers, "support_${it.id}", supportOptions) }
         val compatibleCards = ChatTemplates.candidates(reviewed).map { it.id }.toSet()
         val card = candidates.firstOrNull { it.id in compatibleCards && it.id == focus?.takeIf { result -> result.clear }?.choice }
         val reading = card?.let { readings.getValue(it.id) }?.takeIf { it.clear && it.choice != "unclear" }
         val permitted = ChatActions.candidates(reviewed).map { it.id }.toSet()
         val selectedAction = actions.firstOrNull { candidate -> candidate.id in permitted &&
             candidate.id == action?.takeIf { result -> result.clear }?.choice &&
-            supports.getValue(candidate.id).let { it.clear && it.choice == "yes" } }
+            supports[candidate.id]?.let { it.clear && it.choice == "yes" } == true }
         val lines = mutableListOf(header, emotionProbabilities(reviewed))
         intentLine(reviewed)?.let { lines += it }
         if (card != null && reading != null) {
@@ -191,10 +195,16 @@ object JevProtocol {
         val confidence = probability(answer, "confidence")
         val chosen = answer.getString("choice")
         require(chosen in options)
-        val distribution = answer.getJSONObject("probabilities")
-        require(distribution.length() == options.size)
-        val values = options.keys.associateWith { probability(distribution, it) }
-        require(abs(values.values.sum() - 1.0) <= 0.02)
+        val distribution = answer.optJSONObject("probabilities")
+        val values = if (distribution != null && distribution.length() == options.size) {
+            options.keys.associateWith { probability(distribution, it) }
+                .also { require(abs(it.values.sum() - 1.0) <= 0.02) }
+        } else {
+            // 模型只给 choice + confidence 时本地补分布：选中项最高，其余平分剩余。
+            val picked = confidence.coerceIn(0.5, 0.95)
+            val rest = if (options.size > 1) (1.0 - picked) / (options.size - 1) else 0.0
+            options.keys.associateWith { if (it == chosen) picked else rest }
+        }
         require(values.getValue(chosen) + 0.000001 >= values.values.max())
         return ChatDecision(chosen, values, confidence)
     }

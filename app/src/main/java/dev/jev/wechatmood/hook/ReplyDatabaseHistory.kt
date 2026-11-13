@@ -136,6 +136,11 @@ object ReplyDatabaseHistory {
 
     internal fun voiceText(record: VerifiedVoice): String? = runCatching {
         if (!voiceStillMatches(record)) return@runCatching null
+        voiceTextUnchecked(record)
+    }.getOrNull()
+
+    /** 调用方已经确认过语音仍然有效时用这个，避免每轮轮询多两次全表查询。 */
+    internal fun voiceTextUnchecked(record: VerifiedVoice): String? = runCatching {
         query(record.db, "SELECT content FROM VoiceTransText WHERE msgId = ? AND cmsgId = ? LIMIT 1",
             arrayOf(record.source.id.toString(), record.source.fileToken)).use {
             if (it.moveToFirst()) it.getString(0)?.trim()?.takeIf(String::isNotBlank) else null
@@ -144,6 +149,7 @@ object ReplyDatabaseHistory {
 
     suspend fun load(loaded: ReplyContext, limit: Int = ReplyContext.MAX_MESSAGES): ReplyContext = withContext(Dispatchers.IO) {
         require(limit in 1..ReplyContext.MAX_MESSAGES)
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         val active = coroutineContext
         val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
         val sources = databases.map { db -> ReplyHistoryQuery { sql, args ->
@@ -160,7 +166,9 @@ object ReplyDatabaseHistory {
             }
         } }
         ReplyHistoryReader.read(loaded, sources, limit) { active.ensureActive() }.also {
-            MoodLog.i("REPLY_HISTORY_RESULT requested=$limit handles=${databases.size} source=${it.source} count=${it.messages.size} trimmed=${it.trimmed}")
+            MoodLog.i("REPLY_HISTORY_RESULT requested=$limit handles=${databases.size} source=${it.source} " +
+                "count=${it.messages.size} trimmed=${it.trimmed} took=${android.os.SystemClock.elapsedRealtime() - startedAt}ms " +
+                "quoted=${it.messages.count { message -> message.text.startsWith("【引用") }}")
         }
     }
 }

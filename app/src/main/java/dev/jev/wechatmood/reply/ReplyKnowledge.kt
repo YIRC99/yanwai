@@ -17,4 +17,8 @@ object ReplyKnowledge {
             "## 来源：$path\n" + assets.open(path).bufferedReader(Charsets.UTF_8).use { it.readText() }
         }.also { cached[relationship] = it }
     }
+
+    /** 按当前对话裁剪相关片段，避免每次都把整库塞进 system。 */
+    fun loadFor(context: Context, relationship: ReplyRelationship, sample: String): String =
+        ReplyKnowledgeSelector.select(load(context, relationship), sample)
 }
