@@ -1,5 +1,6 @@
 package dev.jev.wechatmood.reply
 
+import dev.jev.wechatmood.core.HttpClients
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import org.json.JSONObject
@@ -8,9 +9,8 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
 
-class ReplyModelsClient(private val client: Call.Factory = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(40, TimeUnit.SECONDS)
-    .followRedirects(false).followSslRedirects(false).build()) {
+class ReplyModelsClient(private val client: Call.Factory = HttpClients.shared.newBuilder()
+    .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(40, TimeUnit.SECONDS).build()) {
     suspend fun list(settings: ReplySettings): List<String> {
         require(settings.endpoint.isNotBlank() && settings.apiKey.isNotBlank()) { "请先填写 API 地址和 Key" }
         val url = settings.endpoint.removeSuffix("/chat/completions") + "/models"

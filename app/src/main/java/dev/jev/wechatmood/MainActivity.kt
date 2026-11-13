@@ -65,6 +65,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // API Key 展开成明文时不允许截图/录屏/最近任务缩略图留底。
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE,
+            android.view.WindowManager.LayoutParams.FLAG_SECURE)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -137,6 +140,21 @@ class MainActivity : AppCompatActivity() {
         binding.openReplyModel.setOnClickListener { openModels(R.id.modelReply) }
         binding.openAllModels.setOnClickListener { openModels(R.id.modelJev) }
         binding.toolbar.setNavigationOnClickListener { backToHome.handleOnBackPressed() }
+        savedInstanceState?.let { state ->
+            val provider = state.getString("draft_provider")
+            val endpointText = state.getString("draft_endpoint")
+            val keyText = state.getString("draft_key")
+            val modelText = state.getString("draft_model")
+            if (provider == selectedProvider.id && endpointText != null && keyText != null && modelText != null) {
+                drafts[selectedProvider] = ApiDraft(endpointText, keyText, modelText)
+                bindingInputs = true
+                binding.inputApiBase.setText(endpointText)
+                binding.inputApiKey.setText(keyText)
+                binding.inputApiModel.setText(modelText)
+                bindingInputs = false
+            }
+        }
+        if (savedInstanceState == null) restoreProbeState()
         showModelTab(savedInstanceState?.getInt("model_tab", R.id.modelJev) ?: R.id.modelJev)
         if (savedInstanceState?.getBoolean("models_open") == true) {
             modelsReturnPage = selectedTab
@@ -332,13 +350,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun testModel() {
         if (probeState == ProbeState.CHECKING) return
-        if (!saveApiSettings()) return
-        if (ModulePrefs.apiKey.isBlank()) {
+        // 只校验表单，不先落盘：检测失败不该覆盖原来能用的配置。
+        val testedSettings = try {
+            ApiSettings.fromInput(binding.inputApiBase.text?.toString().orEmpty(),
+                binding.inputApiKey.text?.toString().orEmpty(), selectedProvider.id,
+                binding.inputApiModel.text?.toString().orEmpty())
+        } catch (error: IllegalArgumentException) {
+            binding.layoutApiKey.error = error.message
+            binding.inputApiKey.requestFocus()
+            return
+        }
+        if (testedSettings.apiKey.isBlank()) {
             binding.layoutApiKey.error = "请先填写 API Key"
             binding.inputApiKey.requestFocus()
             return
         }
-        val testedSettings = ModulePrefs.analysisSettings() ?: return
         binding.buttonTestModel.isEnabled = false
         binding.layoutProvider.isEnabled = false
         binding.layoutApiBase.isEnabled = false
@@ -356,25 +382,29 @@ class MainActivity : AppCompatActivity() {
                     dev.jev.wechatmood.core.ContextMessage("对方", "你是不是忘了周末吃饭的事？"),
                     dev.jev.wechatmood.core.ContextMessage("我", "记得，这次我来安排，明天把餐厅和时间告诉你。")))
                 val client = JevHttpClient()
-                val mood = ChatAnalysis.analyzeSuspending(sample, testedSettings.api.model,
-                    { payload -> client.exchangeSuspending(payload, testedSettings.api) })
-                if (!sameJevSettings(testedSettings.api)) {
+                val mood = ChatAnalysis.analyzeSuspending(sample, testedSettings.model,
+                    { payload -> client.exchangeSuspending(payload, testedSettings) })
+                if (!sameJevSettings(testedSettings)) {
                     return@launch
                 }
                 probeState = ProbeState.PASSED
-                showResult("JEV 检测通过\n${mood.detail}\n\n仅验证 JEV 连接；微信模块状态见首页。", StatusTone.SUCCESS)
+                // 只有检测通过才落盘，避免把刚好能用的旧配置换掉。
+                val saved = saveApiSettings()
+                if (saved) markProbePassed(testedSettings)
+                showResult(if (saved) "JEV 检测通过\n${mood.detail}\n\n配置已保存。仅验证 JEV 连接；微信模块状态见首页。"
+                else "检测通过，但保存配置失败，请重试。", if (saved) StatusTone.SUCCESS else StatusTone.WARNING)
                 MoodLog.i("模型连接检测成功")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (!sameJevSettings(testedSettings.api)) {
+                if (!sameJevSettings(testedSettings)) {
                     return@launch
                 }
                 probeState = ProbeState.FAILED
                 showResult("检测失败\n${e.message}\n\n修正配置或检查网络后，点击「重试连接检测」。", StatusTone.ERROR)
                 MoodLog.e("模型连接检测失败：${e.message}")
             } finally {
-                if (!sameJevSettings(testedSettings.api)) {
+                if (!sameJevSettings(testedSettings)) {
                     probeState = ProbeState.UNTESTED
                     showResult("配置已变化，请重新检测。", StatusTone.WARNING)
                 }
@@ -390,8 +420,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun probeFingerprint(settings: ApiSettings): String =
+        listOf(settings.provider.id, settings.endpoint, settings.model,
+            settings.apiKey.hashCode().toString()).joinToString("|")
+
+    /** 记住「这套配置检测通过过」，重开 App 不再退回待检测。 */
+    private fun markProbePassed(settings: ApiSettings) {
+        getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE).edit()
+            .putString("probe_passed_for", probeFingerprint(settings))
+            .putLong("probe_passed_at", System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun restoreProbeState() {
+        val prefs = getSharedPreferences(ModulePrefs.FILE_NAME, MODE_PRIVATE)
+        val saved = prefs.getString("probe_passed_for", null) ?: return
+        val current = runCatching {
+            ApiSettings.fromInput(prefs.getString(ModulePrefs.KEY_API_BASE, ApiSettings.DEFAULT_ENDPOINT).orEmpty(),
+                prefs.getString(ModulePrefs.KEY_API_KEY, "").orEmpty(),
+                prefs.getString(ModulePrefs.KEY_API_PROVIDER, null),
+                prefs.getString(ModulePrefs.KEY_API_MODEL, "").orEmpty())
+        }.getOrNull() ?: return
+        if (saved == probeFingerprint(current)) probeState = ProbeState.PASSED
+    }
+
     private fun sameJevSettings(tested: ApiSettings): Boolean {
-        val current = ModulePrefs.analysisSettings()?.api ?: return false
+        // 检测时配置可能还没落盘，按当前表单比较。
+        val current = runCatching {
+            ApiSettings.fromInput(binding.inputApiBase.text?.toString().orEmpty(),
+                binding.inputApiKey.text?.toString().orEmpty(), selectedProvider.id,
+                binding.inputApiModel.text?.toString().orEmpty())
+        }.getOrNull() ?: return false
         return current.endpoint == tested.endpoint && current.apiKey == tested.apiKey &&
             current.model == tested.model && current.provider == tested.provider
     }
@@ -539,6 +598,11 @@ class MainActivity : AppCompatActivity() {
         outState.putInt("selected_tab", binding.navigation.selectedItemId)
         outState.putBoolean("models_open", currentPage == R.id.modelsPanel)
         outState.putInt("model_tab", binding.modelTabs.checkedButtonId)
+        // 旋转/分屏时把没保存的 Key 草稿带过去，别让用户重贴。
+        outState.putString("draft_provider", selectedProvider.id)
+        outState.putString("draft_endpoint", binding.inputApiBase.text?.toString().orEmpty())
+        outState.putString("draft_key", binding.inputApiKey.text?.toString().orEmpty())
+        outState.putString("draft_model", binding.inputApiModel.text?.toString().orEmpty())
         super.onSaveInstanceState(outState)
     }
     override fun onDestroy() { uiScope.cancel(); super.onDestroy() }

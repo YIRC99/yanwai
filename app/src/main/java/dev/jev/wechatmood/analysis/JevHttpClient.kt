@@ -1,6 +1,7 @@
 package dev.jev.wechatmood.analysis
 
 import dev.jev.wechatmood.core.ApiSettings
+import dev.jev.wechatmood.core.HttpClients
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -15,9 +16,9 @@ import java.io.IOException
 import kotlin.coroutines.resumeWithException
 
 /** Shared by the Android app and opt-in live verification. Never reports raw service bodies. */
-class JevHttpClient(private val client: Call.Factory = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS)
-        .followRedirects(false).followSslRedirects(false).build()) {
+class JevHttpClient(private val client: Call.Factory = HttpClients.shared.newBuilder()
+    .connectTimeout(10, TimeUnit.SECONDS).writeTimeout(20, TimeUnit.SECONDS)
+    .readTimeout(25, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()) {
 
     suspend fun exchangeSuspending(payload: JSONObject, settings: ApiSettings): String = suspendCancellableCoroutine { continuation ->
         val call = client.newCall(request(payload, settings))

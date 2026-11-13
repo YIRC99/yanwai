@@ -1,5 +1,6 @@
 package dev.jev.wechatmood.reply
 
+import dev.jev.wechatmood.core.HttpClients
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -8,9 +9,9 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
 
-class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS).readTimeout(90, TimeUnit.SECONDS).callTimeout(120, TimeUnit.SECONDS)
-    .followRedirects(false).followSslRedirects(false).build()) {
+class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newBuilder()
+    .connectTimeout(15, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS)
+    .readTimeout(90, TimeUnit.SECONDS).callTimeout(120, TimeUnit.SECONDS).build()) {
     suspend fun generate(settings: ReplySettings, context: ReplyContext, draft: String, direction: String,
         knowledge: String, previous: String = "", focusMessageId: Long? = null,
         relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED, customRelationship: String = ""): ReplySuggestion {
@@ -27,6 +28,15 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
     }
 
     internal suspend fun <T> request(settings: ReplySettings, payload: org.json.JSONObject, parse: (String) -> T): T =
+        try {
+            once(settings, payload, parse)
+        } catch (error: IllegalStateException) {
+            // 输出被截断说明 max_tokens 不够，放宽上限重试一次，比让用户手动点重试好。
+            if (error.message?.contains("截断") != true) throw error
+            once(settings, org.json.JSONObject(payload.toString()).put("max_tokens", 2400), parse)
+        }
+
+    private suspend fun <T> once(settings: ReplySettings, payload: org.json.JSONObject, parse: (String) -> T): T =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(Request.Builder().url(settings.endpoint).header("Authorization", "Bearer ${settings.apiKey}")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build())
@@ -41,7 +51,8 @@ class ReplyHttpClient(private val client: Call.Factory = OkHttpClient.Builder()
                             401, 403 -> "API Key 或模型权限不可用，请检查模型配置"
                             402 -> "模型账户额度不足"
                             429 -> "请求过于频繁，请稍后重试"
-                            400, 404, 422 -> "接口地址、模型或上下文长度不受支持，请检查配置"
+                            400, 422 -> "上下文超出模型长度上限：把「参考最近」调小，或换上下文更大的模型"
+                            404 -> "接口地址或模型名不对，请检查回复模型配置"
                             in 300..399 -> "接口发生重定向，请填写最终地址"
                             else -> "模型服务暂不可用（HTTP ${it.code}）"
                         } }

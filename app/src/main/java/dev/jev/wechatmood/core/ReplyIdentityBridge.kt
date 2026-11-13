@@ -29,11 +29,20 @@ object ReplyIdentityBridge {
     private fun readBackground(context: Context, key: ReplyContactKey, generation: BackgroundScope): ContactBackground {
         val result = SettingsTransport.call(context, "contact_background_get", key.value,
             Bundle().apply { putString(SettingsProvider.KEY_GENERATION, generation.generation) })
-        return accept(generation, key, ContactBackground.decode(requireNotNull(result?.getString("payload"))))
+        val payload = requireNotNull(result?.getString("payload"))
+        return accept(generation, key, ContactBackground.decode(payload)).also {
+            ReplySnapshotCache.save(context, key.value, "bg", payload)
+        }
     }
     fun background(context: Context, key: ReplyContactKey): ContactBackground? {
         val generation = runCatching { generation() }.getOrNull() ?: return null
         backgrounds.get(generation.token, key)?.let { return it }
+        // 主进程拉不起来时直接用上次成功读到的背景，别让分析整块停掉。
+        ReplySnapshotCache.load(context, key.value, "bg")?.let { cached ->
+            runCatching { ContactBackground.decode(cached) }.getOrNull()?.let { value ->
+                return runCatching { accept(generation, key, value) }.getOrDefault(value)
+            }
+        }
         val scope = generation to key
         if (failedAt[scope]?.let { System.nanoTime() - it < 5_000_000_000L } == true) return null
         if (loading.add(scope)) worker.execute {
@@ -44,9 +53,14 @@ object ReplyIdentityBridge {
         return null
     }
     suspend fun loadBackground(context: Context, key: ReplyContactKey): ContactBackground = suspendCancellableCoroutine { c ->
+        val app = context.applicationContext
         val generation = generation()
         worker.execute {
-            val result = runCatching { readBackground(context.applicationContext, key, generation) }
+            val result = runCatching { readBackground(app, key, generation) }.recoverCatching {
+                // 没有缓存也降级成「无背景」，不让抽屉打不开。
+                ReplySnapshotCache.load(app, key.value, "bg")
+                    ?.let { runCatching { ContactBackground.decode(it) }.getOrNull() } ?: ContactBackground()
+            }
             if (c.isActive) c.resumeWith(result)
         }
     }
@@ -71,11 +85,16 @@ object ReplyIdentityBridge {
     suspend fun roles(context: Context): List<ReplyRole> = suspendCancellableCoroutine { c ->
         val captured = generation()
         worker.execute {
+            val app = context.applicationContext
             val result = runCatching {
-                val response = SettingsTransport.call(context, "reply_role_list", null,
+                val response = SettingsTransport.call(app, "reply_role_list", null,
                     Bundle().apply { putString(SettingsProvider.KEY_GENERATION, captured.generation) })
                 check(captured.current()) { "角色已变化，请重试" }
-                requireNotNull(response?.getStringArrayList("roles")).map(ReplyRole::decode)
+                requireNotNull(response?.getStringArrayList("roles")).also {
+                    ReplySnapshotCache.saveRoles(app, it)
+                }.map(ReplyRole::decode)
+            }.recoverCatching {
+                ReplySnapshotCache.loadRoles(app)?.map(ReplyRole::decode) ?: emptyList()
             }
             if (c.isActive) c.resumeWith(result)
         }
@@ -146,8 +165,18 @@ object ReplyIdentityBridge {
         })
     }
     suspend fun load(context: Context, key: ReplyContactKey): ReplyIdentitySetting = suspendCancellableCoroutine { continuation ->
-        queue(context.applicationContext).load(key) { result ->
-            if (continuation.isActive) result.fold({ continuation.resume(it) }, { continuation.resumeWithException(it) })
+        val app = context.applicationContext
+        queue(app).load(key) callback@{ result ->
+            if (!continuation.isActive) return@callback
+            result.fold({ value ->
+                ReplySnapshotCache.save(app, key.value, "id", value.encode())
+                continuation.resume(value)
+            }, { error ->
+                val cached = ReplySnapshotCache.load(app, key.value, "id")
+                    ?.let { runCatching { ReplyIdentitySetting.decode(it) }.getOrNull() }
+                // 读不到就按「未指定身份」继续，用户仍可在抽屉里手动选。
+                continuation.resume(cached ?: ReplyIdentitySetting())
+            })
         }
     }
     fun save(context: Context, owner: ReplyIdentityOwner, value: ReplyIdentitySetting, verify: () -> String?, complete: (Boolean) -> Unit) {

@@ -20,8 +20,10 @@ object ReplyLimitBridge {
     })
 
     suspend fun load(context: Context, account: String?): Int = suspendCancellableCoroutine { continuation ->
-        queue(context.applicationContext).load(account) { result ->
-            if (continuation.isActive) result.fold({ continuation.resume(it) }, { continuation.resumeWithException(it) })
+        queue(context.applicationContext).load(account) callback@{ result ->
+            if (!continuation.isActive) return@callback
+            // 参考条数读不到就用默认值，不能因为这一项把「帮我回」整块拦住。
+            continuation.resume(result.getOrDefault(ReplyHistoryLimit.DEFAULT))
         }
     }
     fun save(context: Context, owner: ReplyIdentityOwner, value: Int, verify: () -> String?, complete: (Boolean) -> Unit) =
