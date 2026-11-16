@@ -46,7 +46,8 @@ object ReplyHistoryReader {
                 val result = ReplyContext.collect(loaded.talker, records.sortedWith(compareBy({ it.createdAt }, { it.messageId })), limit)
                 // A stale/mismatched table must not replace newer evidence already visible on screen.
                 if (result.messages.isEmpty() || (textAnchor != null && result.messages.last().time < textAnchor.time)) continue
-                return result.copy(source = ReplyContextSource.LOCAL_HISTORY, latestLoadedId = loaded.latestLoadedId)
+                return result.copy(source = ReplyContextSource.LOCAL_HISTORY, latestLoadedId = loaded.latestLoadedId,
+                    focusMessageId = loaded.focusMessageId)
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { /* No raw SQL, account identifier or chat content in diagnostics. */ }
         }

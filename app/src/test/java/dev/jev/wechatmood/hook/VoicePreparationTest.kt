@@ -8,6 +8,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VoicePreparationTest {
+    private val MAX_CONTEXT_TRANSCRIPTS_EXPECTED = 3
     private fun source(id: Long) = VoiceSource("friend", id, id * 1000, 0, "file-$id", id + 100)
     @Test fun targetAndPrecedingVoiceAreResolvedBeforeAnalysisWithOriginalIdentity() = runBlocking {
         val input = AnalysisInput(VoiceText.WAITING, "friend",
@@ -43,11 +44,29 @@ class VoicePreparationTest {
     @Test fun voiceReplyBudgetIsAppliedAfterTranscriptionAndKeepsNewestMessage() = runBlocking {
         val context = ReplyContext("friend", (1L..60L).map { ReplyMessage(it, "对方", it * 1000, VoiceText.WAITING, source(it)) })
         val prepared = VoicePreparation.reply(context) { "字".repeat(1000) }
-        assertEquals(48000, prepared.messages.sumOf { it.text.length })
+        // 只有最近三条语音真的会转写，其余保留占位；最新一条必须完整留在上下文里。
+        assertEquals(MAX_CONTEXT_TRANSCRIPTS_EXPECTED, prepared.messages.count { it.voiceState == VoiceState.READY })
         assertEquals(60L, prepared.messages.last().id)
-        assertTrue(prepared.trimmed)
-        assertTrue(prepared.messages.all { it.voiceState == VoiceState.READY })
+        assertEquals("字".repeat(1000), prepared.messages.last().text)
+        assertTrue(prepared.messages.size <= ReplyContext.MAX_MESSAGES)
         assertNotEquals(context.fingerprint, prepared.fingerprint)
+    }
+
+    @Test fun selectedVoiceIsTranscribedBeforeNewerContextVoices() = runBlocking {
+        val messages = listOf(
+            ReplyMessage(1, "对方", 1000, VoiceText.WAITING, source(1)),
+            ReplyMessage(2, "对方", 2000, VoiceText.WAITING, source(2)),
+            ReplyMessage(3, "对方", 3000, VoiceText.WAITING, source(3)),
+            ReplyMessage(4, "对方", 4000, VoiceText.WAITING, source(4)))
+        val calls = mutableListOf<Long>()
+        val prepared = VoicePreparation.reply(ReplyContext("friend", messages, focusMessageId = 1)) {
+            calls += it.id
+            "转写${it.id}"
+        }
+        // 用户长按的 1 号语音排在三条较新语音之前，不能被转写预算挤掉。
+        assertTrue(calls.contains(1L))
+        assertEquals("转写1", prepared.messages.first { it.id == 1L }.text)
+        assertEquals(VoiceState.READY, prepared.messages.first { it.id == 1L }.voiceState)
     }
     @Test fun replyFailurePreservesTimelineAndIsDisclosedToModel() = runBlocking {
         val context = ReplyContext("friend", listOf(ReplyMessage(1, "我", 1000, VoiceText.WAITING, source(1)),
@@ -68,7 +87,7 @@ class VoicePreparationTest {
         }
     }
 
-    @Test fun exhaustedAnalysisBudgetNeverStartsOlderVoiceWorkOrCountsDiscardedFailures() = runBlocking {
+    @Test fun olderVoicesAreNotTranscribedOnceTheContextBudgetIsSpent() = runBlocking {
         val context = (1L..24L).map { ContextMessage("对方", VoiceText.WAITING, it * 1000, it, source(it)) }
         val calls = mutableListOf<Long>()
         val prepared = VoicePreparation.analysis(AnalysisInput("好的", "friend", context)) {
@@ -76,10 +95,10 @@ class VoicePreparationTest {
             if (it.id <= 12) error("older unavailable voice")
             "字".repeat(1000)
         }
-        assertEquals((24L downTo 13L).toList(), calls)
-        assertEquals((13L..24L).toList(), prepared.context.map { it.messageId })
+        // 只转写最近的 3 条；更早的语音直接占位，不启动转写任务。
+        assertEquals(listOf(24L, 23L, 22L), calls)
+        assertEquals((1L..24L).toList(), prepared.context.map { it.messageId })
         assertEquals(0, prepared.coverage.unavailableVoice)
-        assertTrue(prepared.coverage.truncated)
     }
 
     @Test fun voiceIdentityIncludesFileTimeAndDirectionForAnalysisCache() {

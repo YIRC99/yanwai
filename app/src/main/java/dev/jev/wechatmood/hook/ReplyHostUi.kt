@@ -112,9 +112,11 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 MoodLog.e("REPLY_SETTINGS_READ_FAILED", error)
                 if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker) {
                     // 不再弹「去开自启动」的对话框；本地已有回退，失败只记日志。
-                    if (error is dev.jev.wechatmood.core.SettingsConnectionUnavailableException || !ModulePrefs.bridgeAvailable)
-                        dev.jev.wechatmood.core.MoodLog.w("REPLY_OPEN_WITHOUT_BRIDGE 未能连接言外，已按本地缓存继续")
-                    else toast("回复设置读取失败，请重试；长按分析开关可导出日志")
+                    if (error is dev.jev.wechatmood.core.SettingsConnectionUnavailableException || !ModulePrefs.bridgeAvailable) {
+                        dev.jev.wechatmood.core.MoodLog.w("REPLY_OPEN_WITHOUT_BRIDGE 未能连接言外")
+                        // 首次使用没有可用快照时不能只写日志，否则用户点「帮我回」没有任何反应。
+                        toast("未能连接言外设置，请打开言外主应用后重试")
+                    } else toast("回复设置读取失败，请重试；长按分析开关可导出日志")
                 }
             }
         }
@@ -622,7 +624,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             renderParts(); controls(false)
             val loaded = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
                 reference.fail(ticket); state.text = it.message ?: "读取聊天失败，请重试"; controls(false); return
-            }
+            }.let { it.copy(focusMessageId = focusMessageId ?: it.latestLoadedId) }
             if (loaded.talker != selectedTalker) { reference.cancel(); window.dismiss(); return }
             historyJob = scope.launch {
                 try {

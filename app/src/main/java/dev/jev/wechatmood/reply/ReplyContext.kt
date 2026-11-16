@@ -22,7 +22,7 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
     val trimmed: Boolean = false, val latestLoadedId: Long = messages.lastOrNull()?.id ?: 0,
     val source: ReplyContextSource = ReplyContextSource.LOADED_PAGE, val historyFailure: String? = null,
     val requestedMessages: Int = MAX_MESSAGES, val historyAnchor: ReplyHistoryAnchor? = null,
-    val background: ContactBackground = ContactBackground()) {
+    val background: ContactBackground = ContactBackground(), val focusMessageId: Long = 0) {
     val fingerprint: String get() {
         val text = messages.joinToString("\u0000") { "${it.id}:${it.speaker.length}:${it.speaker}:${it.time}:${it.text.length}:${it.text}:${it.voice?.key.orEmpty()}:${it.voiceState}" }
         return MessageDigest.getInstance("SHA-256").digest("$talker:$latestLoadedId:${background.revision}:$text".toByteArray())
@@ -36,8 +36,14 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
             require(maxMessages in 1..MAX_MESSAGES)
             val same = records.filter { it.talker == talker }.distinctBy { if (it.messageId > 0) "id:${it.messageId}" else "${it.createdAt}:${it.isSend}:${it.content}" }
             // 引用消息即使解析不出正文也要保留：丢掉它会让模型对着上下文里别的消息作答。
-            val eligible = same.filter { it.isSend in 0..1 &&
-                (it.type == 49 || it.type == 822083633 || it.plainText() != null || it.voiceSource() != null) }
+            // 超过 1000 字的单条消息只是分析功能的限制，回复上下文由下面的总预算裁剪，
+            // 这里按内容是否可用筛选，不能因为正文超长就把整条消息丢掉。
+            val eligible = same.filter { it.isSend in 0..1 && when (it.type) {
+                1 -> it.content.isNotBlank()
+                34 -> it.voiceSource() != null
+                49, 822083633 -> true
+                else -> it.plainText() != null
+            } }
             val text = eligible.takeLast(maxMessages)
             var budget = MAX_CHARACTERS
             var trimmed = eligible.size > maxMessages
