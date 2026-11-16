@@ -9,18 +9,18 @@ class ReplyHistoryLimitTest {
         for (input in listOf("", " ", "1.5", "abc", "1e1", "+10", "0", "101", "-1", "99999999999999999"))
             assertThrows(IllegalArgumentException::class.java) { ReplyHistoryLimit.parse(input) }
         assertNull(ReplyHistoryLimit.parse(null)) // dialog cancel never supplies a new selection
-        assertEquals(listOf(10, 30, 50, 100), ReplyHistorySelection.OPTIONS)
+        assertEquals(listOf(10, 20, 30, 50, 100), ReplyHistorySelection.OPTIONS)
     }
 
     @Test fun `saved account selection survives reopen without taking a count from old replies`() {
         val disk = mutableMapOf<String, Int>()
         fun store() = ReplyLimitPreferences(123, disk::get) { k, v -> disk[k] = v }
         val alice = "a".repeat(64); val bob = "b".repeat(64)
-        assertEquals(100, store().load(alice))
+        assertEquals(ReplyHistoryLimit.DEFAULT, store().load(alice))
         store().save(alice, 17)
         assertEquals(17, store().load(alice))
-        assertEquals(100, store().load(bob))
-        assertEquals(100, ReplyLimitPreferences(456, disk::get) { _, _ -> }.load(alice))
+        assertEquals(ReplyHistoryLimit.DEFAULT, store().load(bob))
+        assertEquals(ReplyHistoryLimit.DEFAULT, ReplyLimitPreferences(456, disk::get) { _, _ -> }.load(alice))
         val old = RememberedReply(ReplyContext("chat", listOf(ReplyMessage(1, "对方", 1, "好")), requestedMessages = 30),
             ReplySuggestion(listOf("好"), ""))
         val composition = ReplyComposition(old, preferredLimit = store().load(alice))
@@ -44,7 +44,7 @@ class ReplyHistoryLimitTest {
         queue.save(owner, 30, { "b".repeat(64) }) { assertFalse(it) }
         jobs.removeFirst().invoke()
         assertEquals(17, values[account])
-        queue.load(null) { assertEquals(100, it.getOrThrow()) }
+        queue.load(null) { assertEquals(ReplyHistoryLimit.DEFAULT, it.getOrThrow()) }
         jobs.removeFirst().invoke()
     }
 }

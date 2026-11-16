@@ -27,14 +27,19 @@ object NativeVoiceBridge {
     fun install(bridge: DexKitBridge, loader: ClassLoader) {
         if (setup != null) return
         runCatching {
-            val component = bridge.findClass { matcher { usingStrings("MicroMsg.TransformComponent", "[onChattingPause]") } }
-                .singleOrNull()?.getInstance(loader) ?: return
-            val chat = bridge.findClass { matcher { usingStrings("MicroMsg.ChattingContext", "[notifyDataSetChange]") } }
-                .singleOrNull()?.getInstance(loader) ?: return
-            val talker = bridge.findMethod { matcher { usingStrings("getTalker returns null.") } }
+            val componentClasses = bridge.findClass { matcher { usingStrings("MicroMsg.TransformComponent", "[onChattingPause]") } }
+            if (componentClasses.isEmpty()) { MoodLog.w("VOICE_COMPONENT_NOT_FOUND"); return }
+            val component = componentClasses.first().getInstance(loader)
+            val chatClasses = bridge.findClass { matcher { usingStrings("MicroMsg.ChattingContext", "[notifyDataSetChange]") } }
+            if (chatClasses.isEmpty()) { MoodLog.w("VOICE_CHAT_CLASS_NOT_FOUND"); return }
+            val chat = chatClasses.first().getInstance(loader)
+            val talkers = bridge.findMethod { matcher { usingStrings("getTalker returns null.") } }
                 .mapNotNull { runCatching { it.getMethodInstance(loader) }.getOrNull() }
-                .single { it.declaringClass == chat && it.parameterCount == 0 && it.returnType == String::class.java }
-            val contract = requireNotNull(VoiceHostContract.resolve(component, chat))
+                .filter { it.declaringClass == chat && it.parameterCount == 0 && it.returnType == String::class.java }
+            check(talkers.isNotEmpty()) { "getTalker 未找到匹配方法" }
+            if (talkers.size > 1) MoodLog.w("VOICE_TALKER_AMBIGUOUS count=${talkers.size}，取第一个")
+            val talker = talkers.first()
+            val contract = requireNotNull(VoiceHostContract.resolve(component, chat)) { "语音转写契约解析失败" }
             val hooks = mutableListOf<XC_MethodHook.Unhook>()
             try {
                 val observer = object : XC_MethodHook() {
@@ -48,7 +53,9 @@ object NativeVoiceBridge {
                 setup = Setup(contract, chat, talker.apply { isAccessible = true })
                 MoodLog.i("VOICE_BRIDGE_READY 原生语音转写入口已连接")
             } catch (e: Exception) { hooks.forEach { it.unhook() }; throw e }
-        }.onFailure { MoodLog.w("VOICE_BRIDGE_UNAVAILABLE ${it.javaClass.simpleName}") }
+        }.onFailure {
+            MoodLog.w("VOICE_BRIDGE_UNAVAILABLE ${it.javaClass.simpleName}: ${it.message}")
+        }
     }
 
     @Synchronized private fun observe(component: Any) {
@@ -105,13 +112,19 @@ object NativeVoiceBridge {
                 checkChat()
                 val state = (contract.state.invoke(host, source.id) as Enum<*>).name
                 // An existing host task is awaited, never toggled off by another consumer.
-                if (state == "NoTransform") contract.submit.invoke(host, record.message, false, -1, 0)
+                if (state == "NoTransform") contract.submitMessage(host, record.message)
             }
             val result = withTimeoutOrNull(30_000) {
                 var polls = 0
+                var delayMs = 300L
                 while (true) {
                     checkChat()
-                    check(withContext(Dispatchers.IO) { ReplyDatabaseHistory.voiceStillMatches(record) }) { "语音已删除或聊天账号已变化" }
+                    // 语音有效性每 3 轮才查一次；转写文本直接查，不再顺带重复校验。
+                    if (polls % 3 == 0) {
+                        check(withContext(Dispatchers.IO) { ReplyDatabaseHistory.voiceStillMatches(record) }) {
+                            "语音已删除或聊天账号已变化"
+                        }
+                    }
                     val state = withContext(Dispatchers.Main.immediate) { (contract.state.invoke(host, source.id) as Enum<*>).name }
                     if (state == "Transformed") {
                         val text = withContext(Dispatchers.Main.immediate) {
@@ -119,11 +132,13 @@ object NativeVoiceBridge {
                         }?.trim()
                         if (!text.isNullOrBlank()) return@withTimeoutOrNull text
                     }
-                    val stored = withContext(Dispatchers.IO) { ReplyDatabaseHistory.voiceText(record) }
+                    val stored = withContext(Dispatchers.IO) { ReplyDatabaseHistory.voiceTextUnchecked(record) }
                     if (!stored.isNullOrBlank() && state !in setOf("PreTransform", "Transforming")) return@withTimeoutOrNull stored
                     check(state != "NoTransform" || polls < 5) { "微信未能转写这条语音，可先播放确认文件可用后重试" }
                     polls++
-                    delay(300)
+                    // 300 -> 600 -> 900 -> 1200ms：30 秒内的轮询次数从 100 降到 30 出头。
+                    delay(delayMs)
+                    if (delayMs < 1200) delayMs += 300
                 }
                 @Suppress("UNREACHABLE_CODE") ""
             } ?: error("语音转写超时，请稍后重试")

@@ -13,7 +13,7 @@ data class MessageMetadata(val type: Int, val isSend: Int, val content: String, 
     fun isAnalysisContent() = type in setOf(1, 34) || quoteReply != null
     fun incomingText(): String? = if (isSend == 0) plainText() else null
     fun isReplyTarget(): Boolean = isSend == 0 && talker.isNotBlank() && messageId > 0 &&
-        (type == 1 && content.isNotBlank() || type == 34)
+        ((type == 1 && content.isNotBlank()) || type == 34 || quoteReply?.text?.isNotBlank() == true)
 
     fun voiceSource(): VoiceSource? = if (type == 34 && isSend in 0..1 && talker.isNotBlank() && messageId > 0)
         VoiceSource(talker, messageId, createdAt, isSend, imagePath, serverId) else null

@@ -52,9 +52,11 @@ class ReplySettingsUi(private val activity: AppCompatActivity, private val bindi
             showModelChoices()
         }
         binding.saveReply.setOnClickListener {
-            save()?.let {
+            save()?.let { settings ->
                 binding.replyResult.visibility = View.GONE
-                android.widget.Toast.makeText(activity, "回复配置已保存", android.widget.Toast.LENGTH_SHORT).show()
+                // 回显最终地址：自定义端点会被补成 /chat/completions，不显示出来用户看不到实际请求位置。
+                android.widget.Toast.makeText(activity, "已保存，实际请求：${settings.endpoint}",
+                    android.widget.Toast.LENGTH_LONG).show()
             }
         }
         binding.testReply.setOnClickListener { test() }

@@ -20,7 +20,7 @@ import dev.jev.wechatmood.hook.ReplyDatabaseHistory
 /** Direct package entry, independent of the optional initZygote callback. */
 class HookEntry : IXposedHookLoadPackage {
     private var installed = false
-    private var announced = false
+    private var failedAnnounced = false
 
     override fun handleLoadPackage(param: XC_LoadPackage.LoadPackageParam) {
         if (param.packageName != "com.tencent.mm" || param.processName != "com.tencent.mm") return
@@ -37,16 +37,15 @@ class HookEntry : IXposedHookLoadPackage {
                 if (activity.packageName != "com.tencent.mm") return
                 initialize(activity.application)
                 if (!installed) {
-                    Toast.makeText(activity, "情绪助手初始化失败，请查看模块日志", Toast.LENGTH_LONG).show()
+                    // 每次切页都弹会烦人，失败只提示一次，细节进日志。
+                    if (!failedAnnounced) {
+                        failedAnnounced = true
+                        Toast.makeText(activity, "情绪助手初始化失败，请查看模块日志", Toast.LENGTH_LONG).show()
+                    }
                     return
                 }
-                runCatching {
-                    MessageSniffer.resume(activity)
-                    if (!announced) {
-                        announced = true
-                        Toast.makeText(activity, "言外已加载 · 仅分析纯文本", Toast.LENGTH_LONG).show()
-                    }
-                }.onFailure { MoodLog.e("HOST_RESUME_FAILED", it) }
+                runCatching { MessageSniffer.resume(activity) }
+                    .onFailure { MoodLog.e("HOST_RESUME_FAILED", it) }
             }
         })
         XposedBridge.hookAllMethods(Instrumentation::class.java, "callActivityOnPause", object : XC_MethodHook() {
@@ -60,13 +59,18 @@ class HookEntry : IXposedHookLoadPackage {
         if (installed) return
         runCatching {
             MoodLog.init(context)
-            MoodLog.i("ENVIRONMENT\n${Diagnostics.environment(context)}")
             ModulePrefs.init(context)
-            MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
-            ModulePrefs.report("模块 ${BuildConfig.VERSION_NAME} 已加载，等待打开聊天")
-            ReplyDatabaseHistory.install(context.classLoader)
             MessageSniffer.install(context)
             installed = true
+            MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
+            // 环境采集、日志上报、WCDB 反射扫描都不参与首帧，挪出冷启动主线程。
+            Thread({
+                runCatching {
+                    MoodLog.i("ENVIRONMENT\n${Diagnostics.environment(context)}")
+                    ModulePrefs.report("模块 ${BuildConfig.VERSION_NAME} 已加载，等待打开聊天")
+                    ReplyDatabaseHistory.install(context.classLoader)
+                }.onFailure { MoodLog.e("HOOK_INIT_BACKGROUND_FAILED", it) }
+            }, "yanwai-init-bg").start()
         }.onFailure {
             XposedBridge.log("WeChatMood initialization failed: ${it.javaClass.name}")
             MoodLog.e("HOOK_INIT_FAILED", it)

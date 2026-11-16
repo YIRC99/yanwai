@@ -16,7 +16,7 @@ import java.util.IdentityHashMap
 /** Append a sibling below the real text bubble, without replacing a host row or ViewHolder. */
 object BubbleDecorator {
     private data class Card(
-        val key: String, val view: TextView, val parent: ViewGroup,
+        val key: String, var input: AnalysisInput?, val view: TextView, val parent: ViewGroup,
         val anchor: View, val assignedId: Int?, val detach: View.OnAttachStateChangeListener,
     )
     private val cards = IdentityHashMap<View, Card>()
@@ -40,16 +40,34 @@ object BubbleDecorator {
             state = attach(row, key) ?: return false
             cards[row] = state
         }
+        state.input = message
         val value = mood?.let {
             AnalysisCardText.format(it, row.resources.displayMetrics.density,
                 state.view.layoutParams.width - state.view.paddingLeft - state.view.paddingRight, state.view.paint, display)
         } ?: SignalAnalyzer.failure(key)?.let {
             "${JevProtocol.header}\n分析失败：$it\n点击此卡重试"
-        } ?: "${JevProtocol.header}\n" + if (ModulePrefs.canAnalyze(message))
-            SignalAnalyzer.progress(key) ?: if (message.voice != null || message.context.any { it.voice != null }) "正在准备语音…" else "正在分析…"
-            else if (!message.backgroundReady) "正在读取对方背景；读取失败时会重试"
-            else "模型未配置或设置未连接"
+        } ?: "${JevProtocol.header}\n" + when {
+            !ModulePrefs.bridgeAvailable -> "设置未同步 · 点此重试"
+            ModulePrefs.canAnalyze(message) -> SignalAnalyzer.progress(key)
+                ?: if (message.voice != null || message.context.any { it.voice != null }) "正在准备语音…" else "正在分析…"
+            !message.backgroundReady -> "正在读取对方背景；读取失败时会重试"
+            else -> "模型未配置"
+        }
         if (state.view.text.toString() != value.toString()) state.view.text = value
+        val failed = SignalAnalyzer.failure(key) != null || MoodStore.get(key)?.intentFailed == true
+        state.view.setOnClickListener {
+            when {
+                failed -> {
+                    SignalAnalyzer.retryFailure(key)
+                    MessageSniffer.refresh()
+                }
+                !ModulePrefs.bridgeAvailable -> {
+                    ModulePrefs.requestReload(force = true)
+                    MessageSniffer.refresh()
+                }
+                else -> if (ModulePrefs.hideCard(message)) MessageSniffer.refresh()
+            }
+        }
         return true
     }
 
@@ -69,12 +87,6 @@ object BubbleDecorator {
             setTextColor(0xFFF0F1F5.toInt())
             minHeight = dp(row, 48)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-            setOnClickListener {
-                if (SignalAnalyzer.failure(key) != null || MoodStore.get(key)?.intentFailed == true) {
-                    SignalAnalyzer.retryFailure(key)
-                    MessageSniffer.refresh()
-                }
-            }
         }
         var branch: View = anchor
         var parent = branch.parent as? ViewGroup
@@ -130,7 +142,7 @@ object BubbleDecorator {
             }
         }
         row.addOnAttachStateChangeListener(detach)
-        return Card(key, card, target, branch, assignedId, detach)
+        return Card(key, null, card, target, branch, assignedId, detach)
     }
 
     private fun findBubble(root: ViewGroup): View? {

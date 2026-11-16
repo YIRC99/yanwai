@@ -26,5 +26,6 @@ class ReplyHistorySelection(private val talker: String, initial: ReplyContext? =
     fun isCurrent(ticket: Ticket): Boolean = ticket.serial == serial
     fun cancel() { serial++; active = null; context = null }
 
-    companion object { val OPTIONS = listOf(10, 30, 50, 100) }
+    /** 预设档位要含默认值 20，否则默认值会显示成「自定义」。 */
+    companion object { val OPTIONS = listOf(10, 20, 30, 50, 100) }
 }

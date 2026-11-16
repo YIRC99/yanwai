@@ -5,7 +5,8 @@ object ReplyKnowledgeCatalog {
     fun paths(relationship: ReplyRelationship): List<String> {
         val common = listOf("goutoujunshi/SKILL.md",
             "goutoujunshi/references/practical/实战话术编排器：从一句回复到后续分支.md",
-            "goutoujunshi/references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md")
+            "goutoujunshi/references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md",
+            "goutoujunshi/references/practical/回复口吻与自然感.md")
         val specific = when (relationship) {
             ReplyRelationship.CRUSH -> listOf("knowledge/06-吸引约会与关系启动.md")
             ReplyRelationship.FLIRT -> listOf("knowledge/06-吸引约会与关系启动.md",

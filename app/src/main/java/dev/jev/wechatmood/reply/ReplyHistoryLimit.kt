@@ -1,7 +1,8 @@
 package dev.jev.wechatmood.reply
 
 object ReplyHistoryLimit {
-    const val DEFAULT = ReplyContext.MAX_MESSAGES
+    /** 默认只取 20 条：够看清上下文，又不至于在几百人的群里拖几十秒、烧一堆 token。 */
+    const val DEFAULT = 20
     fun valid(value: Int) = value in 1..ReplyContext.MAX_MESSAGES
     /** Null is cancellation. Invalid input never becomes a new selection. */
     fun parse(input: String?): Int? {

@@ -1,5 +1,6 @@
 package dev.jev.wechatmood.reply
 
+import dev.jev.wechatmood.core.isPrivateHost
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** Separate from Jev configuration; never include credentials in toString. */
@@ -16,6 +17,9 @@ class ReplySettings private constructor(val endpoint: String, val apiKey: String
             val url = endpoint.trim().toHttpUrlOrNull()
             require(url != null && url.username.isEmpty() && url.password.isEmpty() && url.query == null && url.fragment == null) {
                 "请填写 HTTP(S) 地址，不要包含账号密码、查询参数或锚点"
+            }
+            require(url.isHttps || url.host.isPrivateHost()) {
+                "公网地址请用 HTTPS，否则 API Key 和聊天内容会明文发送；本机或局域网地址可以继续用 HTTP"
             }
             val key = apiKey.trim()
             require(key.all { it.code in 33..126 }) { "API Key 不能包含空格、换行或中文字符" }

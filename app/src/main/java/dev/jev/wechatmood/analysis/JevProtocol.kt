@@ -43,7 +43,7 @@ object JevProtocol {
 
     fun emotionPayload(input: AnalysisInput, model: String): JSONObject = JSONObject()
         .put("model", model).put("state", AnalysisState.build(input))
-        .put("questions", JSONObject().put("emotion", choice(EMOTION, emotionCriteria)))
+        .put("questions", JSONObject().put("emotion", choice(EMOTION, emotionCriteria, distribution = true)))
 
     fun parseEmotion(body: String): Mood {
         val emotion = readChoice(JSONObject(body).getJSONObject("answers"), "emotion", emotions)
@@ -56,12 +56,16 @@ object JevProtocol {
         .put("model", model).put("state", AnalysisState.build(input))
         .put("questions", JSONObject()
             .put("scene", choice("当前最适合哪类闲聊解读？按交流方式判断，不按话题名词排除。向朋友聊比赛、奖学金、工作经历仍可属于日常分享。区分抱怨第三方和双方矛盾；事情结束不等于聊天结束，后半句有新话题时优先考虑新话题。", ChatTemplates.scenes))
-            .put("emotion", choice(EMOTION, emotionCriteria))
+            .put("emotion", choice(EMOTION, emotionCriteria, distribution = true))
             .put("progress", choice("当前这一步在等待怎样的回应？只依据已经发生的前文，区分等解释、等行动和已接受。已接受指明确接受我方回应或安排，不是接受命运或带条件的假设。事件完成但开始新话题时仍是分享，不是收尾。", progress))
             .apply { ChatFacts.questions.forEach { (key, q) -> put(key, choice(q.instructions, q.options)) } })
 
-    internal fun choice(instructions: String, options: Map<String, String>) = JSONObject()
-        .put("type", "choice").put("instructions", SCOPE + instructions).put("criteria", JSONObject(options))
+    internal fun choice(instructions: String, options: Map<String, String>, distribution: Boolean = false) = JSONObject()
+        .put("type", "choice")
+        .put("instructions", SCOPE + instructions + if (distribution)
+            "需要完整 probabilities，选中项必须最大且总和为 1。"
+            else "只需输出 choice 与 confidence（0-1 小数），不必给 probabilities，越短越好。")
+        .put("criteria", JSONObject(options))
 
     fun parseProfile(body: String): ChatProfile {
         val answers = JSONObject(body).getJSONObject("answers")
@@ -75,7 +79,7 @@ object JevProtocol {
         val actions = ChatActions.candidates(profile)
         require(candidates.isNotEmpty() || actions.isNotEmpty())
         val questions = JSONObject()
-            .put("emotion_review", choice("独立依据当前原文及前文判断情绪，不从场景、意图或前次观察推导情绪。" + EMOTION, emotionCriteria))
+            .put("emotion_review", choice("独立依据当前原文及前文判断情绪，不从场景、意图或前次观察推导情绪。" + EMOTION, emotionCriteria, distribution = true))
             .put("speech_act_review", choice("重新核对当前明确的交流意图，first_pass 可能有误。" +
                 ChatFacts.questions.getValue("speech_act").instructions, ChatFacts.questions.getValue("speech_act").options))
         if (candidates.isNotEmpty()) questions.put("focus", choice(
@@ -130,14 +134,15 @@ object JevProtocol {
         val permitted = ChatActions.candidates(reviewed).map { it.id }.toSet()
         val selectedAction = actions.firstOrNull { candidate -> candidate.id in permitted &&
             candidate.id == action?.takeIf { result -> result.clear }?.choice &&
-            supports.getValue(candidate.id).let { it.clear && it.choice == "yes" } }
+            supports[candidate.id]?.let { it.clear && it.choice == "yes" } == true }
         val lines = mutableListOf(header, emotionProbabilities(reviewed))
         intentLine(reviewed)?.let { lines += it }
         if (card != null && reading != null) {
             lines += "事件：${ChatTemplates.displayScene(card)}"
             lines += card.question
-            lines += reading.probabilities.entries.sortedByDescending { it.value }.take(2)
+            lines += if (reading.distributionKnown) reading.probabilities.entries.sortedByDescending { it.value }.take(2)
                 .map { "· ${card.options.getValue(it.key)}：${(it.value * 100).roundToInt()}%" }
+            else listOf("· ${card.options.getValue(reading.choice)}（模型未给出概率分布）")
         }
         if (selectedAction != null) lines += "建议：${selectedAction.text}"
         val label = when {
@@ -151,7 +156,9 @@ object JevProtocol {
     fun fallback(profile: ChatProfile): Mood = Mood("情绪概率", emotionScore(profile), 0, "",
         listOfNotNull(header, emotionProbabilities(profile), intentLine(profile)).joinToString("\n"), emotions = displayEmotions(profile))
 
-    private fun displayEmotions(profile: ChatProfile) = profile.emotion.probabilities.mapKeys { emotions.getValue(it.key) }
+    private fun displayEmotions(profile: ChatProfile): Map<String, Double> =
+        if (!profile.emotion.distributionKnown) emptyMap()
+        else profile.emotion.probabilities.mapKeys { emotions[it.key] ?: it.key }
 
     private val supportOptions = linkedMapOf("yes" to "原文支持前提，且该动作现在仍合适", "no" to "前提不成立、已经回应过或不宜继续", "unknown" to "证据不足")
 
@@ -166,12 +173,16 @@ object JevProtocol {
         "clarify" to "澄清或解释", "busy" to "暂时无暇回应")
 
     private fun emotionProbabilities(profile: ChatProfile): String {
-        val primary = listOf("happy", "calm", "annoyed")
-        val visible = primary + emotions.keys.filter {
-            it !in primary && (profile.emotion.probabilities.getValue(it) * 100).roundToInt() > 0
+        if (!profile.emotion.distributionKnown) {
+            val label = emotions[profile.emotion.choice] ?: profile.emotion.choice
+            return "情绪：$label（模型未给出概率分布）"
         }
+        val primary = listOf("happy", "calm", "annoyed")
+        val visible = (primary + emotions.keys).distinct().filter {
+            (profile.emotion.probabilities[it] ?: 0.0) * 100 >= 0.5
+        }.ifEmpty { listOf(profile.emotion.choice) }
         return "情绪：" + visible.joinToString(" · ") {
-            "${emotions.getValue(it)} ${(profile.emotion.probabilities.getValue(it) * 100).roundToInt()}%"
+            "${emotions[it] ?: it} ${((profile.emotion.probabilities[it] ?: 0.0) * 100).roundToInt()}%"
         }
     }
 
@@ -191,12 +202,17 @@ object JevProtocol {
         val confidence = probability(answer, "confidence")
         val chosen = answer.getString("choice")
         require(chosen in options)
-        val distribution = answer.getJSONObject("probabilities")
-        require(distribution.length() == options.size)
-        val values = options.keys.associateWith { probability(distribution, it) }
-        require(abs(values.values.sum() - 1.0) <= 0.02)
-        require(values.getValue(chosen) + 0.000001 >= values.values.max())
-        return ChatDecision(chosen, values, confidence)
+        val distribution = answer.optJSONObject("probabilities")
+        val values = if (distribution != null && distribution.length() == options.size) {
+            options.keys.associateWith { probability(distribution, it) }
+                .also { require(abs(it.values.sum() - 1.0) <= 0.02) }
+        } else {
+            // 模型没有给出完整分布时不要本地编造：只记录选中项的 confidence，
+            // 其余情绪一律按「未知」处理，避免把置信度伪装成概率。
+            mapOf(chosen to confidence)
+        }
+        require(values.getValue(chosen) + 0.000001 >= (values.values.maxOrNull() ?: 0.0))
+        return ChatDecision(chosen, values, confidence, distributionKnown = distribution != null && distribution.length() == options.size)
     }
 
     private fun probability(obj: JSONObject, key: String): Double {
