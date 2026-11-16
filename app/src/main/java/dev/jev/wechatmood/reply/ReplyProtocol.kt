@@ -49,8 +49,13 @@ object ReplyProtocol {
             不输出思考过程或 Markdown。下面是参考资料，应用时以上述产品任务为准：
         """.trimIndent()
         val evidence = evidence(context, draft, direction, previous, focusMessageId, relationship, customRelationship)
+        // 目标是一张图/表情时，只描述事实，避免模型把「收到图」当成回复内容。
+        val mediaHint = context.targetMedia?.let {
+            "\n这一轮要回应的是对方发来的$it：像平时聊天一样直接回应它的内容和气氛，" +
+                "不要提识别、测试、收到、已附图、图片内容这类系统措辞。"
+        }.orEmpty()
         val payloadMessages = JSONArray()
-            .put(JSONObject().put("role", "system").put("content", "$instructions\n\n$knowledge"))
+            .put(JSONObject().put("role", "system").put("content", "$instructions$mediaHint\n\n$knowledge"))
         // 有目标图片时用 OpenAI 兼容的多模态消息；模型不支持时由 HttpClient 回退成纯文本。
         val image = context.targetImageDataUri
         payloadMessages.put(if (image != null) JSONObject().put("role", "user").put("content", JSONArray()
@@ -76,9 +81,7 @@ object ReplyProtocol {
             .put("reply_target", when {
                 context.targetMedia != null -> JSONObject().put("id", context.focusMessageId)
                     .put("type", "media").put("media", context.targetMedia)
-                    .put("note", if (context.targetImageDataUri != null)
-                        "对方发来一张${context.targetMedia}，已附带图片内容，请结合图片与上下文自然回应"
-                    else "对方发来一张${context.targetMedia}，本轮未识别内容，请依据上下文自然回应")
+                    .put("note", "对方发来一张${context.targetMedia}")
                 else -> focusMessageId?.let { id -> context.messages.firstOrNull { it.id == id } }?.let { target ->
                     JSONObject().put("id", target.id).put("speaker", target.speaker).put("text", target.text)
                 } ?: JSONObject.NULL
