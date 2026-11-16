@@ -51,7 +51,8 @@ object ReplyProtocol {
         val evidence = evidence(context, draft, direction, previous, focusMessageId, relationship, customRelationship)
         // 目标是一张图/表情时，只描述事实，避免模型把「收到图」当成回复内容。
         val mediaHint = context.targetMedia?.let {
-            "\n这一轮要回应的是对方发来的$it：像平时聊天一样直接回应它的内容和气氛，" +
+            "\n这一轮要回应的是对方发来的$it：先判断它表达的情绪（玩笑、撒娇、阴阳、认真、安慰等），" +
+                "再像平时聊天一样回应它的内容和气氛，并按对应情绪取用知识库里的通用原则；" +
                 "不要提识别、测试、收到、已附图、图片内容这类系统措辞。"
         }.orEmpty()
         val payloadMessages = JSONArray()
