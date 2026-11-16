@@ -21,7 +21,7 @@ enum class ReplyContextSource { LOADED_PAGE, LOCAL_HISTORY }
 data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, val omittedMedia: Int = 0,
     val trimmed: Boolean = false, val latestLoadedId: Long = messages.lastOrNull()?.id ?: 0,
     val source: ReplyContextSource = ReplyContextSource.LOADED_PAGE, val historyFailure: String? = null,
-    val requestedMessages: Int = MAX_MESSAGES, val historyAnchor: ReplyHistoryAnchor? = null,
+    val requestedMessages: Int = ReplyHistoryLimit.DEFAULT, val historyAnchor: ReplyHistoryAnchor? = null,
     val background: ContactBackground = ContactBackground(), val focusMessageId: Long = 0) {
     val fingerprint: String get() {
         val text = messages.joinToString("\u0000") { "${it.id}:${it.speaker.length}:${it.speaker}:${it.time}:${it.text.length}:${it.text}:${it.voice?.key.orEmpty()}:${it.voiceState}" }

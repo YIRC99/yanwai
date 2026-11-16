@@ -88,16 +88,13 @@ object ReplyProtocol {
         check(!root.has("error"))
         val choice = root.getJSONArray("choices").getJSONObject(0)
         val finish = choice.optString("finish_reason")
+        // 被截断的响应永远不是完整的答案，必须先拒绝，再做宽松的 JSON 提取。
+        check(finish == "stop") { "回复被截断（finish_reason=$finish），请重试或换输出上限更高的模型" }
         val message = choice.getJSONObject("message")
         check(message.isNull("refusal") || message.optString("refusal").isBlank())
         val raw = message.getString("content").trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         val json = raw.substring(raw.indexOf('{').takeIf { it >= 0 } ?: 0).trim()
-        return runCatching { JSONObject(json) }.getOrElse { error ->
-            if (finish == "length") {
-                throw IllegalStateException("回复被截断（finish_reason=length），请重试或换输出上限更高的模型")
-            }
-            throw error
-        }
+        return JSONObject(json)
     }
 
     fun parse(body: String): ReplySuggestion = try {
