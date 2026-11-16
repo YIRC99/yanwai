@@ -110,7 +110,7 @@ class HostUi(private val activity: Activity) {
     }
 
     private fun openSettings() = HostSettingsEntry.open(activity)
-    fun suggestReply(focusMessageId: Long? = null) = replyUi.open(focusMessageId)
+    fun suggestReply(focusMessageId: Long? = null, imageDataUri: String? = null) = replyUi.open(focusMessageId, imageDataUri)
     fun hide() { replyUi.hide(); removeControl(); dialog?.dismiss(); messages = emptyList(); talker = null }
     fun dispose() { hide(); replyUi.dispose() }
     private fun removeControl() {

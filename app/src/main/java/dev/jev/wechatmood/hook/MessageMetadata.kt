@@ -12,8 +12,10 @@ data class MessageMetadata(val type: Int, val isSend: Int, val content: String, 
     fun quotedMessage() = quoteReply?.quoted
     fun isAnalysisContent() = type in setOf(1, 34) || quoteReply != null
     fun incomingText(): String? = if (isSend == 0) plainText() else null
-    fun isReplyTarget(): Boolean = isSend == 0 && talker.isNotBlank() && messageId > 0 &&
-        ((type == 1 && content.isNotBlank()) || type == 34 || quoteReply?.text?.isNotBlank() == true)
+    /** 默认只认文本、语音和可读引用；allowMedia 打开后图片、表情和引用媒体也能作为「帮我回」的目标。 */
+    fun isReplyTarget(allowMedia: Boolean = false): Boolean = isSend == 0 && talker.isNotBlank() && messageId > 0 &&
+        ((type == 1 && content.isNotBlank()) || type == 34 || quoteReply?.text?.isNotBlank() == true ||
+            (allowMedia && (type == 3 || type == 47 || type == 49 || type == 822083633)))
 
     fun voiceSource(): VoiceSource? = if (type == 34 && isSend in 0..1 && talker.isNotBlank() && messageId > 0)
         VoiceSource(talker, messageId, createdAt, isSend, imagePath, serverId) else null

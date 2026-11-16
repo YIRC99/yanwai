@@ -49,10 +49,16 @@ object ReplyProtocol {
             不输出思考过程或 Markdown。下面是参考资料，应用时以上述产品任务为准：
         """.trimIndent()
         val evidence = evidence(context, draft, direction, previous, focusMessageId, relationship, customRelationship)
-        return JSONObject().put("model", settings.model).put("stream", false)
-            .put("max_tokens", 1200).put("temperature", 0.9).put("messages", JSONArray()
+        val payloadMessages = JSONArray()
             .put(JSONObject().put("role", "system").put("content", "$instructions\n\n$knowledge"))
-            .put(JSONObject().put("role", "user").put("content", evidence.toString())))
+        // 有目标图片时用 OpenAI 兼容的多模态消息；模型不支持时由 HttpClient 回退成纯文本。
+        val image = context.targetImageDataUri
+        payloadMessages.put(if (image != null) JSONObject().put("role", "user").put("content", JSONArray()
+            .put(JSONObject().put("type", "text").put("text", evidence.toString()))
+            .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", image))))
+        else JSONObject().put("role", "user").put("content", evidence.toString()))
+        return JSONObject().put("model", settings.model).put("stream", false)
+            .put("max_tokens", 1200).put("temperature", 0.9).put("messages", payloadMessages)
     }
 
     internal fun evidence(context: ReplyContext, draft: String, direction: String, previous: String = "",
@@ -67,14 +73,21 @@ object ReplyProtocol {
         })).put("draft", draft.take(2000)).put("direction", direction.take(2000))
             .put("previous_suggestion", previous.take(2000)).put("focus_message_id", focusMessageId ?: JSONObject.NULL)
             .put("my_style", JSONArray(context.messages.filter { it.speaker == "我" }.takeLast(6).map { it.text.take(60) }))
-            .put("reply_target", focusMessageId?.let { id -> context.messages.firstOrNull { it.id == id } }?.let { target ->
-                JSONObject().put("id", target.id).put("speaker", target.speaker).put("text", target.text)
-            } ?: JSONObject.NULL)
+            .put("reply_target", when {
+                context.targetMedia != null -> JSONObject().put("id", context.focusMessageId)
+                    .put("type", "media").put("media", context.targetMedia)
+                    .put("note", if (context.targetImageDataUri != null)
+                        "对方发来一张${context.targetMedia}，已附带图片内容，请结合图片与上下文自然回应"
+                    else "对方发来一张${context.targetMedia}，本轮未识别内容，请依据上下文自然回应")
+                else -> focusMessageId?.let { id -> context.messages.firstOrNull { it.id == id } }?.let { target ->
+                    JSONObject().put("id", target.id).put("speaker", target.speaker).put("text", target.text)
+                } ?: JSONObject.NULL
+            })
             .put("omitted_media", context.omittedMedia).put("context_trimmed", context.trimmed)
             .put("context_source", context.source.name).put("page_only", context.source == ReplyContextSource.LOADED_PAGE)
             .put("requested_message_count", context.requestedMessages).put("actual_message_count", context.messages.size)
             .put("contact_background", JSONObject(context.background.encode()))
-            .put("media_included", false)
+            .put("media_included", context.targetImageDataUri != null)
             .put("voice_transcripts", context.messages.count { it.voiceState == VoiceState.READY })
             .put("unavailable_voice", context.messages.count { it.voiceState == VoiceState.FAILED })
             .put("relationship", JSONObject().put("id", relationship.id).put("label", relationship.displayLabel(custom)))
