@@ -67,7 +67,10 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
                             }
                             val body = requireNotNull(reply.body) { "模型没有返回内容，请重试" }
                             val streaming = payload.optBoolean("stream") && body.contentType()?.toString()?.contains("event-stream") == true
-                            if (streaming) streamBody(body, onPartial) else readWhole(body)
+                            if (streaming) streamBody(body, onPartial) else {
+                                dev.jev.wechatmood.core.MoodLog.i("REPLY_STREAM off type=${body.contentType()}")
+                                readWhole(body)
+                            }
                         }.let(parse)
                     }.recoverCatching { error ->
                         if (error is IllegalStateException) throw error
@@ -95,6 +98,8 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
         var truncated = false
         var emitted = false
         var size = 0L
+        val startedAt = System.currentTimeMillis()
+        var firstAt = 0L
         while (true) {
             val line = source.readUtf8Line() ?: break
             size += line.length
@@ -110,6 +115,7 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
             val delta = choice.optJSONObject("delta") ?: choice.optJSONObject("message")
             val piece = delta?.optString("content").orEmpty()
             if (piece.isEmpty()) continue
+            if (firstAt == 0L) firstAt = System.currentTimeMillis()
             content.append(piece)
             if (!emitted) {
                 firstReply(content)?.let { partial ->
@@ -119,6 +125,9 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
             }
         }
         check(content.isNotEmpty()) { "模型没有返回内容，请重试" }
+        // 只记耗时和长度，不记内容：用于确认流式是否真的生效。
+        dev.jev.wechatmood.core.MoodLog.i(
+            "REPLY_STREAM ok chars=${content.length} first=${if (firstAt == 0L) -1 else firstAt - startedAt}ms total=${System.currentTimeMillis() - startedAt}ms")
         return JSONObject().put("choices", JSONArray().put(JSONObject()
             .put("message", JSONObject().put("content", content.toString()).put("refusal", JSONObject.NULL))
             .put("finish_reason", if (truncated) "length" else "stop"))).toString()
