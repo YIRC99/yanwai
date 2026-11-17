@@ -67,11 +67,29 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         val latest = MessageSniffer.replyBoundary() ?: return
         newMessageNotice?.visibility = if (latest != captured.latestLoadedId && captured.messages.none { it.id == latest }) View.VISIBLE else View.GONE
     }
-    private fun footer(): View? = views(activity.window.decorView).singleOrNull {
-        it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" && it.isShown
+    private var footerRef: java.lang.ref.WeakReference<View>? = null
+    private var editorRef: java.lang.ref.WeakReference<EditText>? = null
+
+    /**
+     * 这两个查找原来每 tick、每次按键都从 decorView 起做一次最多 4000 节点的 DFS。
+     * 底部栏和输入框在同一个聊天页里是稳定的，缓存后用 attach 状态校验即可。
+     */
+    private fun footer(): View? {
+        footerRef?.get()?.takeIf { it.isAttachedToWindow && it.isShown }?.let { return it }
+        val found = views(activity.window.decorView).singleOrNull {
+            it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.ChatFooter" && it.isShown
+        }
+        footerRef = found?.let { java.lang.ref.WeakReference(it) }
+        return found
     }
-    private fun editor(): EditText? = footer()?.let { root ->
-        views(root).filterIsInstance<EditText>().filter { it.isShown && it.isEnabled }.singleOrNull()
+
+    private fun editor(): EditText? {
+        editorRef?.get()?.takeIf { it.isAttachedToWindow && it.isShown && it.isEnabled }?.let { return it }
+        val found = footer()?.let { root ->
+            views(root).filterIsInstance<EditText>().filter { it.isShown && it.isEnabled }.singleOrNull()
+        }
+        editorRef = found?.let { java.lang.ref.WeakReference(it) }
+        return found
     }
 
     fun open(focusMessageId: Long? = null): Boolean {
@@ -782,7 +800,17 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     val client = ReplyHttpClient()
                     val topics = if (findTopics) client.findTopics(config, current, baselineDraft, notes, knowledge, relationship,
                         requireNotNull(time), previousTopics, customRelationship) else null
-                    val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction, knowledge, previous, focusId, relationship, customRelationship)
+                    // 流式：第一条候选写完整就先显示在状态栏，不必等 3–5 条全部生成。
+                    val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction,
+                        knowledge, previous, focusId, relationship, customRelationship) { partial ->
+                        activity.runOnUiThread {
+                            if (job?.isActive == true && ownsDrawer() &&
+                                session.accepts(ticket, MessageSniffer.currentReplyTalker())) {
+                                state.text = partial
+                                state.setTextColor(theme.muted)
+                            }
+                        }
+                    }
                     val activeConfig = ModulePrefs.replySettings()
                     if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.canGenerateReply) return@launch
                     if (!verifyAccount()) { window.dismiss(); return@launch }

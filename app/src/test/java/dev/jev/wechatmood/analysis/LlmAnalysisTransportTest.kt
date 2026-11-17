@@ -24,7 +24,7 @@ class LlmAnalysisTransportTest {
             val settings = config(server.url("/v1").toString())
             val client = ReplyHttpClient()
             suspend fun run() = AnalysisRouter.analyze(input, settings, { error("Unexpected JEV request") },
-                { cfg, payload -> client.request(cfg, payload) { it } })
+                { cfg, payload -> client.request(cfg, payload, parse = { it }) })
             try { run(); fail("Malformed response must fail") } catch (e: IllegalStateException) { assertTrue(e.message!!.contains("不完整")) }
             assertTrue(run().detail.contains("LLM 定性"))
             assertEquals(2, server.requestCount)
@@ -42,13 +42,13 @@ class LlmAnalysisTransportTest {
             val settings = config(server.url("/v1").toString())
             val http = OkHttpClient.Builder().callTimeout(150, TimeUnit.MILLISECONDS).build()
             try {
-                AnalysisRouter.analyze(input, settings, { error("JEV") }, { cfg, payload -> ReplyHttpClient(http).request(cfg, payload) { it } })
+                AnalysisRouter.analyze(input, settings, { error("JEV") }, { cfg, payload -> ReplyHttpClient(http).request(cfg, payload, parse = { it }) })
                 fail("Timeout must fail")
             } catch (e: IllegalStateException) { assertTrue(e.message!!.contains("超时")) }
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
             val client = ReplyHttpClient()
             val job = launch {
-                AnalysisRouter.analyze(input, settings, { error("JEV") }, { cfg, payload -> client.request(cfg, payload) { it } })
+                AnalysisRouter.analyze(input, settings, { error("JEV") }, { cfg, payload -> client.request(cfg, payload, parse = { it }) })
                 fail("Canceled request cannot return a result")
             }
             withTimeout(2000) { while (server.requestCount < 2) delay(10) }

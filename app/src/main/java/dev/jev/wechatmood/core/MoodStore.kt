@@ -29,7 +29,13 @@ data class Mood(
  */
 object MoodStore {
 
-    private val cache = ConcurrentHashMap<String, Mood>()
+    /**
+     * 有界 LRU。原来是无上限的 ConcurrentHashMap，微信常驻一整天会一直累积。
+     * 512 条足够覆盖当前会话与相邻几个聊天，超出后淘汰最久未访问的结果。
+     */
+    private val cache = object : java.util.LinkedHashMap<String, Mood>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Mood>) = size > 512
+    }
     private val pending = mutableMapOf<String, Claim>()
 
     class Claim internal constructor(val key: String)
@@ -64,13 +70,27 @@ object MoodStore {
                 quote(it.quoted)
             }
         }
-        return java.security.MessageDigest.getInstance("SHA-256")
-            .digest(source.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        return hex(java.security.MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8)))
     }
 
-    fun get(key: String): Mood? = cache[key]
+    private val HEX = "0123456789abcdef".toCharArray()
 
-    fun retryIntent(key: String) { cache.computeIfPresent(key) { _, mood -> if (mood.intentFailed) null else mood } }
+    /** 一次 key 计算要编码 32 字节，String.format 在这里是纯开销。 */
+    private fun hex(bytes: ByteArray): String {
+        val out = CharArray(bytes.size * 2)
+        for (index in bytes.indices) {
+            val value = bytes[index].toInt() and 0xff
+            out[index * 2] = HEX[value ushr 4]
+            out[index * 2 + 1] = HEX[value and 0x0f]
+        }
+        return String(out)
+    }
+
+    @Synchronized fun get(key: String): Mood? = cache[key]
+
+    @Synchronized fun retryIntent(key: String) {
+        if (cache[key]?.intentFailed == true) cache.remove(key)
+    }
 
     /** 尝试认领一次分析任务；已经在跑或已完成返回 null。 */
     @Synchronized fun acquire(key: String): Claim? {
@@ -92,7 +112,7 @@ object MoodStore {
         return true
     }
 
-    fun size(): Int = cache.size
+    @Synchronized fun size(): Int = cache.size
 
     @Synchronized fun clear() {
         cache.clear()
