@@ -44,7 +44,8 @@ object ReplyProtocol {
             “OK”“昂”“好呀”等用词取决于我平时的口吻、关系和当下情绪；不因恋人身份就固定用“昂”，不为凑条数加语气词。
             不含编号、引号说明、发送时间或分支；候选不能以对方尚未作出的回答为前提。
             像一个人在打字：不要「首先/其次/总之」，不排比三段，不写总结句，不用 emoji 和波浪号，不用书面连接词；
-            允许短句、省略主语、不完整的句子。用词和句长尽量向 my_style 里我的说话习惯靠。
+            允许短句、省略主语、不完整的句子。my_style 是按我历史消息统计出的说话习惯，
+            my_style_samples 是几条真实短句；用词、句长、标点都尽量向它们靠，不要刻意模仿到夸张。
             只返回 JSON 对象：{"replies":["最推荐的候选","第二个候选","第三个候选"],"reason":"一句简短理由或需要留意的地方"}。
             不输出思考过程或 Markdown。下面是参考资料，应用时以上述产品任务为准：
         """.trimIndent()
@@ -59,6 +60,8 @@ object ReplyProtocol {
         focusMessageId: Long? = null, relationship: ReplyRelationship = ReplyRelationship.UNSPECIFIED,
         customRelationship: String = ""): JSONObject {
         val custom = relationship.customValue(customRelationship)
+        // 口吻画像：纯本地统计，命中缓存时不重复计算。
+        val style = StyleProfileCache.of(context.talker, context.messages)
         require(context.messages.none { it.voiceState == VoiceState.WAITING }) { "语音尚未完成转写" }
         require(relationship != ReplyRelationship.OTHER || custom.isNotBlank()) { "请先填写对方身份" }
         return JSONObject().put("messages", JSONArray(context.messages.map {
@@ -66,7 +69,9 @@ object ReplyProtocol {
                 .put("message_source", if (it.voice != null) "voice_transcript" else "text").put("voice_state", it.voiceState.name)
         })).put("draft", draft.take(2000)).put("direction", direction.take(2000))
             .put("previous_suggestion", previous.take(2000)).put("focus_message_id", focusMessageId ?: JSONObject.NULL)
-            .put("my_style", JSONArray(context.messages.filter { it.speaker == "我" }.takeLast(6).map { it.text.take(60) }))
+            .put("my_style", style?.summary() ?: JSONObject.NULL)
+            .put("my_style_samples", JSONArray(style?.samples?.takeIf { it.isNotEmpty() }
+                ?: context.messages.filter { it.speaker == "我" }.takeLast(6).map { it.text.take(60) }))
             .put("reply_target", focusMessageId?.let { id -> context.messages.firstOrNull { it.id == id } }?.let { target ->
                 JSONObject().put("id", target.id).put("speaker", target.speaker).put("text", target.text)
             } ?: JSONObject.NULL)
