@@ -40,6 +40,9 @@ object MessageSniffer {
     private data class PendingCard(val observer: ViewTreeObserver, val listener: ViewTreeObserver.OnPreDrawListener)
     private val pendingCards = mutableMapOf<View, PendingCard>()
     private var idleTicks = 0
+    private data class RecordsSnapshot(val signature: Long, val rows: List<Pair<View, BoundMessage>>)
+    /** 静止画面下 records() 的产物完全一致，签名相同就直接复用，省掉每 tick 的反射与上下文重建。 */
+    private var recordsSnapshot: RecordsSnapshot? = null
     private val tick = object : Runnable {
         override fun run() {
             val activity = active.get() ?: return
@@ -203,8 +206,10 @@ object MessageSniffer {
     fun resume(activity: Activity) {
         ReplyDatabaseHistory.resetAccountScope()
         main.removeCallbacks(tick)
-        SignalAnalyzer.cancelAll()
+        // 不再 cancelAll：看大图、扫一扫回来会把正在跑的两轮分析全部作废并重新计费。
+        // 下一次 scan 会 reconcile(新可见集合, 当前会话)，只清理未开始或已经离开这个会话的请求。
         clearPendingCards()
+        recordsSnapshot = null
         BubbleDecorator.clearAll()
         ui?.dispose()
         ui = null
@@ -400,8 +405,23 @@ object MessageSniffer {
     }
 
     private fun records(scope: List<View>): List<Pair<View, BoundMessage>> {
+        val lists = scope.filterIsInstance<ListView>()
+        var signature = 17L
+        for (list in lists) {
+            signature = signature * 31 + list.childCount
+            signature = signature * 31 + list.firstVisiblePosition
+            for (index in 0 until list.childCount) {
+                signature = signature * 31 + System.identityHashCode(
+                    runCatching { list.getItemAtPosition(list.firstVisiblePosition + index) }.getOrNull())
+            }
+        }
+        synchronized(bindings) {
+            bindings.keys.forEach { signature = signature * 31 + System.identityHashCode(it) }
+            signature = signature * 31 + bindings.size
+        }
+        recordsSnapshot?.takeIf { it.signature == signature }?.let { return it.rows }
         val records = mutableListOf<Pair<View, BoundMessage>>()
-        for (list in scope.filterIsInstance<ListView>()) {
+        for (list in lists) {
             for (index in 0 until list.childCount) {
                 val row = list.getChildAt(index)
                 if (!isVisible(row)) continue
@@ -419,6 +439,7 @@ object MessageSniffer {
             bindings.entries.filter { it.key in views && isVisible(it.key) }
                 .forEach { records += it.key to it.value }
         }
+        recordsSnapshot = RecordsSnapshot(signature, records)
         return records
     }
 

@@ -79,7 +79,21 @@ class SqliteAnalysisCache(private val db: AnalysisCacheDatabase,
         db.execute("CREATE INDEX IF NOT EXISTS analysis_accessed ON analysis_results(accessed)")
     }
 
+    private var lastPrune = 0L
+
+    /**
+     * 之前只在容量淘汰时删行，过期数据其实一直留在磁盘上，直到被挤出 5000 条。
+     * 每次读写前最多一小时清理一次，让「14 天」这个承诺真的生效。
+     */
+    private fun pruneExpired() {
+        val current = now()
+        if (current - lastPrune < 60L * 60 * 1000) return
+        lastPrune = current
+        db.execute("DELETE FROM analysis_results WHERE accessed < ?", listOf((current - CACHE_TTL_MS).toString()))
+    }
+
     @Synchronized fun find(key: AnalysisCacheKey): CachedAnalysisResult? {
+        pruneExpired()
         // 过期结果不再命中：聊天原文不该无限期留在磁盘上。
         val payload = db.query("SELECT payload FROM analysis_results WHERE cache_key = ? AND accessed >= ?",
             listOf(key.value, (now() - CACHE_TTL_MS).toString())) ?: return null
@@ -92,6 +106,7 @@ class SqliteAnalysisCache(private val db: AnalysisCacheDatabase,
     @Synchronized fun save(key: AnalysisCacheKey, mood: Mood, evidence: String) {
         // Incomplete intelligent analysis must remain retryable, never a durable success.
         if (mood.intentFailed) return
+        pruneExpired()
         val payload = CachedAnalysisResult(mood, evidence).encode()
         if (payload.toByteArray(Charsets.UTF_8).size > minOf(256L * 1024, maxBytes)) return
         db.execute("BEGIN IMMEDIATE")

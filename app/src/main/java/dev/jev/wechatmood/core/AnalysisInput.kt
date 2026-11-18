@@ -35,8 +35,15 @@ data class AnalysisInput(
     val backgroundReady: Boolean = true,
     val settingsFingerprint: String = "",
 ) {
-    val key: String get() = MoodStore.keyOf(text, talker, context, messageId, speaker, createdAt, coverage,
-        zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: "") + "|background:${background.revision}:$backgroundReady|settings:$settingsFingerprint", quoted, accountScope)
+    /**
+     * 界面每帧都会读一次。旧实现是计算属性，每次访问都要重建整串再做一次 SHA-256，
+     * 而 records() 里同一条消息每 tick 会被读好几次。data class 的 copy() 会生成新实例，
+     * 所以用 lazy 不会拿到别的上下文的 key。
+     */
+    val key: String by lazy {
+        MoodStore.keyOf(text, talker, context, messageId, speaker, createdAt, coverage,
+            zoneId + (voice?.let { "|voice:${it.key}:$voiceState" } ?: "") + "|background:${background.revision}:$backgroundReady|settings:$settingsFingerprint", quoted, accountScope)
+    }
 }
 
 object MessagePolicy {

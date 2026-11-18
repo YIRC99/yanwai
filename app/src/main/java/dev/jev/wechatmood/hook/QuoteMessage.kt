@@ -13,9 +13,32 @@ import javax.xml.parsers.SAXParserFactory
 /** Allow only appmsg subtype 57. Link/file titles must never become ordinary chat text. */
 data class QuoteMessage(val text: String, val quoted: QuotedMessage) {
     companion object {
+        private const val CACHE_LIMIT = 256
+        private val UNSAFE = Regex("<!\\s*(DOCTYPE|ENTITY)", RegexOption.IGNORE_CASE)
+
+        /**
+         * MessageMetadata 的 quoteReply 是实例级 lazy，而每 tick 都会重新 read 出新实例，
+         * 于是同一条引用消息会被反复 SAX 解析。这里按内容做一次全局缓存，命中后只比较字符串。
+         */
+        private val cache = object : LinkedHashMap<Long, Pair<String, QuoteMessage?>>(64, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Pair<String, QuoteMessage?>>) =
+                size > CACHE_LIMIT
+        }
+
+        private fun cacheKey(content: String) = (content.hashCode().toLong() shl 20) xor content.length.toLong()
+
         fun parse(content: String): QuoteMessage? {
-            if (content.length > 65_536 || content.isBlank() ||
-                Regex("<!\\s*(DOCTYPE|ENTITY)", RegexOption.IGNORE_CASE).containsMatchIn(content)) return null
+            val key = cacheKey(content)
+            synchronized(cache) {
+                cache[key]?.let { (raw, value) -> if (raw == content) return value }
+            }
+            val parsed = decode(content)
+            synchronized(cache) { cache[key] = content to parsed }
+            return parsed
+        }
+
+        private fun decode(content: String): QuoteMessage? {
+            if (content.length > 65_536 || content.isBlank() || UNSAFE.containsMatchIn(content)) return null
             return runCatching {
                 val path = mutableListOf<String>()
                 val fields = mutableMapOf<String, StringBuilder>()
