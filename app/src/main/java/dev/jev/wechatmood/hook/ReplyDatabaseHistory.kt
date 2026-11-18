@@ -148,11 +148,14 @@ object ReplyDatabaseHistory {
     }.getOrNull()
 
     /** 按时间范围取统计用消息（不限已加载页），用于「今天 / 最近 N 小时」。 */
-    suspend fun statMessages(talker: String, sinceMillis: Long, limit: Int): List<MessageMetadata> = withContext(Dispatchers.IO) {
+    suspend fun statMessages(talker: String, sinceMillis: Long, limit: Int,
+        accountScope: String? = null): List<MessageMetadata> = withContext(Dispatchers.IO) {
         val out = mutableListOf<MessageMetadata>()
         val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
         var since = sinceMillis
         for (db in databases) {
+            // 只查当前账号的库：多账号在同一群时，另一个账号的历史库可能仍然打开。
+            if (accountScope != null && scope(db) != accountScope) continue
             // 微信不同版本 createTime 有秒也有毫秒，先看一条样本再决定。
             val sample = runCatching {
                 var value = 0L
@@ -199,7 +202,7 @@ object ReplyDatabaseHistory {
     }
 
     /** 群成员昵称：逐个 wxid 查 rcontact / stranger，查不到就返回空。 */
-    suspend fun displayNames(usernames: List<String>): Map<String, String> = withContext(Dispatchers.IO) {
+    suspend fun displayNames(usernames: List<String>, accountScope: String? = null): Map<String, String> = withContext(Dispatchers.IO) {
         val wanted = usernames.filter { it.isNotBlank() }.distinct()
         if (wanted.isEmpty()) return@withContext emptyMap()
         val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
@@ -207,6 +210,7 @@ object ReplyDatabaseHistory {
         var errors = 0
         for (name in wanted) {
             for (db in databases) {
+                if (accountScope != null && scope(db) != accountScope) continue
                 // 单条查询，避免 IN 参数或字段名差异导致整批失败。
                 val found = runCatching {
                     var value: String? = null

@@ -61,6 +61,7 @@ object StatsFilter {
 /** 群聊统计窗口：数字 + 活跃成员 + 一次 AI 解读，结果可复制。 */
 internal class GroupStatsUi(private val activity: Activity, private val context: ReplyContext,
     private val dbMessages: List<dev.jev.wechatmood.reply.ReplyMessage> = emptyList(),
+    private val accountScope: String? = null,
     private val reload: (() -> Unit)? = null) {
     private val theme = ReplyTheme(activity)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -91,8 +92,11 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
         return if (StatsFilter.limit > 0) byTime.takeLast(StatsFilter.limit) else byTime
     }
 
+    /** 当前筛选命中的消息；AI 观察与表格使用同一份，口径一致。 */
+    private val filtered: List<dev.jev.wechatmood.reply.ReplyMessage> = selectedMessages()
+
     init {
-        val records = selectedMessages().map {
+        val records = filtered.map {
             StatRecord(it.time, if (it.speaker == "我") 1 else 0, 1, it.text, it.speaker)
         }
         val base = GroupStatsCalculator.compute(records, sampled = context.trimmed)
@@ -239,6 +243,13 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
             addView(body)
         }
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val modelName = ModulePrefs.replySettings().model.takeIf { it.isNotBlank() } ?: "未配置"
+        root.addView(TextView(activity).apply {
+            text = "点「AI 观察」会把当前筛选的 ${minOf(filtered.size, 30)} 条消息文本发给模型（$modelName）"
+            textSize = 11f
+            setTextColor(theme.muted)
+            setPadding(theme.dp(20), theme.dp(4), theme.dp(20), 0)
+        }, LinearLayout.LayoutParams(-1, -2))
         root.addView(aiButton, LinearLayout.LayoutParams(-1, theme.dp(44)).apply {
             setMargins(theme.dp(20), theme.dp(6), theme.dp(20), 0)
         })
@@ -259,7 +270,7 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
         scope.launch {
             runCatching { ReplyDatabaseHistory.tableNames() }
             val names = runCatching {
-                ReplyDatabaseHistory.displayNames(stats.members.map { it.name })
+                ReplyDatabaseHistory.displayNames(stats.members.map { it.name }, accountScope)
             }.getOrDefault(emptyMap())
             if (names.isNotEmpty()) renderTop(names)
         }
@@ -502,7 +513,9 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
         check(current.isConfigured) {
             if (!ModulePrefs.bridgeAvailable) "设置服务未连接：先打开一次言外再回来分析" else "先在言外「回复」里配置模型"
         }
-        val sample = context.messages.takeLast(30).joinToString("\n") { "${it.speaker}: ${it.text.take(60)}" }
+        // 与界面筛选保持一致：只发当前筛选命中、且最多 30 条的消息文本。
+        val sampleSource = filtered.takeLast(30)
+        val sample = sampleSource.joinToString("\n") { "${it.speaker}: ${it.text.take(60)}" }
         val client = ReplyHttpClient()
         var limit = 3000
         repeat(2) { attempt ->

@@ -146,15 +146,17 @@ class HostUi(private val activity: Activity) {
         }
         statsScope.launch {
             val since = StatsFilter.sinceMillis()
+            // 先确认当前登录账号，只统计这个账号的聊天记录。
+            val account = runCatching { ReplyDatabaseHistory.replyAccount(context) }.getOrNull()
             val rows = runCatching {
                 ReplyDatabaseHistory.statMessages(context.talker, since,
-                    if (StatsFilter.limit == 0) 5000 else StatsFilter.limit)
+                    if (StatsFilter.limit == 0) 5000 else StatsFilter.limit, account)
             }.getOrDefault(emptyList())
             val mapped = rows.map {
                 dev.jev.wechatmood.reply.ReplyMessage(it.messageId, it.speaker(), it.createdAt,
                     it.analysisText() ?: "[媒体]")
             }
-            GroupStatsUi(activity, context, mapped) { showStats() }.show()
+            GroupStatsUi(activity, context, mapped, account) { showStats() }.show()
         }
     }
 
