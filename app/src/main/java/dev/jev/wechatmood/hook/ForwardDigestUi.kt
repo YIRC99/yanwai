@@ -42,7 +42,9 @@ internal class ForwardDigestUi(private val activity: Activity, private val messa
             setPadding(theme.dp(20), theme.dp(12), theme.dp(20), theme.dp(12))
         }
         text = body
-        val scroll = ScrollView(activity).apply { addView(body) }
+        val scroll = MaxScroll(activity, (activity.resources.displayMetrics.heightPixels * 0.62f).toInt()).apply {
+            addView(body)
+        }
         val status = TextView(activity).apply {
             textSize = 11f
             setTextColor(theme.muted)
@@ -89,8 +91,9 @@ internal class ForwardDigestUi(private val activity: Activity, private val messa
             cornerRadius = theme.dp(16).toFloat()
             setColor(theme.surface)
         })
+        // 高度跟着文字走，最多占七成屏幕；只有内容超出时才滚动。
         dialog.window?.setLayout((activity.resources.displayMetrics.widthPixels * 0.9f).toInt(),
-            (activity.resources.displayMetrics.heightPixels * 0.7f).toInt())
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.setCanceledOnTouchOutside(true)
         dialog.setOnDismissListener { scope.cancel() }
         dialog.show()
@@ -108,8 +111,10 @@ internal class ForwardDigestUi(private val activity: Activity, private val messa
                 ReplyHttpClient().request(settings, ForwardDigestProtocol.payload(settings, message),
                     ForwardDigestProtocol::parse) { partial ->
                     if (partial.isNotBlank()) {
-                        result = partial
-                        text?.post { text?.text = partial }
+                        // 显示前再清洗一次：模型会把输入里的填充原样复述出来。
+                        val clean = with(ForwardDigest) { partial.stripFiller() }
+                        result = clean
+                        text?.post { text?.text = clean }
                     }
                 }
             }.onSuccess { content ->
@@ -122,11 +127,20 @@ internal class ForwardDigestUi(private val activity: Activity, private val messa
     }
 
     private fun finish(content: String, copy: TextView) {
-        result = content
-        text?.text = content
+        val shown = with(ForwardDigest) { content.stripFiller() }
+        result = shown
+        text?.text = shown
         copy.isEnabled = true
         copy.alpha = 1f
         if (message.omitted > 0) footer?.text = "已省略 ${message.omitted} 条过长或过多的内容"
+    }
+
+    /** 内容少时只占实际高度，超过上限才滚动。 */
+    private class MaxScroll(context: Context, private val limit: Int) : ScrollView(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            super.onMeasure(widthMeasureSpec,
+                MeasureSpec.makeMeasureSpec(limit, MeasureSpec.AT_MOST))
+        }
     }
 
     fun dismiss() {

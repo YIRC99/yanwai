@@ -42,14 +42,13 @@ class ForwardDigestTest {
         val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist count=\"2\">" +
             item("张三", "外层内容") + item("张三", inner) + "</datalist></recordinfo>")
         val message = requireNotNull(ForwardDigest.parse(raw))
-        assertEquals(2, message.items.size)
-        assertEquals(1, message.nested)
-        assertEquals("里层内容", message.items[1].text)
-        assertTrue(message.items[1].nested)
+        assertTrue(message.items.any { it.text == "外层内容" })
+        assertTrue(message.items.any { it.text == "里层内容" })
+        assertTrue(message.nested >= 1)
     }
 
     @Test fun `超过条目上限时记录省略数量`() {
-        val many = (1..ForwardDigest.MAX_ITEMS + 5).joinToString("") { item("张三", "第 $it 条") }
+        val many = (1..ForwardDigest.MAX_ITEMS + 5).joinToString("") { item("张三$it", "第 $it 条内容") }
         val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist>$many</datalist></recordinfo>")
         val message = requireNotNull(ForwardDigest.parse(raw))
         assertEquals(ForwardDigest.MAX_ITEMS, message.items.size)
@@ -95,22 +94,22 @@ class ForwardDigestTest {
             "<dataitem datatype=\"17\"><datatitle>中层</datatitle><datadesc>中层</datadesc>" +
             "<recordxml>$middle</recordxml></dataitem></datalist></recordinfo>")
         val message = requireNotNull(ForwardDigest.parse(raw))
-        assertEquals(3, message.items.size)
-        assertEquals("外层内容", message.items[0].text)
-        assertEquals("中层内容", message.items[1].text)
-        assertEquals("里层内容", message.items[2].text)
-        assertEquals(2, message.nested)
+        val texts = message.items.map { it.text }
+        assertTrue(texts.any { it.contains("外层内容") })
+        assertTrue(texts.any { it.contains("中层内容") })
+        assertTrue(texts.any { it.contains("里层内容") })
+        assertTrue(message.nested >= 2)
     }
 
     @Test fun `超过展开深度时只留占位`() {
         var body = "<recordinfo><title>第4层</title><datalist>" + item("丁", "最里") + "</datalist></recordinfo>"
-        repeat(3) { level ->
+        repeat(7) { level ->
             body = "<recordinfo><title>第${level}层</title><datalist>" + item("张三", "第${level}层正文") +
                 "<dataitem datatype=\"17\"><datatitle>下层</datatitle><datadesc>[聊天记录]</datadesc>" +
                 "<recordxml>${body}</recordxml></dataitem></datalist></recordinfo>"
         }
         val message = requireNotNull(ForwardDigest.parse(wrap(body)))
-        assertTrue(message.items.any { it.text == "[聊天记录]" })
+        assertTrue(message.items.any { it.text.contains("[聊天记录]") })
         assertTrue(message.items.size <= ForwardDigest.MAX_ITEMS)
     }
 
@@ -121,5 +120,86 @@ class ForwardDigestTest {
             "</datalist></recordinfo>") + padding
         val message = requireNotNull(ForwardDigest.parse(raw))
         assertEquals("正常内容", message.items[0].text)
+    }
+
+    @Test fun `整屏填充字符被跳过`() {
+        val filler = "uinull".repeat(200)
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist>" +
+            item("张三", filler) + item("李四", "正常内容") + "</datalist></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertEquals(1, message.items.size)
+        assertEquals("正常内容", message.items[0].text)
+        assertTrue(message.omitted >= 1)
+    }
+
+    @Test fun `零宽字符与不可打印字符被清掉`() {
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist>" +
+            item("张三", "前面\u200B\u200C后面") + "</datalist></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertEquals("前面后面", message.items[0].text)
+    }
+
+    @Test fun `desc 里的 null 填充被剥掉`() {
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><desc>李工: " + "null".repeat(100) +
+            "真正内容</desc></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertEquals("真正内容", message.items[0].text)
+    }
+
+    @Test fun `合并转发在回复上下文里摊平成文字`() {
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist>" +
+            item("张三", "明晚八点见") + "</datalist></recordinfo>")
+        val meta = dev.jev.wechatmood.hook.MessageMetadata(49, 0, raw, "chat", 9, 1000)
+        val context = ReplyContext.collect("chat", listOf(meta))
+        assertEquals(1, context.messages.size)
+        assertTrue(context.messages[0].text.contains("合并转发"))
+        assertTrue(context.messages[0].text.contains("明晚八点见"))
+    }
+
+    @Test fun `夹在中间的填充段也会被剥掉`() {
+        val filler = "null".repeat(40)
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><desc>诺: " + filler +
+            "[聊天记录]" + filler + "李工在群里说要去广医</desc></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertEquals("[聊天记录]李工在群里说要去广医", message.items[0].text)
+    }
+
+    @Test fun `uinull 重复段被整段剥掉`() {
+        val filler = "uinull".repeat(120)
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><desc>Sun: " + filler +
+            "全世界都在找李工</desc></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertEquals("全世界都在找李工", message.items[0].text)
+    }
+
+    @Test fun `嵌套里层的 datadesc 不会漏`() {
+        val inner = "<recordinfo><datalist><dataitem datatype=\"1\"><datadesc>里层内容</datadesc>" +
+            "<sourcename>乙</sourcename></dataitem></datalist></recordinfo>"
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist count=\"2\">" +
+            "<dataitem datatype=\"17\"><datatitle>内层</datatitle><datadesc>[聊天记录]</datadesc>" +
+            "<recordxml>$inner</recordxml></dataitem></datalist></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertTrue(message.items.any { it.text.contains("里层内容") })
+    }
+
+    @Test fun `带偏移的 null 重复也能剥掉`() {
+        val filler = "l" + "null".repeat(100)
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><desc>Sun: " + filler +
+            "全世界都在找李工</desc></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        val text = message.items[0].text
+        assertTrue(text.contains("全世界都在找李工"))
+        assertTrue(!text.contains("null"))
+    }
+
+    @Test fun `同一人连续发言合并且纯语气被丢掉`() {
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist>" +
+            item("张三", "哈哈哈") + item("张三", "明天几点到") + item("张三", "我开车") +
+            item("李四", "好") + item("李四", "八点半吧") + "</datalist></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        val sender = message.items.first { it.sender == "张三" }
+        assertTrue(sender.text.contains("明天几点到"))
+        assertTrue(sender.text.contains("我开车"))
+        assertTrue(message.items.none { it.text == "哈哈哈" || it.text == "好" })
     }
 }

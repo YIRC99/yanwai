@@ -85,7 +85,12 @@ object ReplyProtocol {
                     .put("type", "media").put("media", context.targetMedia)
                     .put("note", "对方发来一张${context.targetMedia}")
                 else -> focusMessageId?.let { id -> context.messages.firstOrNull { it.id == id } }?.let { target ->
-                    JSONObject().put("id", target.id).put("speaker", target.speaker).put("text", target.text)
+                    val obj = JSONObject().put("id", target.id).put("speaker", target.speaker).put("text", target.text)
+                    // 长按的是合并转发：这段文本是本地摊平出来的，得告诉模型回的是什么。
+                    if (target.text.startsWith("【合并转发")) {
+                        obj.put("type", "forward").put("note", "对方发来一段聊天记录，本轮要接住这段记录里的内容与情绪")
+                    }
+                    obj
                 } ?: JSONObject.NULL
             })
             .put("omitted_media", context.omittedMedia).put("context_trimmed", context.trimmed)
