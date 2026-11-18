@@ -97,12 +97,10 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
 
     init {
         val records = filtered.map {
-            StatRecord(it.time, if (it.speaker == "我") 1 else 0, 1, it.text, it.speaker)
+            StatRecord(it.time, if (it.speaker == "我") 1 else 0, it.type, it.text, it.speaker)
         }
-        val base = GroupStatsCalculator.compute(records, sampled = context.trimmed)
-        // 媒体不在回复上下文里，用漏掉的条数补上，否则永远是 0。
-        val voices = context.messages.count { it.voiceState == dev.jev.wechatmood.voice.VoiceState.READY }
-        stats = base.copy(media = context.omittedMedia, voice = voices)
+        // 图片/语音数量与表格、AI 观察共用同一批筛选记录；筛选范围外的媒体不计入。
+        stats = GroupStatsCalculator.compute(records, sampled = context.trimmed)
     }
 
     fun show() {
@@ -243,6 +241,14 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
             addView(body)
         }
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        if (accountScope == null) {
+            root.addView(TextView(activity).apply {
+                text = "无法确认当前登录账号，只统计当前页面可见的 ${filtered.size} 条消息"
+                textSize = 11f
+                setTextColor(theme.muted)
+                setPadding(theme.dp(20), theme.dp(4), theme.dp(20), 0)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
         val modelName = ModulePrefs.replySettings().model.takeIf { it.isNotBlank() } ?: "未配置"
         root.addView(TextView(activity).apply {
             text = "点「AI 观察」会把当前筛选的 ${minOf(filtered.size, 30)} 条消息文本发给模型（$modelName）"

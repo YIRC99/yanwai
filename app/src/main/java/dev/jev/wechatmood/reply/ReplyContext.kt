@@ -7,7 +7,9 @@ import dev.jev.wechatmood.voice.VoiceState
 import dev.jev.wechatmood.voice.VoiceText
 
 data class ReplyMessage(val id: Long, val speaker: String, val time: Long, val text: String,
-    val voice: VoiceSource? = null, val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING)
+    val voice: VoiceSource? = null, val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING,
+    /** 原始消息类型：统计要按 3/47 计图片、按 34 计语音，不能用正文猜。 */
+    val type: Int = 1)
 /** Identity check only. Media payloads stay out of the reply context and model input. */
 data class ReplyHistoryAnchor(val id: Long, val type: Int, val sent: Int, val time: Long, val digest: String) {
     fun matches(record: MessageMetadata): Boolean = this == from(record)
@@ -21,7 +23,7 @@ enum class ReplyContextSource { LOADED_PAGE, LOCAL_HISTORY }
 data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, val omittedMedia: Int = 0,
     val trimmed: Boolean = false, val latestLoadedId: Long = messages.lastOrNull()?.id ?: 0,
     val source: ReplyContextSource = ReplyContextSource.LOADED_PAGE, val historyFailure: String? = null,
-    val requestedMessages: Int = MAX_MESSAGES, val historyAnchor: ReplyHistoryAnchor? = null,
+    val requestedMessages: Int = ReplyHistoryLimit.DEFAULT, val historyAnchor: ReplyHistoryAnchor? = null,
     val background: ContactBackground = ContactBackground(), val focusMessageId: Long = 0,
     val targetMedia: String? = null, val targetImageDataUri: String? = null, val focusText: String? = null,
     val facts: List<RelationFact> = emptyList()) {
@@ -38,8 +40,14 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
             require(maxMessages in 1..MAX_MESSAGES)
             val same = records.filter { it.talker == talker }.distinctBy { if (it.messageId > 0) "id:${it.messageId}" else "${it.createdAt}:${it.isSend}:${it.content}" }
             // 引用消息即使解析不出正文也要保留：丢掉它会让模型对着上下文里别的消息作答。
-            val eligible = same.filter { it.isSend in 0..1 &&
-                (it.type == 49 || it.type == 822083633 || it.plainText() != null || it.voiceSource() != null) }
+            // 超过 1000 字的单条消息只是分析功能的限制，回复上下文由下面的总预算裁剪，
+            // 这里按内容是否可用筛选，不能因为正文超长就把整条消息丢掉。
+            val eligible = same.filter { it.isSend in 0..1 && when (it.type) {
+                1 -> it.content.isNotBlank()
+                34 -> it.voiceSource() != null
+                49, 822083633 -> true
+                else -> it.plainText() != null
+            } }
             val text = eligible.takeLast(maxMessages)
             var budget = MAX_CHARACTERS
             var trimmed = eligible.size > maxMessages
@@ -70,7 +78,8 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
                 val cut = body.take(end)
                 if (cut.length != body.length) trimmed = true
                 budget -= cut.length
-                ReplyMessage(record.messageId, record.speaker(), record.createdAt, cut, record.voiceSource())
+                ReplyMessage(record.messageId, record.speaker(), record.createdAt, cut, record.voiceSource(),
+                    type = record.type)
             }.asReversed()
             return ReplyContext(talker, selected, same.count { it.type !in setOf(1, 34) }, trimmed, same.lastOrNull()?.messageId ?: 0,
                 requestedMessages = maxMessages,

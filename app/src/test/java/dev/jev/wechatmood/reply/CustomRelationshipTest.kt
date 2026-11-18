@@ -65,7 +65,7 @@ class CustomRelationshipTest {
 
     @Test fun `topic pool is bound to custom identity and resets only after fresh generation`() {
         val c = ReplyComposition().apply { relationship = ReplyRelationship.OTHER; customRelationship = "前同事" }
-        val key = TopicKey(context.fingerprint, 100, ReplyRelationship.OTHER, "", "", time.date, "前同事")
+        val key = TopicKey(context.fingerprint, context.requestedMessages, ReplyRelationship.OTHER, "", "", time.date, "前同事")
         assertTrue(c.acceptTopics(context, topics, key, null))
         assertTrue(c.nextTopic(key))
         c.customRelationship = "相亲对象"

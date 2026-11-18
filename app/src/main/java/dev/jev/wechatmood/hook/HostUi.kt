@@ -148,13 +148,19 @@ class HostUi(private val activity: Activity) {
             val since = StatsFilter.sinceMillis()
             // 先确认当前登录账号，只统计这个账号的聊天记录。
             val account = runCatching { ReplyDatabaseHistory.replyAccount(context) }.getOrNull()
-            val rows = runCatching {
-                ReplyDatabaseHistory.statMessages(context.talker, since,
-                    if (StatsFilter.limit == 0) 5000 else StatsFilter.limit, account)
-            }.getOrDefault(emptyList())
-            val mapped = rows.map {
-                dev.jev.wechatmood.reply.ReplyMessage(it.messageId, it.speaker(), it.createdAt,
-                    it.analysisText() ?: "[媒体]")
+            val mapped: List<dev.jev.wechatmood.reply.ReplyMessage> = if (account == null) {
+                // 账号确认不了时不查历史库（可能混进另一个账号同群的消息），只用当前可见页面。
+                dev.jev.wechatmood.core.MoodLog.i("STATS_SCOPE unknown fallback=page msgs=${context.messages.size}")
+                context.messages
+            } else {
+                val rows = runCatching {
+                    ReplyDatabaseHistory.statMessages(context.talker, since,
+                        if (StatsFilter.limit == 0) 5000 else StatsFilter.limit, account)
+                }.getOrDefault(emptyList())
+                rows.map {
+                    dev.jev.wechatmood.reply.ReplyMessage(it.messageId, it.speaker(), it.createdAt,
+                        it.analysisText() ?: "[媒体]", type = it.type)
+                }
             }
             GroupStatsUi(activity, context, mapped, account) { showStats() }.show()
         }

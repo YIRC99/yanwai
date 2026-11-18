@@ -32,11 +32,19 @@ class ApiSettingsTest {
 
     @Test fun `unknown hosts and nonstandard paths remain custom during migration`() {
         for (url in listOf("https://openrouter.ai.evil.example/api/v1", "https://example.org/openrouter.ai",
-            "https://openrouter.ai/custom", "http://openrouter.ai/api/v1", "https://openrouter.ai:8443/api/v1")) {
+            "https://openrouter.ai/custom", "https://openrouter.ai:8443/api/v1")) {
             val settings = ApiSettings.fromInput(url, "test")
             assertEquals(JevProvider.CUSTOM, settings.provider)
             assertEquals(url, settings.endpoint)
         }
+    }
+
+    @Test fun `公网明文地址被拒绝而本机与局域网仍可用`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ApiSettings.fromInput("http://openrouter.ai/api/v1", "test")
+        }
+        assertEquals("http://192.168.1.10:8080/v1", ApiSettings.fromInput("http://192.168.1.10:8080/v1", "test").endpoint)
+        assertEquals("http://127.0.0.1:11434/v1", ApiSettings.fromInput("http://127.0.0.1:11434/v1", "test").endpoint)
     }
 
     @Test fun `explicit custom URL is kept even on a known host`() {

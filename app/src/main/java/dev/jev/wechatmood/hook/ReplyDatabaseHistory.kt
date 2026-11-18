@@ -31,6 +31,15 @@ object ReplyDatabaseHistory {
     private fun scope(db: Any): String? = (db.javaClass.getMethod("getPath").invoke(db) as? String)
         ?.replace('\\', '/')?.takeIf { it.endsWith("/EnMicroMsg.db") }?.let { AnalysisCacheKey.digest(it) }
 
+    /**
+     * 只保留属于当前账号的数据库。
+     * 账号无法确认时返回空列表：宁可只用当前可见页面，也不能把另一个账号同群的历史算进来。
+     */
+    internal fun databasesForScope(databases: List<Any>, accountScope: String?): List<Any> {
+        if (accountScope == null || !accountScope.matches(Regex("[0-9a-f]{64}"))) return emptyList()
+        return databases.filter { scope(it) == accountScope }
+    }
+
     fun install(loader: ClassLoader) {
         var hooks = 0
         for (name in listOf("com.tencent.wcdb.compat.SQLiteDatabase", "com.tencent.wcdb.database.SQLiteDatabase")) {
@@ -151,11 +160,11 @@ object ReplyDatabaseHistory {
     suspend fun statMessages(talker: String, sinceMillis: Long, limit: Int,
         accountScope: String? = null): List<MessageMetadata> = withContext(Dispatchers.IO) {
         val out = mutableListOf<MessageMetadata>()
-        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        // 账号无法确认时这里为空，调用方改用当前可见页面的数据。
+        val databases = databasesForScope(
+            synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }, accountScope)
         var since = sinceMillis
         for (db in databases) {
-            // 只查当前账号的库：多账号在同一群时，另一个账号的历史库可能仍然打开。
-            if (accountScope != null && scope(db) != accountScope) continue
             // 微信不同版本 createTime 有秒也有毫秒，先看一条样本再决定。
             val sample = runCatching {
                 var value = 0L
@@ -205,12 +214,13 @@ object ReplyDatabaseHistory {
     suspend fun displayNames(usernames: List<String>, accountScope: String? = null): Map<String, String> = withContext(Dispatchers.IO) {
         val wanted = usernames.filter { it.isNotBlank() }.distinct()
         if (wanted.isEmpty()) return@withContext emptyMap()
-        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        // rcontact 和 stranger 必须查同一组已确认的库，否则回退查询会翻到另一个账号的昵称。
+        val databases = databasesForScope(
+            synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }, accountScope)
         val result = mutableMapOf<String, String>()
         var errors = 0
         for (name in wanted) {
             for (db in databases) {
-                if (accountScope != null && scope(db) != accountScope) continue
                 // 单条查询，避免 IN 参数或字段名差异导致整批失败。
                 val found = runCatching {
                     var value: String? = null

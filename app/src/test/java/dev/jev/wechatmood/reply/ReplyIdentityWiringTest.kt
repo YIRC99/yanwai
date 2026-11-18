@@ -36,7 +36,7 @@ class ReplyIdentityWiringTest {
     }
     @Test fun `drawer finishes identity load before creating editor and edits save independently of generation`() {
         val ui = source("hook/ReplyHostUi.kt")
-        val open = ui.indexOf("openResolved(focusMessageId, live, owner, identity, preferredLimit, background, imageDataUri, loadedFacts)")
+        val open = ui.indexOf("openResolved(focusMessageId, live, owner, identity, preferredLimit, background, imageDataUri, loadedFacts, autoTopics)")
         assertTrue(open >= 0)
         assertTrue(ui.indexOf("ReplyIdentityBridge.load(") in 0 until open)
         assertTrue(ui.indexOf("ReplyLimitBridge.load(") in 0 until open)
