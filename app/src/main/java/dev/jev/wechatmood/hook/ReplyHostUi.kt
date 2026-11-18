@@ -31,11 +31,12 @@ import dev.jev.wechatmood.reply.*
 import kotlinx.coroutines.*
 
 /** Native widgets only: module resource IDs are not valid inside the host's resource table. */
-class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> View) {
+class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> View,
+    private val openPanel: () -> Unit = {}) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val session = ReplySession()
     private val history = ReplyHistory.process
-    private val plusEntry = ReplyPlusRow(activity, createAnalysisControl) { open() }
+    private val plusEntry = ReplyPlusRow(activity, createAnalysisControl) { openPanel(); true }
     private var job: Job? = null
     private var historyJob: Job? = null
     private var openingJob: Job? = null
@@ -101,7 +102,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         return found
     }
 
-    fun open(focusMessageId: Long? = null, imageDataUri: String? = null): Boolean {
+    fun open(focusMessageId: Long? = null, imageDataUri: String? = null, autoTopics: Boolean = false): Boolean {
         targetFocusId = focusMessageId ?: 0
         targetImage = imageDataUri
         val selectedTalker = talker ?: return false
@@ -136,7 +137,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     !owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
                     !owner.acceptsAccount(latestAccount)) return@launch
                 // All reads finish before the editor is created, so a late load cannot erase typed text.
-                openResolved(focusMessageId, live, owner, identity, preferredLimit, background, imageDataUri, loadedFacts)
+                openResolved(focusMessageId, live, owner, identity, preferredLimit, background, imageDataUri, loadedFacts, autoTopics)
             } catch (e: CancellationException) { throw e }
             catch (error: Exception) {
                 MoodLog.e("REPLY_SETTINGS_READ_FAILED", error)
@@ -153,7 +154,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
 
     private fun openResolved(focusMessageId: Long?, live: ReplyContext, owner: ReplyIdentityOwner,
         identity: ReplyIdentitySetting, preferredLimit: Int, contactBackground: ContactBackground,
-        imageDataUri: String? = null, loadedFacts: List<RelationFact> = emptyList()): Boolean {
+        imageDataUri: String? = null, loadedFacts: List<RelationFact> = emptyList(),
+        autoTopics: Boolean = false): Boolean {
         facts = loadedFacts
         val selectedTalker = owner.talker
         val generation = ModulePrefs.analysisSettings()?.generation
@@ -1030,6 +1032,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND); setDimAmount(0.32f)
         }
         window.show()
+        if (autoTopics) generate("", true)
         // 开关打开时按条件静默整理一次：距上次超过 3 天，或这段时间新增了 30 条以上消息。
         val factsKey = owner.key
         if (RelationFactBridge.enabled(activity) && factsKey != null) {

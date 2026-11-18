@@ -133,9 +133,11 @@ object ReplyProtocol {
             val replies = result.getJSONArray("replies")
             check(replies.length() in 1..6)
             // Android org.json coerces getString values, unlike the JVM test implementation.
-            (0 until replies.length()).map { (replies.get(it) as? String ?: error("Invalid reply part")).trim() }
-        } else listOf((result.get("reply") as? String ?: error("Invalid reply")).trim())
-        ReplySuggestion(parts, (result.opt("reason") as? String).orEmpty().trim().take(2000))
+            (0 until replies.length()).map {
+                dev.jev.wechatmood.core.TextClean.plain((replies.get(it) as? String ?: error("Invalid reply part")).trim())
+            }
+        } else listOf(dev.jev.wechatmood.core.TextClean.plain((result.get("reply") as? String ?: error("Invalid reply")).trim()))
+        ReplySuggestion(parts, dev.jev.wechatmood.core.TextClean.plain((result.opt("reason") as? String).orEmpty()).take(2000))
     } catch (error: Exception) {
         val detail = error.message.orEmpty()
         throw IllegalStateException(

@@ -22,7 +22,7 @@ class ReplyEntrySafetyTest {
         val reply = source("ReplyHostUi")
         assertTrue(reply.contains("plusEntry.update(footer())"))
         assertTrue(reply.substringAfter("fun hide()").contains("plusEntry.clear()"))
-        assertTrue(reply.contains("ReplyPlusRow(activity, createAnalysisControl) { open() }"))
+        assertTrue(reply.contains("ReplyPlusRow(activity, createAnalysisControl) { openPanel(); true }"))
     }
 
     @Test fun `plus row uses the historical inner panel mount and restores native content`() {
@@ -48,7 +48,7 @@ class ReplyEntrySafetyTest {
         val host = source("HostUi")
         assertFalse(host.contains("ActionBarContainer"))
         assertFalse(host.contains("header.addView"))
-        assertTrue(source("ReplyPlusRow").contains("row.addView(createAnalysisControl()"))
+        assertTrue(source("ReplyPlusRow").contains("theme.action(\"附加\", primary = true)"))
         assertTrue(host.contains("setOnLongClickListener { showActions(); true }"))
         assertTrue(host.contains("帮我回 / 上次建议"))
         assertTrue(host.contains("0 -> replyUi.open()"))

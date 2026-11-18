@@ -110,7 +110,7 @@ object DraftCheckProtocol {
     internal fun simpleParse(body: String): String? = runCatching {
         val content = JSONObject(body).getJSONArray("choices").getJSONObject(0)
             .getJSONObject("message").getString("content").trim()
-        content.lines().firstOrNull { it.isNotBlank() }?.trim()
+        content.lines().firstOrNull { it.isNotBlank() }?.let { dev.jev.wechatmood.core.TextClean.plain(it) }
             ?.removeSurrounding("「", "」")?.removeSurrounding("\"")
             ?.take(MAX_REWRITE)?.takeIf { it.isNotBlank() && it != "无" }
     }.getOrNull()
@@ -119,13 +119,14 @@ object DraftCheckProtocol {
         val content = JSONObject(body).getJSONArray("choices").getJSONObject(0)
             .getJSONObject("message").getString("content").trim()
         val sections = sections(content)
-        val responded = sections["回应"]?.take(40)?.takeIf { it.isNotBlank() }
-        val verdict = sections["判断"]?.take(120)?.takeIf { it.isNotBlank() }
+        val responded = sections["回应"]?.let { dev.jev.wechatmood.core.TextClean.plain(it) }?.take(40)?.takeIf { it.isNotBlank() }
+        val verdict = sections["判断"]?.let { dev.jev.wechatmood.core.TextClean.plain(it) }?.take(120)?.takeIf { it.isNotBlank() }
         val problems = sections["问题"] ?: sections["毛病"]
         val issues = problems?.split("；", ";", "\n")?.map { it.trim() }?.filter { it.isNotEmpty() && it != "无" }
-            ?.take(2)?.map { it.take(MAX_ISSUE) }.orEmpty()
+            ?.take(2)?.map { dev.jev.wechatmood.core.TextClean.plain(it).take(MAX_ISSUE) }.orEmpty()
         val rewrite = (sections["改写"] ?: sections["可以改成"] ?: sections["建议"])
-            ?.trim()?.take(MAX_REWRITE)?.takeIf { it.isNotBlank() && it != "无" && it != "不需要" }
+            ?.let { dev.jev.wechatmood.core.TextClean.plain(it) }?.take(MAX_REWRITE)
+            ?.takeIf { it.isNotBlank() && it != "无" && it != "不需要" }
         dev.jev.wechatmood.core.MoodLog.i(
             "DRAFT_CHECK ok chars=${content.length} issues=${issues.size} rewrite=${rewrite != null} verdict=${verdict != null}")
         DraftCheck(issues, rewrite, verdict = verdict, responded = responded)
