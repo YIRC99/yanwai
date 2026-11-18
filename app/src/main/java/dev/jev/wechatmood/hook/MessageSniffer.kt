@@ -271,6 +271,18 @@ object MessageSniffer {
             .filter { it.talker == talker && it.isReplyTarget(allowMedia = true) }.distinct().singleOrNull()
     }
 
+    /** 长按的合并转发消息：自己发出去的也要能取，所以不按接收方向过滤。 */
+    fun forwardForView(view: View): MessageMetadata? {
+        val activity = active.get() ?: return null
+        val scope = chatNodes(activity.window.decorView)
+        val current = records(scope)
+        val talker = conversation(activity, scope, current) ?: return null
+        val ancestors = generateSequence(view) { it.parent as? View }.toSet()
+        return current.filter { it.first in ancestors }.mapNotNull { it.second.metadata }
+            .filter { it.talker == talker && it.type == 49 && dev.jev.wechatmood.reply.ForwardDigest.isForward(it.content) }
+            .distinct().singleOrNull()
+    }
+
     fun suggestReply(view: View, expected: MessageMetadata): Boolean {
         val target = replyTargetForView(view) ?: return false
         if (target != expected) return false
