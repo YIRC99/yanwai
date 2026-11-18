@@ -46,9 +46,12 @@ internal class ForwardDigestUi(private val activity: Activity, private val messa
         val status = TextView(activity).apply {
             textSize = 11f
             setTextColor(theme.muted)
-            text = if (message.omitted > 0) "已省略 ${message.omitted} 条过长或过多的内容"
-            else if (message.nested > 0) "含 ${message.nested} 条嵌套聊天记录，只展开了一层"
-            else ""
+            text = when {
+                message.truncatedRaw -> "内容超过 512K，只读取了前面的部分"
+                message.omitted > 0 -> "已省略 ${message.omitted} 条过长或过多的内容"
+                message.nested > 0 -> "含 ${message.nested} 条嵌套聊天记录，已展开到第 3 层"
+                else -> ""
+            }
             setPadding(theme.dp(20), 0, theme.dp(20), theme.dp(4))
         }
         footer = status
@@ -123,7 +126,7 @@ internal class ForwardDigestUi(private val activity: Activity, private val messa
         text?.text = content
         copy.isEnabled = true
         copy.alpha = 1f
-        footer?.text = if (message.omitted > 0) "已省略 ${message.omitted} 条过长或过多的内容" else (footer?.text ?: "")
+        if (message.omitted > 0) footer?.text = "已省略 ${message.omitted} 条过长或过多的内容"
     }
 
     fun dismiss() {

@@ -85,4 +85,41 @@ class ForwardDigestTest {
         assertTrue(text.contains("2. 李四: 二"))
         assertTrue(!text.contains("<"))
     }
+
+    @Test fun `datatype 17 的三层嵌套按 recordxml 展开`() {
+        val innermost = "<recordinfo><title>最早</title><datalist>${item("甲", "里层内容")}</datalist></recordinfo>"
+        val middle = "<recordinfo><title>中层</title><datalist>${item("乙", "中层内容")}" +
+            "<dataitem datatype=\"17\"><datatitle>最早</datatitle><datadesc>[聊天记录]</datadesc>" +
+            "<recordxml>$innermost</recordxml></dataitem></datalist></recordinfo>"
+        val raw = wrap("<recordinfo><title>外层</title><datalist>${item("丙", "外层内容")}" +
+            "<dataitem datatype=\"17\"><datatitle>中层</datatitle><datadesc>中层</datadesc>" +
+            "<recordxml>$middle</recordxml></dataitem></datalist></recordinfo>")
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertEquals(3, message.items.size)
+        assertEquals("外层内容", message.items[0].text)
+        assertEquals("中层内容", message.items[1].text)
+        assertEquals("里层内容", message.items[2].text)
+        assertEquals(2, message.nested)
+    }
+
+    @Test fun `超过展开深度时只留占位`() {
+        var body = "<recordinfo><title>第4层</title><datalist>" + item("丁", "最里") + "</datalist></recordinfo>"
+        repeat(3) { level ->
+            body = "<recordinfo><title>第${level}层</title><datalist>" + item("张三", "第${level}层正文") +
+                "<dataitem datatype=\"17\"><datatitle>下层</datatitle><datadesc>[聊天记录]</datadesc>" +
+                "<recordxml>${body}</recordxml></dataitem></datalist></recordinfo>"
+        }
+        val message = requireNotNull(ForwardDigest.parse(wrap(body)))
+        assertTrue(message.items.any { it.text == "[聊天记录]" })
+        assertTrue(message.items.size <= ForwardDigest.MAX_ITEMS)
+    }
+
+    @Test fun `超长原始 XML 被截断而不是异常`() {
+        val padding = "x".repeat(ForwardDigest.MAX_RAW_CHARS + 2048)
+        assertNull(ForwardDigest.parse(padding))
+        val raw = wrap("<recordinfo><title>群聊的聊天记录</title><datalist>" + item("张三", "正常内容") +
+            "</datalist></recordinfo>") + padding
+        val message = requireNotNull(ForwardDigest.parse(raw))
+        assertEquals("正常内容", message.items[0].text)
+    }
 }
