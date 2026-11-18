@@ -224,10 +224,15 @@ object ReplyDatabaseHistory {
                 // 单条查询，避免 IN 参数或字段名差异导致整批失败。
                 val found = runCatching {
                     var value: String? = null
-                    query(db, "SELECT conRemark, nickname FROM rcontact WHERE username = ?", arrayOf(name)).use { cursor ->
+                    // 群消息里的 speaker 有时是微信号而不是 wxid，username 和 alias 一起查，
+                    // 备注、昵称、微信号依次回退，能多认出一批人。
+                    query(db, "SELECT conRemark, nickname, alias FROM rcontact WHERE username = ? OR alias = ? LIMIT 1",
+                        arrayOf(name, name)).use { cursor ->
                         if (cursor.moveToFirst()) {
-                            value = runCatching { cursor.getString(0) }.getOrNull()?.takeIf { it.isNotBlank() }
-                                ?: runCatching { cursor.getString(1) }.getOrNull()?.takeIf { it.isNotBlank() }
+                            value = (0..2).asSequence()
+                                .mapNotNull { index -> runCatching { cursor.getString(index) }.getOrNull() }
+                                .map { dev.jev.wechatmood.core.TextClean.plain(it).trim() }
+                                .firstOrNull { it.isNotEmpty() && !it.equals("null", true) && !it.equals("uinull", true) }
                         }
                     }
                     value
@@ -239,7 +244,9 @@ object ReplyDatabaseHistory {
                     val found = runCatching {
                         var value: String? = null
                         query(db, "SELECT nickname FROM stranger WHERE username = ?", arrayOf(name)).use { cursor ->
-                            if (cursor.moveToFirst()) value = runCatching { cursor.getString(0) }.getOrNull()?.takeIf { it.isNotBlank() }
+                            if (cursor.moveToFirst()) value = runCatching { cursor.getString(0) }.getOrNull()
+                                ?.let { dev.jev.wechatmood.core.TextClean.plain(it).trim() }
+                                ?.takeIf { it.isNotEmpty() && !it.equals("null", true) && !it.equals("uinull", true) }
                         }
                         value
                     }.onFailure { errors++ }.getOrNull()

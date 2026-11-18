@@ -19,11 +19,14 @@ import java.util.Locale
 object StatsImage {
     private const val WIDTH = 1080
     private const val PAD = 72f
-    private val BG = Color.parseColor("#10171A")
-    private val CARD = Color.parseColor("#182226")
-    private val INK = Color.parseColor("#F2F5F4")
-    private val MUTED = Color.parseColor("#9AA8A6")
-    private val ACCENT = Color.parseColor("#2C7A73")
+    /** 每 dp 的像素数：分享图和界面共用 360dp 宽度基准，圆角看起来才一致。 */
+    private val DP = WIDTH / 360f
+    // 固定深色配色，取值与 ReplyTheme 的深色一套相同；不跟随宿主主题。
+    private val BG = Color.parseColor("#111B17")
+    private val CARD = Color.parseColor("#1C2A24")
+    private val INK = Color.parseColor("#E1EEE6")
+    private val MUTED = Color.parseColor("#A6B9AF")
+    private val ACCENT = Color.parseColor("#8CD7C0")
 
     fun render(stats: GroupStats, names: Map<String, String>, analysis: String?, title: String): Bitmap {
         val titlePaint = text(48f, INK, Typeface.BOLD)
@@ -75,14 +78,14 @@ object StatsImage {
                 canvas.drawText(value, WIDTH - PAD - rowValuePaint.measureText(value), y, rowValuePaint)
                 // 条形长度按最高值归一，直观看出谁说得最多。
                 val barWidth = (WIDTH - PAD * 2) * (count.toFloat() / max)
-                canvas.drawRoundRect(PAD, y + 12, PAD + barWidth, y + 22, 5f, 5f, fillPaint(ACCENT))
+                canvas.drawRoundRect(PAD, y + 12, PAD + barWidth, y + 22, 6 * DP, 6 * DP, fillPaint(ACCENT))
                 y += 64
             }
             y += 12
         }
 
         if (bodyLines.isNotEmpty()) {
-            canvas.drawRoundRect(PAD, y, WIDTH - PAD, y + bodyLines.size * 44 + 64, 24f, 24f, fillPaint(CARD))
+            canvas.drawRoundRect(PAD, y, WIDTH - PAD, y + bodyLines.size * 44 + 64, 14 * DP, 14 * DP, fillPaint(CARD))
             y += 46
             bodyLines.forEach { line ->
                 canvas.drawText(line, PAD + 24, y, bodyPaint)
