@@ -83,7 +83,10 @@ object MessageMenu {
                         val view = param.args[1] as? View ?: return@runCatching
                         val input = MessageSniffer.inputForView(view)?.takeIf { ManualAnalysis.identity(it) != null }
                         val replyTarget = MessageSniffer.replyTargetForView(view)
-                        if (input == null && replyTarget == null) return@runCatching
+                        if (input == null && replyTarget == null) {
+                            MoodLog.i("MESSAGE_MENU_NO_REPLY " + MessageSniffer.describeTarget(view))
+                            return@runCatching
+                        }
                         val menu = param.args[0] ?: return@runCatching
                         if (menu is Menu && (menu.findItem(ITEM_ID) != null || menu.findItem(REPLY_ITEM_ID) != null)) return@runCatching
                         val add = menu.javaClass.methods.singleOrNull {

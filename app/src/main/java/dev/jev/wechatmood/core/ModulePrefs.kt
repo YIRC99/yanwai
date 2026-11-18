@@ -10,6 +10,8 @@ import java.util.concurrent.TimeUnit
 object ModulePrefs {
     const val FILE_NAME = "wechatmood_config"
     const val KEY_EXPLORE = "explore_mode"
+    /** 关系档案自动提取，默认关闭；开启后才会在打开「帮我回」时顺带跑一次。 */
+    const val KEY_RELATION_FACTS = "relation_facts_auto"
     const val KEY_API_KEY = "api_key"
     const val KEY_API_BASE = "api_base"
     const val KEY_API_PROVIDER = "api_provider"
@@ -64,16 +66,14 @@ object ModulePrefs {
     private fun warmReplySnapshot() {
         if (warmScheduled) return
         val ctx = context ?: return
-        val current = session.current ?: return
-        val generation = current.generation
-        val version = "${current.generation}:${current.rolesRevision}"
+        val generation = session.current?.generation ?: return
         warmScheduled = true
         bridgeWorker.execute {
             runCatching {
                 val response = SettingsTransport.call(ctx, "reply_role_list", null,
                     Bundle().apply { putString(SettingsProvider.KEY_GENERATION, generation) })
                 val roles = response?.getStringArrayList("roles") ?: return@runCatching
-                ReplySnapshotCache.saveRoles(ctx, roles, version)
+                ReplySnapshotCache.saveRoles(ctx, roles)
                 MoodLog.i("REPLY_ROLES_WARMED count=${roles.size}")
             }.onFailure {
                 warmScheduled = false
@@ -82,9 +82,12 @@ object ModulePrefs {
         }
     }
     fun init(context: Context) {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         val app = context.applicationContext ?: context
         this.context = app
-        AnalysisResultCache.init(app)
+        // 打开 SQLite 属于磁盘 IO，放到后台，别卡启动。
+        runCatching { java.util.concurrent.Executors.newSingleThreadExecutor().execute { AnalysisResultCache.init(app) } }
+        UsageReporter.init(app)
         if (app.packageName == "com.tencent.mm" && conversations == null) {
             val local = app.getSharedPreferences("yanwai_conversations", Context.MODE_PRIVATE)
             conversations = ConversationSwitches(local.getStringSet("enabled_chats", emptySet()).orEmpty()) {
@@ -103,6 +106,7 @@ object ModulePrefs {
             }
             requestReload(force = true)
         } else reload(force = true)
+        MoodLog.i("STARTUP_PREFS took=${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
     }
 
     private fun cachedSnapshot(): RuntimeSettings? = runCatching {
@@ -123,12 +127,7 @@ object ModulePrefs {
         val snapshot = SettingsSync.decode(bundle)
         if (snapshot == null) { MoodLog.w("SYNC_INVALID 广播配置不完整"); return }
         // Invalidate a changed installation immediately, without waiting for Provider I/O.
-        val accepted = bridge.receive(snapshot)
-        // A broadcast that is rejected (unverified reset, retired generation, stale revision)
-        // must not overwrite the on-disk fallback with credentials the session never adopted.
-        if (accepted && analysisSettings()?.revision == snapshot.revision) {
-            context?.let { SettingsSnapshotCache.save(it, bundle) }
-        }
+        bridge.receive(snapshot)
         MoodLog.protect(snapshot.api.apiKey)
         MoodLog.protect(snapshot.reply.apiKey)
         MoodLog.protect(snapshot.intent.llm.apiKey)

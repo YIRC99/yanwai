@@ -40,6 +40,9 @@ object MessageSniffer {
     private data class PendingCard(val observer: ViewTreeObserver, val listener: ViewTreeObserver.OnPreDrawListener)
     private val pendingCards = mutableMapOf<View, PendingCard>()
     private var idleTicks = 0
+    private data class RecordsSnapshot(val signature: Long, val rows: List<Pair<View, BoundMessage>>)
+    /** 静止画面下 records() 的产物完全一致，签名相同就直接复用，省掉每 tick 的反射与上下文重建。 */
+    private var recordsSnapshot: RecordsSnapshot? = null
     private val tick = object : Runnable {
         override fun run() {
             val activity = active.get() ?: return
@@ -203,8 +206,10 @@ object MessageSniffer {
     fun resume(activity: Activity) {
         ReplyDatabaseHistory.resetAccountScope()
         main.removeCallbacks(tick)
-        SignalAnalyzer.cancelAll()
+        // 不再 cancelAll：看大图、扫一扫回来会把正在跑的两轮分析全部作废并重新计费。
+        // 下一次 scan 会 reconcile(新可见集合, 当前会话)，只清理未开始或已经离开这个会话的请求。
         clearPendingCards()
+        recordsSnapshot = null
         BubbleDecorator.clearAll()
         ui?.dispose()
         ui = null
@@ -238,7 +243,7 @@ object MessageSniffer {
         if (!isVisible(view)) return null
         val scope = chatNodes(activity.window.decorView)
         if (view !in scope) return null
-        val current = records(scope)
+        val current = records(scope, useCache = false)
         val talker = conversation(activity, scope, current) ?: return null
         val ancestors = generateSequence(view) { it.parent as? View }.toSet()
         return current.filter { it.first in ancestors }.mapNotNull { it.second.input }
@@ -257,17 +262,32 @@ object MessageSniffer {
     fun replyTargetForView(view: View): MessageMetadata? {
         val activity = active.get() ?: return null
         val scope = chatNodes(activity.window.decorView)
-        val current = records(scope)
+        val current = records(scope, useCache = false)
         val talker = conversation(activity, scope, current) ?: return null
         val ancestors = generateSequence(view) { it.parent as? View }.toSet()
         return current.filter { it.first in ancestors }.mapNotNull { it.second.metadata }
-            .filter { it.talker == talker && it.isReplyTarget() }.distinct().singleOrNull()
+            .filter { it.talker == talker && it.isReplyTarget(allowMedia = true) }.distinct().singleOrNull()
     }
+
+    /** 长按没出菜单时用：只记数量与哈希，不记聊天内容。 */
+    fun describeTarget(view: View): String = runCatching {
+        val activity = active.get() ?: return "no_activity"
+        val scope = chatNodes(activity.window.decorView)
+        if (scope.isEmpty()) return "no_scope"
+        val current = records(scope, useCache = false)
+        val talker = conversation(activity, scope, current) ?: return "no_talker rows=${current.size}"
+        val ancestors = generateSequence(view) { it.parent as? View }.toSet()
+        val candidates = current.filter { it.first in ancestors }.mapNotNull { it.second.metadata }
+        "talker=${talker.hashCode()} rows=${current.size} matched=${candidates.size} " +
+            "targets=${candidates.count { it.isReplyTarget(allowMedia = true) }}"
+    }.getOrElse { "error=" + it.javaClass.simpleName }
 
     fun suggestReply(view: View, expected: MessageMetadata): Boolean {
         val target = replyTargetForView(view) ?: return false
         if (target != expected) return false
-        return ui?.suggestReply(target.messageId) == true
+        // 图片/表情从已经渲染的气泡取图，绕开微信的 .dat 加密文件。
+        val image = if (target.type == 3 || target.type == 47) MediaImage.capture(view) else null
+        return ui?.suggestReply(target.messageId, image) == true
     }
 
     fun currentReplyTalker(): String? {
@@ -277,7 +297,7 @@ object MessageSniffer {
     }
 
     /** Captures a bounded window from the active loaded adapter at user click time. */
-    fun replyContext(requireBottom: Boolean = true): ReplyContext {
+    fun replyContext(requireBottom: Boolean = true, focusId: Long = 0): ReplyContext {
         val activity = active.get() ?: error("请先打开聊天")
         val scope = chatNodes(activity.window.decorView)
         val rows = records(scope)
@@ -320,7 +340,31 @@ object MessageSniffer {
         }
         val result = ReplyContext.collect(talker, messages.asReversed())
         check(result.historyAnchor != null || result.messages.isNotEmpty()) { "暂时无法核对当前聊天，请重新进入后重试" }
-        return result.copy(trimmed = result.trimmed || messages.size < count)
+        // 图片/表情本身不进 messages，只记下目标类型与引用里的媒体，供请求层提示模型。
+        val target = if (focusId > 0) messages.firstOrNull { it.messageId == focusId } else null
+        val targetMedia = when {
+            target == null -> null
+            target.type == 3 -> "图片"
+            target.type == 47 -> "表情"
+            target.type == 49 || target.type == 822083633 -> when (target.quotedMessage()?.type) {
+                3 -> "图片"
+                47 -> "表情"
+                else -> null
+            }
+            else -> null
+        }
+        // 目标消息可能不在最近 N 条里，单独带一份正文，避免模型只能看到别的消息。
+        val focusText = target?.let { record ->
+            val own = record.plainText()
+            val quoted = record.quotedMessage()
+            when {
+                own == null -> quoted?.text
+                quoted?.text != null -> "【引用${quoted.displayName.orEmpty()}：${quoted.text}】$own"
+                else -> own
+            }
+        }
+        return result.copy(trimmed = result.trimmed || messages.size < count, focusMessageId = focusId,
+            targetMedia = targetMedia, focusText = focusText)
     }
 
     /** Cheap live boundary check, without re-reading 100 messages on every scan. */
@@ -382,9 +426,25 @@ object MessageSniffer {
         return ConversationIdentity.resolve(records.map { it.second.talker }, footerTalker, dedicated)
     }
 
-    private fun records(scope: List<View>): List<Pair<View, BoundMessage>> {
+    private fun records(scope: List<View>, useCache: Boolean = true): List<Pair<View, BoundMessage>> {
+        val lists = scope.filterIsInstance<ListView>()
+        var signature = 17L
+        for (list in lists) {
+            signature = signature * 31 + list.childCount
+            signature = signature * 31 + list.firstVisiblePosition
+            for (index in 0 until list.childCount) {
+                signature = signature * 31 + System.identityHashCode(
+                    runCatching { list.getItemAtPosition(list.firstVisiblePosition + index) }.getOrNull())
+            }
+        }
+        synchronized(bindings) {
+            bindings.keys.forEach { signature = signature * 31 + System.identityHashCode(it) }
+            signature = signature * 31 + bindings.size
+        }
+        // 长按是对着具体 View 找行的，缓存里的旧 View 引用可能已经被回收复用，必须重建。
+        if (useCache) recordsSnapshot?.takeIf { it.signature == signature }?.let { return it.rows }
         val records = mutableListOf<Pair<View, BoundMessage>>()
-        for (list in scope.filterIsInstance<ListView>()) {
+        for (list in lists) {
             for (index in 0 until list.childCount) {
                 val row = list.getChildAt(index)
                 if (!isVisible(row)) continue
@@ -402,6 +462,7 @@ object MessageSniffer {
             bindings.entries.filter { it.key in views && isVisible(it.key) }
                 .forEach { records += it.key to it.value }
         }
+        recordsSnapshot = RecordsSnapshot(signature, records)
         return records
     }
 

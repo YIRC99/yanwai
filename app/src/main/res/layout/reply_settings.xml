@@ -26,4 +26,9 @@
     <com.google.android.material.button.MaterialButton android:id="@+id/saveReply" style="@style/Yanwai.Button.Text" android:text="仅保存配置" />
     <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progressReply" android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true" android:visibility="gone" android:contentDescription="正在检测回复模型" />
     <TextView android:id="@+id/replyResult" style="@style/Yanwai.Body" android:layout_marginTop="12dp" android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone" android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
+    <TextView style="@style/Yanwai.Section" android:layout_marginTop="24dp" android:text="关系档案" />
+    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchRelationFacts" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="打开「帮我回」时自动整理关系档案" />
+    <TextView style="@style/Yanwai.Caption" android:text="开启后会用上面这个回复模型分析最近聊天，提取工作、城市、喜好、约定这类事实，只保存在本机、不进备份。每个联系人每天最多一次，默认关闭。" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/buttonClearFacts" style="@style/Yanwai.Button.Text" android:text="清空已整理的关系档案" />
+    <TextView android:id="@+id/factsStatus" style="@style/Yanwai.Caption" android:accessibilityLiveRegion="polite" />
 </LinearLayout>

@@ -51,6 +51,18 @@ class SettingsProvider : ContentProvider() {
                     }
                     result
                 }
+                "usage_add" -> {
+                    UsageMeter.add(ctx, extras?.getLong("prompt", 0L) ?: 0L, extras?.getLong("completion", 0L) ?: 0L)
+                    Bundle()
+                }
+                "usage_today" -> {
+                    val usage = UsageMeter.today(ctx)
+                    Bundle().apply {
+                        putInt("requests", usage.requests)
+                        putLong("prompt", usage.promptTokens)
+                        putLong("completion", usage.completionTokens)
+                    }
+                }
                 "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
                 "config" -> snapshot(ctx)
                 "report" -> {

@@ -49,7 +49,7 @@ object SignalAnalyzer {
         speaker: String = "对方"): Mood {
         val snapshot = requireNotNull(ModulePrefs.analysisSettings()) { "设置尚未连接" }
         return AnalysisRouter.analyze(AnalysisInput(text, "sample", context, speaker = speaker), snapshot,
-            { client.exchangeSuspending(it, snapshot.api) }, { settings, payload -> llmClient.request(settings, payload) { it } })
+            { client.exchangeSuspending(it, snapshot.api) }, { settings, payload -> llmClient.request(settings, payload, parse = { it }) })
     }
 
     private suspend fun analyze(input: AnalysisInput, shouldContinue: () -> Boolean = { true }): Mood = withContext(Dispatchers.IO) {
@@ -80,7 +80,7 @@ object SignalAnalyzer {
             stage.text = "正在分析…"
             val mood = AnalysisRouter.analyze(prepared, snapshot,
                 { client.exchangeSuspending(it, settings) },
-                { config, payload -> llmClient.request(config, payload) { it } }, ::active,
+                { config, payload -> llmClient.request(config, payload, parse = { it }) }, ::active,
                 { emotion ->
                     stage.text = emotion.detail.substringAfter('\n') + "\n智能分析中…"
                     stage.emotion = emotion.copy(detail = emotion.detail + "\n智能分析中…")

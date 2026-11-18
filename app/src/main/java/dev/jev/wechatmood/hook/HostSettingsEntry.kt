@@ -42,22 +42,30 @@ internal object HostSettingsEntry {
             .singleOrNull { it.returnType.constructors.any { c ->
                 c.parameterTypes.contentEquals(arrayOf(Any::class.java, Any::class.java))
             } } ?: return@runCatching null
-        val key = bridge.findMethod {
+        // 之前这里用 single()：微信多出一个候选就整块抛异常、设置入口彻底消失。
+        // 现在取第一个并记录候选数量，至少保留可用路径。
+        fun <T> first(candidates: List<T>, label: String): T? {
+            if (candidates.size > 1) MoodLog.w("SETTINGS_ENTRY_MULTIPLE_$label candidates=${candidates.size}")
+            return candidates.firstOrNull()
+        }
+        val key = first(bridge.findMethod {
             matcher { declaredClass = personal.name; returnType = "java.lang.String"
                 paramCount = 0; usingStrings("SettingGroup_Main_PersonalInfo") }
-        }.single().getMethodInstance(loader)
-        val title = bridge.findMethod {
+        }.mapNotNull { runCatching { it.getMethodInstance(loader) }.getOrNull() }, "KEY") ?: return@runCatching null
+        val title = first(bridge.findMethod {
             matcher { declaredClass = base.name; returnType = "java.lang.String"
                 paramCount = 0; usingStrings("getString(...)") }
-        }.single().getMethodInstance(loader)
-        val group = personal.declaredMethods.single { it.parameterCount == 0 && it.returnType == Integer::class.java }
-        val click = personal.methods.single { it.parameterTypes.contentEquals(clickArgs) }
+        }.mapNotNull { runCatching { it.getMethodInstance(loader) }.getOrNull() }, "TITLE") ?: return@runCatching null
+        val group = first(personal.declaredMethods.filter { it.parameterCount == 0 && it.returnType == Integer::class.java }, "GROUP")
+            ?: return@runCatching null
+        val click = first(personal.methods.filter { it.parameterTypes.contentEquals(clickArgs) }, "CLICK")
+            ?: return@runCatching null
         Points(personal, loader.loadClass(SETTINGS + "SettingGroupMain"), base, key, title, group, click, build)
     }.onFailure { MoodLog.e("SETTINGS_ENTRY_LOCATE_FAILED", it) }.getOrNull()
 
     @Synchronized fun install(candidates: List<Points>) {
         if (installed) return
-        val points = candidates.distinctBy { it.build }.singleOrNull()
+        val points = candidates.distinctBy { it.build }.firstOrNull()
         if (points == null) {
             state = "当前微信设置列表未适配，可从桌面打开言外"
             MoodLog.w("SETTINGS_ENTRY_UNSUPPORTED 未找到唯一的原生设置列表")
@@ -90,8 +98,11 @@ internal object HostSettingsEntry {
                     if (param.args[0] == GROUP_TEXT_ID) param.result = "插件"
                 }
             })
-            val constructor = points.personal.constructors.single { it.parameterCount == 1 &&
-                it.parameterTypes[0].name == "androidx.appcompat.app.AppCompatActivity" }
+            val constructor = points.personal.constructors.firstOrNull { it.parameterCount == 1 &&
+                it.parameterTypes[0].name == "androidx.appcompat.app.AppCompatActivity" } ?: run {
+                MoodLog.w("SETTINGS_ENTRY_NO_CONSTRUCTOR 设置列表构造特征未命中")
+                return@runCatching null
+            }
             val getActivity = points.personal.getMethod("getActivity")
             val baseGroup = points.base.getMethod(points.group.name)
             // Xposed reverses the order for after callbacks: highest priority runs last.

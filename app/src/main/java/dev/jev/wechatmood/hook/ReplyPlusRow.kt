@@ -21,7 +21,9 @@ internal class ReplyPlusRow(private val activity: Activity, private val createAn
     private var blockedPanel: ViewGroup? = null
     private var refreshing = false
     private var lastStatus: String? = null
-    private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { refresh() }
+    private var lastRefreshAt = 0L
+    private var pendingRefresh: Runnable? = null
+    private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { requestRefresh() }
     private val attachListener = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(view: View) = Unit
         override fun onViewDetachedFromWindow(view: View) { clear() }
@@ -36,7 +38,29 @@ internal class ReplyPlusRow(private val activity: Activity, private val createAn
                 it.addOnAttachStateChangeListener(attachListener)
             }
         }
-        refresh()
+        requestRefresh()
+    }
+
+    /**
+     * 全局布局监听在面板展开动画期间会连续触发，每次都要遍历最多 1500 个节点。
+     * 合并成最多 8 次/秒，并把最后一次布局留到延后执行，避免漏掉动画结束状态。
+     */
+    private fun requestRefresh() {
+        val now = android.os.SystemClock.uptimeMillis()
+        val wait = 120 - (now - lastRefreshAt)
+        if (wait <= 0) {
+            lastRefreshAt = now
+            refresh()
+            return
+        }
+        if (pendingRefresh != null) return
+        val runnable = Runnable {
+            pendingRefresh = null
+            lastRefreshAt = android.os.SystemClock.uptimeMillis()
+            refresh()
+        }
+        pendingRefresh = runnable
+        footer?.postDelayed(runnable, wait)
     }
 
     private fun status(value: String) {
@@ -55,6 +79,9 @@ internal class ReplyPlusRow(private val activity: Activity, private val createAn
     }
 
     private fun syncRow() {
+        // 已经挂好且可见时不需要再遍历整棵底部面板。
+        val mounted = panel
+        if (mounted != null && mounted.isAttachedToWindow && mounted.isShown && wrapper?.parent === mounted) return
         val found = footer?.takeIf { it.isAttachedToWindow && it.isShown }?.let(::descendants)?.filterIsInstance<ViewGroup>()?.singleOrNull {
             it.javaClass.name == "com.tencent.mm.pluginsdk.ui.chat.AppPanel" && it.isShown
         }
@@ -95,6 +122,8 @@ internal class ReplyPlusRow(private val activity: Activity, private val createAn
     }
 
     fun clear() {
+        pendingRefresh?.let { footer?.removeCallbacks(it) }
+        pendingRefresh = null
         observer?.takeIf { it.isAlive }?.removeOnGlobalLayoutListener(layoutListener)
         observer = null
         footer?.removeOnAttachStateChangeListener(attachListener)

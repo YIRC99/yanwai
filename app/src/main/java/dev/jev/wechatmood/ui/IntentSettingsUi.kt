@@ -190,7 +190,7 @@ class IntentSettingsUi(private val activity: AppCompatActivity, private val bind
                 val input = AnalysisInput("睡吧睡吧", "sample", listOf(ContextMessage("我", "累了一天，终于躺下了。")))
                 val mood = ReplyHttpClient().request(settings,
                     dev.jev.wechatmood.analysis.LlmEmotionProtocol.payload(input, settings),
-                    dev.jev.wechatmood.analysis.LlmEmotionProtocol::parse)
+                    parse = dev.jev.wechatmood.analysis.LlmEmotionProtocol::parse)
                 if (savedModelFingerprint() != fingerprint) return@launch
                 testedFingerprint = fingerprint
                 modelStatus("分析模型连接成功", R.color.status_success)
