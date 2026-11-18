@@ -52,9 +52,9 @@ class ReplyEntrySafetyTest {
         assertTrue(host.contains("setOnLongClickListener { showActions(); true }"))
         assertTrue(host.contains("帮我回 / 上次建议"))
         assertTrue(host.contains("0 -> replyUi.open()"))
-        assertTrue(host.contains("fun suggestReply(focusMessageId: Long? = null) = replyUi.open(focusMessageId)"))
+        assertTrue(host.contains("fun suggestReply(focusMessageId: Long? = null, imageDataUri: String? = null) = replyUi.open(focusMessageId, imageDataUri)"))
         assertTrue(source("MessageMenu").contains("MessageSniffer.suggestReply(view, it)"))
-        assertTrue(source("MessageSniffer").contains("ui?.suggestReply(target.messageId) == true"))
+        assertTrue(source("MessageSniffer").contains("ui?.suggestReply(target.messageId, image) == true"))
     }
 
     @Test fun `app guide directs users to the plus row analysis control`() {

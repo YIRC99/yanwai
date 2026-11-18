@@ -74,13 +74,13 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         views(root).filterIsInstance<EditText>().filter { it.isShown && it.isEnabled }.singleOrNull()
     }
 
-    fun open(focusMessageId: Long? = null): Boolean {
+    fun open(focusMessageId: Long? = null, imageDataUri: String? = null): Boolean {
         val selectedTalker = talker ?: return false
         if (MessageSniffer.currentReplyTalker() != selectedTalker) return false
         if (dialog?.isShowing == true || openingJob?.isActive == true) return true
         val epoch = ReplyDatabaseHistory.pendingAccountScope()
         ownerEpoch = epoch
-        val live = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
+        val live = runCatching { MessageSniffer.replyContext(requireBottom = false, focusId = focusMessageId ?: 0) }.getOrElse {
             toast(it.message ?: "读取聊天失败"); return true
         }
         if (live.talker != selectedTalker) return false
@@ -106,7 +106,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     !owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
                     !owner.acceptsAccount(latestAccount)) return@launch
                 // All reads finish before the editor is created, so a late load cannot erase typed text.
-                openResolved(focusMessageId, live, owner, identity, preferredLimit, background)
+                openResolved(focusMessageId, live, owner, identity, preferredLimit, background, imageDataUri)
             } catch (e: CancellationException) { throw e }
             catch (error: Exception) {
                 MoodLog.e("REPLY_SETTINGS_READ_FAILED", error)
@@ -124,7 +124,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
     }
 
     private fun openResolved(focusMessageId: Long?, live: ReplyContext, owner: ReplyIdentityOwner,
-        identity: ReplyIdentitySetting, preferredLimit: Int, contactBackground: ContactBackground): Boolean {
+        identity: ReplyIdentitySetting, preferredLimit: Int, contactBackground: ContactBackground,
+        imageDataUri: String? = null): Boolean {
         val selectedTalker = owner.talker
         val generation = ModulePrefs.analysisSettings()?.generation
         var rolesRevision = ModulePrefs.analysisSettings()?.rolesRevision
@@ -136,7 +137,9 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         var selectedIdentity = identity
         val reference = ReplyHistorySelection(selectedTalker, remembered?.context?.takeIf { it.requestedMessages == preferredLimit })
         // Reopening saved content must not depend on scrolling to the latest message or text input mode.
-        val captured = remembered?.context ?: live
+        val captured = (remembered?.context ?: live).let { ctx ->
+            if (imageDataUri != null && ctx.targetImageDataUri == null) ctx.copy(targetImageDataUri = imageDataUri) else ctx
+        }
         if (captured.talker != selectedTalker) return false
         val initialEditor = editor()
         if (remembered == null && initialEditor == null) { toast("请先切换到文字输入"); return true }
@@ -622,9 +625,10 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             failed = false
             state.text = ""; state.setTextColor(theme.muted)
             renderParts(); controls(false)
-            val loaded = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrElse {
+            val loaded = runCatching { MessageSniffer.replyContext(requireBottom = false, focusId = focusMessageId ?: 0) }.getOrElse {
                 reference.fail(ticket); state.text = it.message ?: "读取聊天失败，请重试"; controls(false); return
-            }.let { it.copy(focusMessageId = focusMessageId ?: it.latestLoadedId) }
+            }.let { it.copy(focusMessageId = focusMessageId ?: it.latestLoadedId,
+                targetImageDataUri = imageDataUri ?: it.targetImageDataUri) }
             if (loaded.talker != selectedTalker) { reference.cancel(); window.dismiss(); return }
             historyJob = scope.launch {
                 try {
@@ -643,9 +647,12 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     if (!ownsDrawer() || !ModulePrefs.canGenerateReply) return@launch
                     if (!verifyAccount()) { window.dismiss(); return@launch }
                     if (current.messages.isEmpty() || current.messages.all { it.voiceState == VoiceState.FAILED }) {
-                        reference.fail(ticket)
-                        state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
-                        return@launch
+                        if (current.targetMedia == null) {
+                            reference.fail(ticket)
+                            state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
+                            return@launch
+                        }
+                        state.text = "本轮目标是一张${current.targetMedia}，暂不识别内容，按上下文拟回复。"
                     }
                     if (!reference.complete(ticket, current, MessageSniffer.currentReplyTalker())) return@launch
                     snapshot = current
