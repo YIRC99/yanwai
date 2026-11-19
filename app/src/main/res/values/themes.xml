@@ -8,6 +8,9 @@
         <item name="colorSecondary">@color/brand_primary</item>
         <item name="colorOnSecondary">@color/brand_on_primary</item>
         <item name="android:colorBackground">@color/page_background</item>
+        <!-- 窗口底色：setContentView 之前那一帧用的是 windowBackground，
+             不设就退回系统默认白底，切到本应用时会闪一下白屏 -->
+        <item name="android:windowBackground">@color/page_background</item>
         <item name="colorSurface">@color/panel_surface</item>
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="colorOnSurfaceVariant">@color/text_secondary</item>

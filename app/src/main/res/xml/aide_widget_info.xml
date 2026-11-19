@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  updatePeriodMillis 设 0：系统最小间隔就是 30 分钟，而且不保证准点。
+  刷新改为「打开 App 时主动刷」——通知数据在 app 进程里产生，
+  微信进程跨进程更新 widget 会被系统按包校验拒掉，绕那一圈不值得。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_aide"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

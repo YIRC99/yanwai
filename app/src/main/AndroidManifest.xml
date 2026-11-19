@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <permission android:name="dev.jev.wechatmood.permission.SYNC_SETTINGS" android:protectionLevel="signature" />
-    <uses-permission android:name="dev.jev.wechatmood.permission.SYNC_SETTINGS" />
+    <!-- 提要要往超级岛推内容，走的是通知；Android 13+ 没有这个权限的话 notify() 会静默失败 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <permission android:name="com.dogheadstrategist.chat.permission.SYNC_SETTINGS" android:protectionLevel="signature" />
+    <uses-permission android:name="com.dogheadstrategist.chat.permission.SYNC_SETTINGS" />
     <queries><package android:name="com.tencent.mm" /></queries>
 
     <!-- 只在微信进程内加载本模块 -->
     <application
+        android:name=".ChatApp"
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:label="@string/app_name"
@@ -15,11 +18,20 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.WeChatMood">
         <provider android:name=".core.SettingsProvider"
-            android:authorities="dev.jev.wechatmood.settings"
+            android:authorities="com.dogheadstrategist.chat.settings"
             android:grantUriPermissions="true"
             android:exported="true" />
 
         <service android:name=".core.SettingsConnectionService" android:exported="true" />
+        <service
+            android:name=".sentry.SentryNotificationService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- 旧的 Xposed API 用这三个 meta-data；现代 Module API 改用 META-INF/xposed/ -->
         <meta-data
@@ -35,6 +47,19 @@
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
 
+        <receiver
+            android:name=".feature.AideWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/aide_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".OpenChatReceiver"
+            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

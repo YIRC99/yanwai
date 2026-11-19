@@ -10,11 +10,11 @@ val appVersion = Properties().apply {
 }
 
 android {
-    namespace = "dev.jev.wechatmood"
+    namespace = "com.dogheadstrategist.chat"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.jev.wechatmood"
+        applicationId = "com.dogheadstrategist.chat"
         minSdk = 28          // 与 WeKit 一致；Android 9+
         targetSdk = 35
         versionCode = appVersion.getProperty("versionCode").toInt()
