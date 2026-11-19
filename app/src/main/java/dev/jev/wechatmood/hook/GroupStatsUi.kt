@@ -61,6 +61,8 @@ object StatsFilter {
 /** 群聊统计窗口：数字 + 活跃成员 + 一次 AI 解读，结果可复制。 */
 internal class GroupStatsUi(private val activity: Activity, private val context: ReplyContext,
     private val dbMessages: List<dev.jev.wechatmood.reply.ReplyMessage> = emptyList(),
+    /** 当前登录账号；昵称查询只在这个账号的库里查，避免把另一个账号的资料算进来。 */
+    private val accountScope: String? = null,
     private val reload: (() -> Unit)? = null) {
     private val kit = PanelKit(activity)
     private val theme = kit.theme
@@ -215,7 +217,7 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
             aiButton.text = "让 AI 说说这群在聊什么"
             scope.launch {
                 val names = runCatching {
-                    ReplyDatabaseHistory.displayNames(stats.members.map { it.name })
+                    ReplyDatabaseHistory.displayNames(stats.members.map { it.name }, accountScope)
                 }.getOrDefault(emptyMap())
                 if (names.isNotEmpty()) renderTop(currentNames + names)
             }
@@ -269,9 +271,9 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
 
         // 昵称在数据库里，异步查一次再替换 wxid；顺便记一次表名，方便确认字段位置。
         scope.launch {
-            runCatching { ReplyDatabaseHistory.tableNames() }
+            runCatching { ReplyDatabaseHistory.tableNames(accountScope) }
             val names = runCatching {
-                ReplyDatabaseHistory.displayNames(stats.members.map { it.name })
+                ReplyDatabaseHistory.displayNames(stats.members.map { it.name }, accountScope)
             }.getOrDefault(emptyMap())
             if (names.isNotEmpty()) renderTop(names)
         }
@@ -455,7 +457,7 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
         // speaker 是 wxid 或微信号，喂给模型之前换成群里的显示名；
         // 查不到的按出现顺序编成「群友 N」，避免整段转述里全是 wxid。
         val rawSpeakers = context.messages.map { it.speaker }.distinct()
-        val resolved = runCatching { ReplyDatabaseHistory.displayNames(rawSpeakers) }.getOrDefault(emptyMap())
+        val resolved = runCatching { ReplyDatabaseHistory.displayNames(rawSpeakers, accountScope) }.getOrDefault(emptyMap())
         val labels = LinkedHashMap<String, String>()
         fun speakerLabel(raw: String): String = labels.getOrPut(raw) {
             val fromDb = resolved[raw]?.let { TextClean.plain(it).trim() }

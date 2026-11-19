@@ -147,15 +147,25 @@ class HostUi(private val activity: Activity) {
         }
         statsScope.launch {
             val since = StatsFilter.sinceMillis()
-            val rows = runCatching {
-                ReplyDatabaseHistory.statMessages(context.talker, since,
-                    if (StatsFilter.limit == 0) 5000 else StatsFilter.limit)
-            }.getOrDefault(emptyList())
-            val mapped = rows.map {
-                dev.jev.wechatmood.reply.ReplyMessage(it.messageId, it.speaker(), it.createdAt,
-                    it.analysisText() ?: "[媒体]")
+            // 先确认当前登录账号，只统计这个账号的聊天记录。
+            val account = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { ReplyDatabaseHistory.replyAccount(context) }.getOrNull()
             }
-            GroupStatsUi(activity, context, mapped) { showStats() }.show()
+            val mapped: List<dev.jev.wechatmood.reply.ReplyMessage> = if (account == null) {
+                // 账号确认不了时不查历史库：可能混进另一个账号同群的消息，只用当前可见页面。
+                dev.jev.wechatmood.core.MoodLog.i("STATS_SCOPE unknown fallback=page msgs=${context.messages.size}")
+                context.messages
+            } else {
+                val rows = runCatching {
+                    ReplyDatabaseHistory.statMessages(context.talker, since,
+                        if (StatsFilter.limit == 0) 5000 else StatsFilter.limit, account)
+                }.getOrDefault(emptyList())
+                rows.map {
+                    dev.jev.wechatmood.reply.ReplyMessage(it.messageId, it.speaker(), it.createdAt,
+                        it.analysisText() ?: "[媒体]")
+                }
+            }
+            GroupStatsUi(activity, context, mapped, account) { showStats() }.show()
         }
     }
 

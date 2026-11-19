@@ -36,7 +36,12 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val session = ReplySession()
     private val history = ReplyHistory.process
-    private val plusEntry = ReplyPlusRow(activity, createAnalysisControl) { openPanel(); true }
+    /** 横条上的按钮交给宿主面板：分析开关和档案、待办都在同一个入口里。 */
+    private fun open(): Boolean {
+        openPanel()
+        return true
+    }
+    private val plusEntry = ReplyPlusRow(activity, createAnalysisControl) { open() }
     private var job: Job? = null
     private var historyJob: Job? = null
     private var openingJob: Job? = null
@@ -525,7 +530,12 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             }
             if (!auto) state.text = "正在整理关系档案…"
             // 独立 scope：关掉抽屉或切走聊天都不会把这次请求掐断。
-            val started = RelationFactRefresher.launch(activity, key, settings) { result, error ->
+            // 但抽取必须用打开时的账号、联系人与消息：异步等待期间切到别的聊天，
+            // 再从头读屏幕就会把 B 的消息按 A 的键存下去。
+            val snapshot = owner.account?.let { account ->
+                RelationFactRefresher.Snapshot(account, owner.talker, live.messages)
+            }
+            val started = RelationFactRefresher.launch(activity, key, settings, snapshot = snapshot) { result, error ->
                 when {
                     error != null -> {
                         MoodLog.w("RELATION_FACTS_FAILED " + error.javaClass.simpleName)

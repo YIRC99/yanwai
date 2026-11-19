@@ -50,6 +50,8 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         visibility = View.GONE
     }
     private var items: List<RelationFact> = emptyList()
+    /** 打开档案时抓到的页面快照；整理与依据查询都只认这个账号，不再重读屏幕。 */
+    private var snapshot: RelationFactRefresher.Snapshot? = null
     private var meta: RelationMeta = RelationMeta()
     private var contactKey: ReplyContactKey? = null
     private var refreshing = false
@@ -149,6 +151,8 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         val live = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrNull() ?: return null
         if (live.talker != selected) return null
         val account = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(live) }
+        // 之后切去别的聊天也不影响：整理和依据查询都用这份快照定位账号。
+        snapshot = account?.let { RelationFactRefresher.Snapshot(it, selected, live.messages) }
         return ReplyContactKey.of(account, selected)
     }
 
@@ -421,7 +425,10 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         val messageId = fact.sourceChatMessageId
         if (messageId <= 0) return
         scope.launch {
-            val message = withContext(Dispatchers.IO) { ReplyDatabaseHistory.messageById(selected, messageId) }
+            // 只查档案所属账号的库：切号后旧库还开着时，另一个账号也可能有同一个 msgId。
+            val message = withContext(Dispatchers.IO) {
+                ReplyDatabaseHistory.messageById(selected, messageId, snapshot?.account)
+            }
             if (message == null) {
                 kit.info("依据消息", "这条消息已经不在本机数据库里了（可能被清理过）")
                 return@launch
@@ -487,7 +494,8 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         refreshing = true
         showStatus(if (incremental) "正在整理新消息…" else "正在整理最近 $limit 条…", theme.muted)
         // 独立 scope：关掉窗口或切去别的聊天，这次整理仍会跑完并落库。
-        val started = RelationFactRefresher.launch(activity, key, settings, limit, incremental) { result, error ->
+        val started = RelationFactRefresher.launch(activity, key, settings, limit, incremental,
+            snapshot) { result, error ->
             refreshing = false
             when {
                 error != null -> {

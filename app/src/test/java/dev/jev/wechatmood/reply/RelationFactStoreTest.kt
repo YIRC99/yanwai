@@ -234,4 +234,46 @@ class RelationFactStoreTest {
         assertEquals(1, after.count { it.status == RelationFact.STATUS_SUPERSEDED })
     }
 
+
+    @Test fun `two contacts keep the same sentence in their own archive`() {
+        val store = RelationFactStore(db())
+        val a = ReplyContactKey("a".repeat(64))
+        val b = ReplyContactKey("b".repeat(64))
+        store.replace(a, listOf(RelationFact("城市", "住在杭州")))
+        store.replace(b, listOf(RelationFact("城市", "住在杭州")))
+        assertEquals(1, store.list(a).size)
+        assertEquals(1, store.list(b).size)
+        assertEquals("住在杭州", store.list(a).single().text)
+    }
+
+    @Test fun `legacy items table with a single column primary key is rebuilt`() {
+        val db = db()
+        // 旧结构：fact_id 单列主键，A、B 的同一句话只能存一条。
+        db.execute("CREATE TABLE relation_fact_items (fact_id TEXT PRIMARY KEY NOT NULL, contact_key TEXT NOT NULL, " +
+            "status TEXT NOT NULL, kind TEXT NOT NULL, occurred_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, " +
+            "payload TEXT NOT NULL)")
+        db.execute("INSERT INTO relation_fact_items VALUES(?, ?, ?, ?, ?, ?, ?)",
+            listOf("1234567890abcdef", "a".repeat(64), "active", "城市", "0", "1",
+                JSONObject().put("kind", "城市").put("text", "住在杭州").toString()))
+        val store = RelationFactStore(db)
+        val a = ReplyContactKey("a".repeat(64))
+        val b = ReplyContactKey("b".repeat(64))
+        // 旧数据要搬过来，否则升级后档案变空。
+        assertEquals("住在杭州", store.list(a).single().text)
+        store.replace(b, listOf(RelationFact("城市", "住在杭州")))
+        assertEquals(1, store.list(a).size)
+        assertEquals(1, store.list(b).size)
+    }
+
+    @Test fun `export all keeps every contact for the cross database migration`() {
+        val store = RelationFactStore(db())
+        val a = ReplyContactKey("a".repeat(64))
+        val b = ReplyContactKey("b".repeat(64))
+        store.replace(a, listOf(RelationFact("城市", "住在杭州"), RelationFact("工作", "在游戏公司做运营")))
+        store.replace(b, listOf(RelationFact("宠物", "养了一只橘猫")))
+        val exported = store.exportAll()
+        assertEquals(2, exported.getJSONArray(a.value).length())
+        assertEquals(1, exported.getJSONArray(b.value).length())
+        assertFalse(exported.has("c".repeat(64)))
+    }
 }

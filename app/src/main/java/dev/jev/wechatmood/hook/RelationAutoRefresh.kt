@@ -61,9 +61,10 @@ internal object RelationAutoRefresh {
         if (live.talker != talker) return
         val settings = ModulePrefs.replySettings()
         if (!settings.isConfigured) return
-        val key = withContext(Dispatchers.IO) {
-            ReplyDatabaseHistory.replyAccount(live)?.let { ReplyContactKey.of(it, talker) }
-        } ?: return
+        val account = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(live) } ?: return
+        val key = ReplyContactKey.of(account, talker) ?: return
+        // 6 秒延迟期间用户可能已经切走：整理只认这次读到的账号、联系人与消息。
+        val snapshot = RelationFactRefresher.Snapshot(account, talker, live.messages)
         // 到期提醒只受「显示档案」本身影响，关掉自动整理不该把提醒一起停掉。
         val facts = withContext(Dispatchers.IO) { runCatching { RelationFactBridge.load(activity, key) }.getOrDefault(emptyList()) }
         RelationReminder.check(activity, key, facts)
@@ -74,7 +75,7 @@ internal object RelationAutoRefresh {
         val due = meta.lastAt <= 0 || gap > STALE_MS || fresh >= FRESH_MESSAGES
         MoodLog.i("RELATION_FACT_AUTOPAGE due=$due gap_hours=${gap / 3600_000L} fresh=$fresh")
         if (!due) return
-        val started = RelationFactRefresher.launch(activity, key, settings) { result, error ->
+        val started = RelationFactRefresher.launch(activity, key, settings, snapshot = snapshot) { result, error ->
             when {
                 error != null -> MoodLog.w("RELATION_FACT_AUTOPAGE_ERROR " + error.javaClass.simpleName)
                 result == null -> Unit

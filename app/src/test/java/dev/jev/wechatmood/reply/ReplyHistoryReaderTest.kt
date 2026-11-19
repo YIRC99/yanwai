@@ -139,9 +139,9 @@ class ReplyHistoryReaderTest {
             assertEquals(oddTalker, args.first())
             if (!sql.contains("msgId = ?")) {
                 queriedHistory = true
-                assertTrue(sql.contains("type = 1"))
+                assertTrue(sql.contains("type IN (1, 34, 49, 822083633)"))
                 assertTrue(sql.contains("LIMIT 101"))
-                assertTrue(sql.contains("ORDER BY createTime DESC, msgId DESC"))
+                assertTrue(sql.contains("ORDER BY msgId DESC"))
             }
             listOf(row(200, oddTalker))
         }

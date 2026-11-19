@@ -39,7 +39,8 @@ object VoicePreparation {
         currentCoroutineContext().ensureActive()
         return input.copy(text = target, context = context,
             voiceState = if (input.voice == null) VoiceState.NONE else VoiceState.READY,
-            coverage = input.coverage.copy(unavailableVoice = context.count { it.voiceState == VoiceState.FAILED },
+            // 跳过的语音只是没转写，不是「尝试失败」，不能计入不可用数量。
+            coverage = input.coverage.copy(unavailableVoice = context.count { it.voiceState == VoiceState.FAILED && it.text != SKIPPED_VOICE },
                 truncated = input.coverage.truncated || context.size != input.context.size))
     }
 
@@ -47,22 +48,43 @@ object VoicePreparation {
         var budget = ReplyContext.MAX_CHARACTERS
         var trimmed = context.trimmed
         var voiceBudget = MAX_CONTEXT_TRANSCRIPTS
+        // 用户明确长按的那条语音先转写：否则它后面几条较新的语音会把轮换预算用光，
+        // 真正要回复的那条只剩「未转写」占位。
+        val focus = context.messages.lastOrNull { it.id == context.focusMessageId && it.voice != null }
+            ?: context.messages.lastOrNull { it.voice != null }
+        val transcripts = HashMap<Long, String>()
+        if (focus?.voice != null) {
+            voiceBudget--
+            try {
+                val text = transcribe(focus.voice).trim()
+                check(text.isNotBlank())
+                transcripts[focus.id] = text
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { /* 主循环会把目标标成转写失败 */ }
+        }
         val messages = context.messages.asReversed().mapNotNull { message ->
             currentCoroutineContext().ensureActive()
             if (budget <= 0) { trimmed = true; return@mapNotNull null }
-            // 只有最近几条语音会真的转写，更早的直接标成未转写，避免串行等几十个 30 秒超时。
-            if (message.voice != null && voiceBudget <= 0) {
-                val rest = message.copy(text = SKIPPED_VOICE, voiceState = VoiceState.FAILED)
-                budget -= rest.text.length
-                return@mapNotNull rest
+            val prepared = when {
+                message.voice == null -> message
+                transcripts[message.id] != null ->
+                    message.copy(text = transcripts.getValue(message.id), voiceState = VoiceState.READY)
+                message.id == focus?.id -> message.copy(text = VoiceText.FAILED, voiceState = VoiceState.FAILED)
+                voiceBudget <= 0 -> {
+                    val rest = message.copy(text = SKIPPED_VOICE, voiceState = VoiceState.FAILED)
+                    budget -= rest.text.length
+                    return@mapNotNull rest
+                }
+                else -> {
+                    voiceBudget--
+                    try {
+                        val text = transcribe(message.voice).trim()
+                        check(text.isNotBlank())
+                        message.copy(text = text, voiceState = VoiceState.READY)
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { message.copy(text = VoiceText.FAILED, voiceState = VoiceState.FAILED) }
+                }
             }
-            if (message.voice != null) voiceBudget--
-            val prepared = if (message.voice == null) message else try {
-                val text = transcribe(message.voice).trim()
-                check(text.isNotBlank())
-                message.copy(text = text, voiceState = VoiceState.READY)
-            } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { message.copy(text = VoiceText.FAILED, voiceState = VoiceState.FAILED) }
             val end = minOf(budget, prepared.text.length).let {
                 if (it < prepared.text.length && it > 0 && prepared.text[it - 1].isHighSurrogate() && prepared.text[it].isLowSurrogate()) it - 1 else it
             }

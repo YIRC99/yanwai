@@ -33,7 +33,7 @@ object AnalysisCardText {
             if (line.header) text.setSpan(StyleSpan(Typeface.BOLD), lineStart, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             line.label?.let { label ->
                 text.setSpan(StyleSpan(Typeface.BOLD), lineStart, lineStart + label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                text.setSpan(ForegroundColorSpan(0xFFB2E3D5.toInt()), lineStart, lineStart + label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                text.setSpan(ForegroundColorSpan(AnalysisPopupPalette.LABEL), lineStart, lineStart + label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
         return text

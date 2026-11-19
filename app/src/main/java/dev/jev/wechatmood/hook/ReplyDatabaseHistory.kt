@@ -31,6 +31,16 @@ object ReplyDatabaseHistory {
     private fun scope(db: Any): String? = (db.javaClass.getMethod("getPath").invoke(db) as? String)
         ?.replace('\\', '/')?.takeIf { it.endsWith("/EnMicroMsg.db") }?.let { AnalysisCacheKey.digest(it) }
 
+    /**
+     * 只保留与当前账号匹配的库。
+     * 切账号后旧库可能还开着，不过滤就会把另一个账号的聊天算进统计、或把别人的消息当依据。
+     * 账号确认不了时返回空，调用方退回当前可见页面。
+     */
+    internal fun databasesForScope(databases: List<Any>, accountScope: String?): List<Any> {
+        if (accountScope == null || !accountScope.matches(Regex("[0-9a-f]{64}"))) return emptyList()
+        return databases.filter { runCatching { scope(it) }.getOrNull() == accountScope }
+    }
+
     fun install(loader: ClassLoader) {
         var hooks = 0
         for (name in listOf("com.tencent.wcdb.compat.SQLiteDatabase", "com.tencent.wcdb.database.SQLiteDatabase")) {
@@ -148,9 +158,12 @@ object ReplyDatabaseHistory {
     }.getOrNull()
 
     /** 按时间范围取统计用消息（不限已加载页），用于「今天 / 最近 N 小时」。 */
-    suspend fun statMessages(talker: String, sinceMillis: Long, limit: Int): List<MessageMetadata> = withContext(Dispatchers.IO) {
+    suspend fun statMessages(talker: String, sinceMillis: Long, limit: Int,
+        accountScope: String? = null): List<MessageMetadata> = withContext(Dispatchers.IO) {
         val out = mutableListOf<MessageMetadata>()
-        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        // 账号无法确认时这里为空，调用方改用当前可见页面的数据。
+        val databases = databasesForScope(
+            synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }, accountScope)
         var since = sinceMillis
         for (db in databases) {
             // 微信不同版本 createTime 有秒也有毫秒，先看一条样本再决定。
@@ -177,9 +190,12 @@ object ReplyDatabaseHistory {
     }
 
     /** 档案条目回指依据：按 localId 取一条消息，只读，不改游标以外的任何状态。 */
-    suspend fun messageById(talker: String, msgId: Long): MessageMetadata? = withContext(Dispatchers.IO) {
+    suspend fun messageById(talker: String, msgId: Long,
+        accountScope: String? = null): MessageMetadata? = withContext(Dispatchers.IO) {
         if (msgId <= 0) return@withContext null
-        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        // 依据消息也只在当前账号的库里找，不能拿另一个账号的同 msgId 顶上。
+        val databases = databasesForScope(
+            synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }, accountScope)
         for (db in databases) {
             val found = runCatching {
                 query(db, "SELECT * FROM message WHERE talker = ? AND msgId = ? LIMIT 1",
@@ -191,8 +207,9 @@ object ReplyDatabaseHistory {
     }
 
     /** 诊断用：列出主库的表名，便于确认群昵称实际存在哪张表。 */
-    suspend fun tableNames(): List<String> = withContext(Dispatchers.IO) {
-        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+    suspend fun tableNames(accountScope: String? = null): List<String> = withContext(Dispatchers.IO) {
+        val databases = databasesForScope(
+            synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }, accountScope)
         val names = mutableListOf<String>()
         for (db in databases) {
             runCatching {
@@ -213,10 +230,12 @@ object ReplyDatabaseHistory {
     }
 
     /** 群成员昵称：逐个 wxid 查 rcontact / stranger，查不到就返回空。 */
-    suspend fun displayNames(usernames: List<String>): Map<String, String> = withContext(Dispatchers.IO) {
+    suspend fun displayNames(usernames: List<String>,
+        accountScope: String? = null): Map<String, String> = withContext(Dispatchers.IO) {
         val wanted = usernames.filter { it.isNotBlank() }.distinct()
         if (wanted.isEmpty()) return@withContext emptyMap()
-        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        val databases = databasesForScope(
+            synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }, accountScope)
         val result = mutableMapOf<String, String>()
         var errors = 0
         for (name in wanted) {

@@ -1,6 +1,7 @@
 package dev.jev.wechatmood.reply
 
 import dev.jev.wechatmood.core.HttpClients
+import dev.jev.wechatmood.core.MoodLog
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -39,18 +40,19 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
             // 输出被截断说明 max_tokens 不够，放宽上限重试一次，比让用户手动点重试好。
             if (error.message?.contains("截断") == true) {
                 once(settings, JSONObject(payload.toString()).put("max_tokens", 2400), parse, onPartial)
+            } else if (hasImage(payload)) {
+                // 图片必须最先回退：若先去掉 response_format / stream_options，重试仍带着图片，
+                // 再失败就直接抛错，纯文本兜底永远走不到。
+                MoodLog.w("REPLY_FALLBACK_TEXT 模型不接受图片，已回退纯文本：${error.message?.take(60)}")
+                once(settings, withoutImage(payload), parse, onPartial)
             } else if (payload.has("response_format")) {
                 // 一些服务不支持 response_format，会直接 400；去掉再试。
-                dev.jev.wechatmood.core.MoodLog.w("RESPONSE_FORMAT_UNSUPPORTED 去掉 response_format 重试")
+                MoodLog.w("RESPONSE_FORMAT_UNSUPPORTED 去掉 response_format 重试")
                 once(settings, JSONObject(payload.toString()).apply { remove("response_format") }, parse, onPartial)
             } else if (payload.has("stream_options")) {
                 // 一些网关不认 stream_options，直接 400；去掉参数再试，不影响回复本身。
-                dev.jev.wechatmood.core.MoodLog.w("REPLY_STREAM_OPTIONS_UNSUPPORTED 去掉 stream_options 重试")
+                MoodLog.w("REPLY_STREAM_OPTIONS_UNSUPPORTED 去掉 stream_options 重试")
                 once(settings, JSONObject(payload.toString()).apply { remove("stream_options") }, parse, onPartial)
-            } else if (hasImage(payload)) {
-                // 模型不接受图片（常见 400）时退回纯文本，功能不至于整块失败。
-                dev.jev.wechatmood.core.MoodLog.w("REPLY_FALLBACK_TEXT 模型不接受图片，已回退纯文本：${error.message?.take(60)}")
-                once(settings, withoutImage(payload), parse, onPartial)
             } else throw error
         }
 

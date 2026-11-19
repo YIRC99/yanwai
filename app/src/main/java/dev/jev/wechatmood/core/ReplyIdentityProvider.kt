@@ -34,9 +34,22 @@ object ReplyIdentityProvider {
             }).also { store = it }
         } catch (error: Exception) { db.close(); throw error }
     }
-    /** 清空所有联系人的关系档案：档案现在存在微信进程里，只能发命令让它自己删。 */
+    /**
+     * 清空所有联系人的关系档案：档案在微信进程里，App 只能记下请求等它执行。
+     * 广播只是加速通道，Android 9–13 拿不到发送方 UID、微信没运行时都收不到，
+     * 所以请求会落盘，由微信进程下次连上设置服务时执行并回执。
+     */
     @Synchronized fun clearAllFacts(context: Context) {
-        context.sendBroadcast(android.content.Intent(RelationFactBridge.CLEAR_ALL_ACTION).setPackage("com.tencent.mm"))
+        RelationFactBridge.requestClearAll(context)
+    }
+
+    /** 旧版档案留在 App 的库里；迁移时由微信进程取走，取走后再删掉这份副本。 */
+    @Synchronized fun legacyFactsJson(context: Context): String =
+        storage(context).facts.exportAll().toString()
+
+    @Synchronized fun clearLegacyFacts(context: Context) {
+        storage(context).facts.clearAll()
+        dev.jev.wechatmood.core.MoodLog.i("RELATION_FACT_LEGACY_CLEARED")
     }
 
     @Synchronized fun roles(context: Context): List<ReplyRole> = storage(context).roles.list()

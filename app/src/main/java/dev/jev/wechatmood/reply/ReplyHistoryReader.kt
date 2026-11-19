@@ -47,9 +47,8 @@ object ReplyHistoryReader {
                 // A stale/mismatched table must not replace newer evidence already visible on screen.
                 if (result.messages.isEmpty() || (textAnchor != null && result.messages.last().time < textAnchor.time)) continue
                 return result.copy(source = ReplyContextSource.LOCAL_HISTORY, latestLoadedId = loaded.latestLoadedId,
-                    background = loaded.background, focusMessageId = loaded.focusMessageId,
-                    targetMedia = loaded.targetMedia, targetImageDataUri = loaded.targetImageDataUri,
-                    focusText = loaded.focusText)
+                    focusMessageId = loaded.focusMessageId, targetMedia = loaded.targetMedia,
+                    targetImageDataUri = loaded.targetImageDataUri)
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { /* No raw SQL, account identifier or chat content in diagnostics. */ }
         }

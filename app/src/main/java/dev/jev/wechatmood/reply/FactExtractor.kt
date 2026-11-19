@@ -21,8 +21,12 @@ class FactExtractor(private val client: ReplyHttpClient = ReplyHttpClient()) {
         check(settings.isConfigured) { "请先配置回复模型" }
         val usable = messages.filter { it.text.isNotBlank() && !it.text.startsWith("【引用") }
             .takeLast(limit.coerceIn(10, MAX_MESSAGES))
+        // 每条都带上原始发送时间：周一的「明天见」拖到周四整理，不能按整理当天换算成周五。
         val transcript = usable.withIndex()
-            .joinToString("\n") { (index, message) -> "[${index + 1}] ${message.speaker}: ${message.text.take(80)}" }
+            .joinToString("\n") { (index, message) ->
+                val stamp = if (message.time > 0) FactTimes.formatLocal(message.time, "MM-dd E HH:mm") else "时间未知"
+                "[${index + 1}] $stamp ${message.speaker}: ${message.text.take(80)}"
+            }
             .take(MAX_CHARACTERS)
         check(transcript.isNotBlank()) { "没有可用的聊天内容" }
         val payload = JSONObject().put("model", settings.model).put("stream", false)
@@ -90,7 +94,7 @@ class FactExtractor(private val client: ReplyHttpClient = ReplyHttpClient()) {
 
         private fun instructions(now: Long, existing: List<RelationFact> = emptyList()): String {
             val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm EEEE", Locale.CHINA).format(Date(now))
-            return """你是资料整理助手。下面是一段微信聊天记录，每行形如「[序号] 说话人: 内容」。
+            return """你是资料整理助手。下面是一段微信聊天记录，每行形如「[序号] 发送时间 说话人: 内容」。
 「我」是用户自己，其他说话人都是「对方」。只提取关于对方的信息，不要提取我自己的。
 只输出 JSON 数组，不要任何解释或 Markdown。
 kind 只能是：工作、城市、家人、喜好、忌口、宠物、重要日期、约定、称呼。
@@ -103,7 +107,8 @@ kind 只能是：工作、城市、家人、喜好、忌口、宠物、重要日
 
 下面是我已经存下的档案，只用来判断哪条被替换，不要当成新的信息复述：
 ${existingBlock(existing)}
-当前时间：$stamp（换算「周五」「下周三」以它为准）。
+当前时间：$stamp。
+换算「周五」「下周三」「明天」这类相对日期时，以该条消息自己的发送时间为基准，不要用当前时间；发送时间是「时间未知」时才用当前时间。
 提取范围，只要对方原话说过或明确确认过就算：
 - 工作、职业、公司、所在城市、住的区域
 - 家人、孩子、宠物、彼此怎么称呼

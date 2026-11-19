@@ -166,17 +166,55 @@ object FactTimes {
  */
 class RelationFactStore(private val db: AnalysisCacheDatabase,
     private val now: () -> Long = System::currentTimeMillis) : Closeable {
+    /** 整批替换要串行：并发整理和手动添加同时跑，旧列表会把刚写进去的条目盖掉。 */
+    private val writeLock = Any()
+
     init {
         db.execute("CREATE TABLE IF NOT EXISTS relation_facts (contact_key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS relation_meta (contact_key TEXT PRIMARY KEY NOT NULL, last_at INTEGER NOT NULL, last_message_id INTEGER NOT NULL)")
-        db.execute("CREATE TABLE IF NOT EXISTS relation_fact_items (fact_id TEXT PRIMARY KEY NOT NULL, contact_key TEXT NOT NULL, " +
-            "status TEXT NOT NULL, kind TEXT NOT NULL, occurred_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL)")
+        ensureItemsTable()
         db.execute("CREATE INDEX IF NOT EXISTS relation_fact_items_contact ON relation_fact_items(contact_key, status, updated_at)")
         db.execute("CREATE TABLE IF NOT EXISTS relation_fact_migrations (contact_key TEXT PRIMARY KEY NOT NULL, migrated_at INTEGER NOT NULL)")
         // 彻底删除的条目记在这里：光删行不够，下次抽取还会抽出同一句话、同一个派生 id。
         db.execute("CREATE TABLE IF NOT EXISTS relation_fact_tombstones (contact_key TEXT NOT NULL, fact_id TEXT NOT NULL, " +
             "deleted_at INTEGER NOT NULL, PRIMARY KEY(contact_key, fact_id))")
         migrateLegacy()
+    }
+
+    /**
+     * 条目表主键必须是 (contact_key, fact_id)。
+     * 旧版只用 fact_id 作全库主键，A 和 B 都存「城市 / 住在杭州」时写 B 会挤掉 A；
+     * 发现旧结构就地重建并搬运数据，索引由 init 里统一重建。
+     */
+    private fun ensureItemsTable() {
+        val existing = runCatching {
+            db.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'relation_fact_items'")
+        }.getOrNull()
+        if (existing == null) {
+            db.execute(CREATE_ITEMS)
+            return
+        }
+        val normalized = existing.replace(" ", "").lowercase()
+        if ("primarykey(contact_key,fact_id)" in normalized) return
+        MoodLog.i("RELATION_FACT_ITEMS_MIGRATE legacy_primary=fact_id")
+        db.execute("ALTER TABLE relation_fact_items RENAME TO relation_fact_items_legacy")
+        db.execute(CREATE_ITEMS)
+        db.execute("INSERT OR REPLACE INTO relation_fact_items(fact_id, contact_key, status, kind, occurred_at, updated_at, payload) " +
+            "SELECT fact_id, contact_key, status, kind, occurred_at, updated_at, payload FROM relation_fact_items_legacy")
+        db.execute("DROP TABLE relation_fact_items_legacy")
+        MoodLog.i("RELATION_FACT_ITEMS_MIGRATED")
+    }
+
+    /** 写回整批条目：删旧、插新、更新进度在同一个事务里，进程中途被杀不会留下空档案。 */
+    private fun transaction(block: () -> Unit) {
+        db.execute("BEGIN IMMEDIATE")
+        try {
+            block()
+            db.execute("COMMIT")
+        } catch (error: Throwable) {
+            runCatching { db.execute("ROLLBACK") }
+            throw error
+        }
     }
 
     /** 旧版一行 JSON 拆成多条；迁移过的联系人记下来，不重复处理。 */
@@ -202,7 +240,7 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
         if (contacts > 0) MoodLog.i("RELATION_FACT_MIGRATED contacts=$contacts facts=$migrated")
     }
 
-    private fun upsert(contactKey: String, fact: RelationFact) {
+    private fun upsert(contactKey: String, fact: RelationFact) = synchronized(writeLock) {
         db.execute("INSERT OR REPLACE INTO relation_fact_items(fact_id, contact_key, status, kind, occurred_at, updated_at, payload) " +
             "VALUES(?, ?, ?, ?, ?, ?, ?)",
             listOf(fact.factId, contactKey, fact.status, fact.kind, fact.occurredAt.toString(),
@@ -235,10 +273,27 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
     }
 
     /** 整体替换该联系人；传入的列表已经由 [RelationFacts.merge] 合并与裁剪。 */
-    fun replace(key: ReplyContactKey, facts: List<RelationFact>) {
+    fun replace(key: ReplyContactKey, facts: List<RelationFact>) = synchronized(writeLock) {
         val ignored = ignored(key)
-        db.execute("DELETE FROM relation_fact_items WHERE contact_key = ?", listOf(key.value))
-        facts.filter { it.factId !in ignored }.forEach { upsert(key.value, it) }
+        transaction {
+            db.execute("DELETE FROM relation_fact_items WHERE contact_key = ?", listOf(key.value))
+            facts.filter { it.factId !in ignored }.forEach { upsert(key.value, it) }
+        }
+    }
+
+    /**
+     * 导出全部联系人的条目：旧版档案留在 App 的库里，微信进程启动时取走并写进自己的库。
+     * 只读，不改动任何状态。
+     */
+    fun exportAll(): JSONObject {
+        val root = JSONObject()
+        db.queryRows("SELECT DISTINCT contact_key FROM relation_fact_items").forEach { contactKey ->
+            if (!contactKey.matches(Regex("[0-9a-f]{64}"))) return@forEach
+            val array = JSONArray()
+            rows(ReplyContactKey(contactKey), null).forEach { array.put(it.encode()) }
+            if (array.length() > 0) root.put(contactKey, array)
+        }
+        return root
     }
 
     /** 被彻底删除过的 fact_id；自动抽取写回时据此过滤，避免同一件事实反复复活。 */
@@ -350,6 +405,12 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
     }
 
     override fun close() = db.close()
+
+    private companion object {
+        const val CREATE_ITEMS = "CREATE TABLE IF NOT EXISTS relation_fact_items (fact_id TEXT NOT NULL, " +
+            "contact_key TEXT NOT NULL, status TEXT NOT NULL, kind TEXT NOT NULL, occurred_at INTEGER NOT NULL, " +
+            "updated_at INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(contact_key, fact_id))"
+    }
 }
 
 object RelationFacts {

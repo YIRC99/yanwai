@@ -77,7 +77,13 @@ class HookEntry : IXposedHookLoadPackage {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, intent: Intent) {
                 if (intent.action != RelationFactBridge.CLEAR_ALL_ACTION) return
-                val from = if (Build.VERSION.SDK_INT >= 34) sentFromUid else -1
+                // Android 9–13 上 sentFromUid 固定是 -1，校验必然失败；
+                // 这种系统版本不走广播，改由落盘的清空请求在微信进程里执行并回执。
+                if (Build.VERSION.SDK_INT < 34) {
+                    MoodLog.i("RELATION_FACT_CLEAR_SENDER_UNKNOWN sdk=" + Build.VERSION.SDK_INT)
+                    return
+                }
+                val from = sentFromUid
                 val appUid = runCatching {
                     c.packageManager.getPackageUid("dev.jev.wechatmood", 0)
                 }.getOrDefault(-1)
@@ -113,6 +119,10 @@ class HookEntry : IXposedHookLoadPackage {
                     MoodLog.i("ENVIRONMENT\n${Diagnostics.environment(context)}")
                     ModulePrefs.report("模块 ${BuildConfig.VERSION_NAME} 已加载，等待打开聊天")
                     ReplyDatabaseHistory.install(context.classLoader)
+                    // 旧版档案还在 App 的库里：搬到微信库一次，搬完让 App 删掉旧副本。
+                    RelationFactBridge.migrateLegacy(context)
+                    // 微信没运行时记下的清空请求，这里补执行并回执。
+                    RelationFactBridge.runPendingClear(context)
                 }.onFailure { MoodLog.e("HOOK_INIT_BACKGROUND_FAILED", it) }
             }, "yanwai-init-bg").start()
         }.onFailure {

@@ -103,7 +103,8 @@ object GroupStatsCalculator {
             .map { MemberStat(it.name, it.count, it.media, it.voice, it.firstAt, it.lastAt, it.hours.take(3).sorted()) }
         return GroupStats(
             total = records.size,
-            senders = memberStats.size,
+            // 参与人数只算对方：自己的条数单独用 mine 表示，混进来会多算一个人。
+            senders = memberStats.count { it.name != "我" },
             mine = mine,
             media = media,
             voice = voice,

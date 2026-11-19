@@ -196,7 +196,9 @@ class MainActivity : AppCompatActivity() {
         }
         binding.replySettings.buttonClearFacts.setOnClickListener {
             dev.jev.wechatmood.core.ReplyIdentityProvider.clearAllFacts(this)
-            binding.replySettings.factsStatus.text = "已请求清空，微信下次打开档案时生效"
+            // 广播在 Android 9–13 上收不到发送方、微信没运行时也收不到，
+            // 所以请求已经落盘，等微信进程连上设置服务后执行并回执。
+            binding.replySettings.factsStatus.text = "已记录清空请求；微信运行中会立即执行，没运行则下次启动时执行"
         }
         binding.buttonDebug.setOnClickListener {
             val open = binding.debugPanel.visibility != View.VISIBLE
