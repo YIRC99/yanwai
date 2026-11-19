@@ -158,6 +158,31 @@ object FactTimes {
     }
 }
 
+/** 一次提醒涉及的联系人：哈希键用于读写档案，talker 只用于点通知时进对那个聊天。 */
+data class DueContact(val key: String, val talker: String?, val name: String, val facts: List<RelationFact>)
+
+/**
+ * 到期条目的筛选与写法。
+ *
+ * 放在这里而不是通知类里，是为了能脱离 Android 环境做单元测试：
+ * 只到日的条目在当天结束前不算过期，过期和今天的都算「现在该管」。
+ */
+object RelationDue {
+    /** 通知里最多展开三条，避免一条通知占满整屏。 */
+    const val MAX_ITEMS = 3
+
+    fun select(facts: List<RelationFact>, now: Long = System.currentTimeMillis()): List<RelationFact> =
+        facts.filter { it.isOpen && it.isTimed && it.occurredAt > 0 }
+            .filter { FactTimes.overdue(it.occurredAt, now) || FactTimes.sameDay(it.occurredAt, now) }
+            .sortedBy { it.occurredAt }
+
+    /** 通知里的一行：时间（过期会注明）+ 内容，不再只说「1 条约会今天到期」。 */
+    fun line(fact: RelationFact, now: Long = System.currentTimeMillis()): String {
+        val suffix = if (FactTimes.overdue(fact.occurredAt, now)) "（已过）" else ""
+        return FactTimes.label(fact.occurredAt, now) + suffix + " · " + fact.text
+    }
+}
+
 /**
  * 事实存储：一条事实一行，[payload] 存完整对象，其余列只用于查询与排序。
  *
@@ -178,6 +203,11 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
         // 彻底删除的条目记在这里：光删行不够，下次抽取还会抽出同一句话、同一个派生 id。
         db.execute("CREATE TABLE IF NOT EXISTS relation_fact_tombstones (contact_key TEXT NOT NULL, fact_id TEXT NOT NULL, " +
             "deleted_at INTEGER NOT NULL, PRIMARY KEY(contact_key, fact_id))")
+        // 哈希键换不回聊天对象，提醒要点进那个聊天就得单独记一份；只在本机，不参与上传或分析。
+        db.execute("CREATE TABLE IF NOT EXISTS relation_contact_dir (contact_key TEXT PRIMARY KEY NOT NULL, " +
+            "talker TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL)")
+        // 旧库只有 talker 一列：补上名字，失败说明已经补过。
+        runCatching { db.execute("ALTER TABLE relation_contact_dir ADD COLUMN name TEXT NOT NULL DEFAULT ''") }
         migrateLegacy()
     }
 
@@ -387,6 +417,52 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
             .mapNotNull { payload -> runCatching { RelationFact.decode(JSONObject(payload)) }.getOrNull() }
     }
 
+    /**
+     * 记住哈希键对应的聊天对象。提醒要点进那个聊天，光有 64 位哈希做不到。
+     * 只写在本机这个库里，不进提示词、不写日志、不上传。
+     */
+    fun rememberContact(key: ReplyContactKey, talker: String, name: String = "") = synchronized(writeLock) {
+        if (talker.isBlank() || talker.length > 256) return@synchronized
+        // 名字查不到时保留上次存下的，不要用一个空串把备注名抹掉。
+        val kept = name.trim().take(64).ifEmpty { contactName(key.value) }
+        db.execute("INSERT OR REPLACE INTO relation_contact_dir(contact_key, talker, name, updated_at) " +
+            "VALUES(?, ?, ?, ?)", listOf(key.value, talker, kept, now().toString()))
+    }
+
+    private fun contactName(contactKey: String): String =
+        db.query("SELECT name FROM relation_contact_dir WHERE contact_key = ?", listOf(contactKey)).orEmpty()
+
+    fun contactTalker(key: ReplyContactKey): String? = contactTalker(key.value)
+
+    private fun contactTalker(contactKey: String): String? =
+        db.query("SELECT talker FROM relation_contact_dir WHERE contact_key = ?", listOf(contactKey))
+
+    /** 全部联系人的到期条目：进微信首页时用它统一提醒一次，不用先把每个聊天点一遍。 */
+    fun dueContacts(now: Long = System.currentTimeMillis()): List<DueContact> {
+        val placeholders = RelationFact.TIMED_KINDS.joinToString(",") { "?" }
+        val rows = db.queryRows(
+            "SELECT contact_key || ':' || payload FROM relation_fact_items " +
+                "WHERE status = 'active' AND kind IN ($placeholders) AND occurred_at > 0",
+            RelationFact.TIMED_KINDS.toList())
+        val grouped = LinkedHashMap<String, MutableList<RelationFact>>()
+        for (row in rows) {
+            if (row.length < 66 || row[64] != ':') continue
+            val contactKey = row.substring(0, 64)
+            if (!contactKey.matches(Regex("[0-9a-f]{64}"))) continue
+            val fact = runCatching { RelationFact.decode(JSONObject(row.substring(65))) }.getOrNull() ?: continue
+            grouped.getOrPut(contactKey) { mutableListOf() } += fact
+        }
+        return grouped.mapNotNull { (contactKey, facts) ->
+            val due = RelationDue.select(facts, now)
+            if (due.isEmpty()) return@mapNotNull null
+            DueContact(contactKey, contactTalker(contactKey), contactName(contactKey), due)
+        }.sortedBy { it.facts.first().occurredAt }
+    }
+
+    /** 通知上的「标完成」一次改多条，返回真正改掉的条数。 */
+    fun setStatusAll(key: ReplyContactKey, factIds: List<String>, status: String): Int =
+        factIds.distinct().count { setStatus(key, it, status) }
+
     fun clear(key: ReplyContactKey) {
         db.execute("DELETE FROM relation_fact_items WHERE contact_key = ?", listOf(key.value))
         db.execute("DELETE FROM relation_facts WHERE contact_key = ?", listOf(key.value))
@@ -394,6 +470,7 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
         db.execute("DELETE FROM relation_fact_tombstones WHERE contact_key = ?", listOf(key.value))
         // 水位一起清掉，下次才会重新抽，否则清空后再也不更新。
         db.execute("DELETE FROM relation_meta WHERE contact_key = ?", listOf(key.value))
+        db.execute("DELETE FROM relation_contact_dir WHERE contact_key = ?", listOf(key.value))
     }
 
     fun clearAll() {
@@ -402,6 +479,7 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
         db.execute("DELETE FROM relation_fact_migrations")
         db.execute("DELETE FROM relation_fact_tombstones")
         db.execute("DELETE FROM relation_meta")
+        db.execute("DELETE FROM relation_contact_dir")
     }
 
     override fun close() = db.close()

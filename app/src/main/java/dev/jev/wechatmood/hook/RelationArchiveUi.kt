@@ -138,6 +138,13 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         scope.launch {
             val key = resolveKey(selected)
             contactKey = key
+            // 记下这条档案对应哪个聊天和备注名，到期通知点开才能进对会话。
+            if (key != null) {
+                val name = withContext(Dispatchers.IO) {
+                    runCatching { ReplyDatabaseHistory.displayNames(listOf(selected))[selected] }.getOrNull()
+                }
+                RelationFactBridge.rememberContact(activity, key, selected, name.orEmpty())
+            }
             if (key == null) {
                 showStatus("没能确认是哪个账号的聊天，先回到聊天页等一会儿", theme.warning)
                 return@launch
@@ -434,7 +441,22 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
                 return@launch
             }
             val time = if (message.createdAt > 0) FactTimes.formatLocal(message.createdAt, "MM-dd HH:mm") else "时间未知"
-            kit.info("依据消息", "${message.speaker()} · $time\n\n${message.analysisText() ?: "[非文字消息]"}")
+            // 把读到的真实类型写进日志：用户说那条明明是文字，得能看出到底读成了什么。
+            val extracted = message.analysisText() ?: message.evidenceBody()
+            MoodLog.i("RELATION_EVIDENCE type=" + message.type + " send=" + message.isSend +
+                " len=" + message.content.length + " shown=" + (extracted?.length ?: -1))
+            val body = extracted
+            val kind = message.evidenceKind()
+            val nearby = withContext(Dispatchers.IO) {
+                ReplyDatabaseHistory.nearbyText(selected, messageId, snapshot?.account)
+            }
+            val around = if (nearby.isEmpty()) "" else "\n\n上下文：\n" + nearby.joinToString("\n") { item ->
+                val stamp = if (item.createdAt > 0) FactTimes.formatLocal(item.createdAt, "HH:mm") else "--:--"
+                val text = item.plainText()?.replace("\n", " ")?.take(40) ?: "[${item.evidenceKind()}]"
+                "$stamp ${item.speaker()}：$text"
+            }
+            kit.info("依据消息", "${message.speaker()} · $time · $kind${around}\n\n" +
+                (body ?: "【这条被读成$kind，没有可显示的正文】"))
         }
     }
 
@@ -449,6 +471,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
                 return@launch
             }
             load(key)
+            RelationReminder.refresh(activity, key, talker)
         }
     }
 
@@ -463,6 +486,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
                 return@launch
             }
             load(key)
+            RelationReminder.refresh(activity, key, talker)
         }
     }
 
@@ -477,6 +501,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
                 return@launch
             }
             load(key)
+            RelationReminder.refresh(activity, key, talker)
             showStatus("已彻底删除，之后的自动整理不会再抽回这条", theme.success)
         }
     }
@@ -528,8 +553,63 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         val text = input("例如：在游戏公司做运营")
         column.addView(text, LinearLayout.LayoutParams(-1, -2).apply { topMargin = theme.dp(10) })
         val timed = kind in RelationFact.TIMED_KINDS
-        val at = if (timed) input("时间，如 2026-11-20 19:00；留空就只当信息") else null
-        at?.let { column.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = theme.dp(8) }) }
+        // 日期和时刻都用自绘刻度条滑选：系统日历+表盘又高又丑，底部还会被屏幕切掉。
+        var occurredAt = 0L
+        if (timed) {
+            val today = FactTimes.startOfDay(System.currentTimeMillis())
+            val soon = System.currentTimeMillis() + 3_600_000L
+            var dayMillis = FactTimes.startOfDay(soon)
+            var minuteOfDay = (((soon - dayMillis) / 60_000L).toInt()).let { it - it % 5 }
+            var dayOnly = kind == "重要日期"
+            fun picked(): Long = if (dayOnly) dayMillis else dayMillis + minuteOfDay * 60_000L
+
+            val dayBack = 30
+            val dayForward = 90
+            fun dayAt(index: Int): Long = today + (index - dayBack) * 86_400_000L
+            val dayOffset = ((dayMillis - today) / 86_400_000L).toInt()
+
+            val dateRuler = RulerPicker(activity, theme, min = 0, max = dayBack + dayForward, step = 1,
+                value = dayBack + dayOffset, spacing = theme.dp(78),
+                label = { index -> FactTimes.label(dayAt(index)) }) { index ->
+                dayMillis = dayAt(index)
+                occurredAt = picked()
+            }
+            val timeRuler = RulerPicker(activity, theme, min = 0, max = 24 * 60 / 5 - 1, step = 1,
+                value = minuteOfDay / 5, spacing = theme.dp(54),
+                label = { index -> String.format(java.util.Locale.CHINA, "%02d:%02d", index * 5 / 60, index * 5 % 60) }
+            ) { index ->
+                minuteOfDay = index * 5
+                occurredAt = picked()
+            }
+            occurredAt = picked()
+
+            column.addView(kit.caption("日期 · 左右滑动").apply { setPadding(0, theme.dp(10), 0, 0) })
+            column.addView(dateRuler, LinearLayout.LayoutParams(-1, -2))
+            val timeCaption = kit.caption("时刻 · 左右滑动").apply { setPadding(0, theme.dp(6), 0, 0) }
+            column.addView(timeCaption)
+            column.addView(timeRuler, LinearLayout.LayoutParams(-1, -2))
+            val dayOnlySwitch = android.widget.Switch(activity).apply {
+                // 不能写 text = ...：外层有个同名 val（正文输入框），会被解析成它。
+                setText("只到日期，不写几点")
+                isChecked = dayOnly
+                textSize = ReplyMetrics.TEXT_BODY
+                setTextColor(theme.ink)
+                minimumHeight = theme.dp(ReplyMetrics.TAP)
+                setPadding(0, theme.dp(8), 0, 0)
+                setOnCheckedChangeListener { _, value ->
+                    dayOnly = value
+                    val gone = if (value) android.view.View.GONE else android.view.View.VISIBLE
+                    timeCaption.visibility = gone
+                    timeRuler.visibility = gone
+                    occurredAt = picked()
+                }
+            }
+            column.addView(dayOnlySwitch, LinearLayout.LayoutParams(-1, -2))
+            if (dayOnly) {
+                timeCaption.visibility = android.view.View.GONE
+                timeRuler.visibility = android.view.View.GONE
+            }
+        }
         val hint = kit.caption("")
         column.addView(hint)
         column.addView(theme.action("保存", primary = true) {
@@ -538,10 +618,9 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
                 body.isEmpty() -> hint.text = "写一句再保存"
                 body.length > RelationFact.MAX_TEXT -> hint.text = "超过 ${RelationFact.MAX_TEXT} 个字了"
                 else -> {
-                    val occurredAt = at?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let(FactTimes::parseLocal) ?: 0
                     sheet.dismiss()
                     addDialog = null
-                    save(kind, body, occurredAt)
+                    save(kind, body, if (timed) occurredAt else 0)
                 }
             }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = theme.dp(10) })

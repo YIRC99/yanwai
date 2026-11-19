@@ -206,6 +206,34 @@ object ReplyDatabaseHistory {
         null
     }
 
+    /**
+     * 依据消息前后的文字，给档案条目补上下文。
+     * 只按本地 msgId 排序取最近几条，查不到就返回空，不猜。
+     */
+    suspend fun nearbyText(talker: String, msgId: Long, accountScope: String? = null,
+        limit: Int = 2): List<MessageMetadata> = withContext(Dispatchers.IO) {
+        if (msgId <= 0) return@withContext emptyList()
+        val databases = databasesForScope(
+            synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }, accountScope)
+        val out = mutableListOf<MessageMetadata>()
+        for (db in databases) {
+            runCatching {
+                query(db, "SELECT * FROM message WHERE talker = ? AND type = 1 AND msgId < ? " +
+                    "ORDER BY msgId DESC LIMIT ?", arrayOf(talker, msgId.toString(), limit.toString())).use { cursor ->
+                    while (cursor.moveToNext()) out += metadata(cursor)
+                }
+            }
+            runCatching {
+                query(db, "SELECT * FROM message WHERE talker = ? AND type = 1 AND msgId > ? " +
+                    "ORDER BY msgId ASC LIMIT ?", arrayOf(talker, msgId.toString(), limit.toString())).use { cursor ->
+                    while (cursor.moveToNext()) out += metadata(cursor)
+                }
+            }
+            if (out.isNotEmpty()) break
+        }
+        out.sortedBy { it.createdAt }
+    }
+
     /** 诊断用：列出主库的表名，便于确认群昵称实际存在哪张表。 */
     suspend fun tableNames(accountScope: String? = null): List<String> = withContext(Dispatchers.IO) {
         val databases = databasesForScope(

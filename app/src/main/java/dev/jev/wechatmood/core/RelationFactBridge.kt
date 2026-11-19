@@ -3,6 +3,7 @@ package dev.jev.wechatmood.core
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import dev.jev.wechatmood.reply.DueContact
 import dev.jev.wechatmood.reply.RelationFact
 import dev.jev.wechatmood.reply.RelationFacts
 import dev.jev.wechatmood.reply.RelationFactStore
@@ -101,6 +102,23 @@ object RelationFactBridge {
         runPendingClearThrottled(context)
         return store(context).listAll(key)
     }
+
+    /** 记下"这个哈希键对应哪个聊天"，供到期提醒点进正确的会话。 */
+    fun rememberContact(context: Context, key: ReplyContactKey, talker: String, name: String = "") = runCatching {
+        store(context).rememberContact(key, talker, name)
+    }.onFailure { MoodLog.w("RELATION_CONTACT_DIR_FAILED " + it.javaClass.simpleName) }
+
+    /** 全部联系人的到期条目；读不到就返回空，宁可这次不提醒也不抛到界面。 */
+    fun dueContacts(context: Context, now: Long = System.currentTimeMillis()): List<DueContact> = runCatching {
+        runPendingClearThrottled(context)
+        store(context).dueContacts(now)
+    }.getOrDefault(emptyList())
+
+    /** 通知上的「标完成」：按哈希键 + 条目 id 精确改状态，返回真正改掉的条数。 */
+    fun markDone(context: Context, contactKey: String, factIds: List<String>): Int = runCatching {
+        val key = ReplyContactKey(contactKey)
+        store(context).setStatusAll(key, factIds, RelationFact.STATUS_DONE)
+    }.onFailure { MoodLog.w("RELATION_TODO_DONE_FAILED " + it.javaClass.simpleName) }.getOrDefault(0)
 
     fun meta(context: Context, key: ReplyContactKey): RelationMeta {
         return store(context).meta(key)

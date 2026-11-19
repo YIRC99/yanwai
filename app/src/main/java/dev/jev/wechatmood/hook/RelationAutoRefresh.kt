@@ -67,7 +67,12 @@ internal object RelationAutoRefresh {
         val snapshot = RelationFactRefresher.Snapshot(account, talker, live.messages)
         // 到期提醒只受「显示档案」本身影响，关掉自动整理不该把提醒一起停掉。
         val facts = withContext(Dispatchers.IO) { runCatching { RelationFactBridge.load(activity, key) }.getOrDefault(emptyList()) }
-        RelationReminder.check(activity, key, facts)
+        // 哈希键换不回聊天对象：顺手把聊天对象和备注名记一份，提醒点开才能进对会话。
+        withContext(Dispatchers.IO) {
+            val name = runCatching { ReplyDatabaseHistory.displayNames(listOf(talker))[talker] }.getOrNull()
+            RelationFactBridge.rememberContact(activity, key, talker, name.orEmpty())
+        }
+        RelationReminder.check(activity, key, talker, facts)
         if (!RelationFactBridge.enabled(activity)) return
         val meta = withContext(Dispatchers.IO) { runCatching { RelationFactBridge.meta(activity, key) }.getOrNull() } ?: return
         val gap = System.currentTimeMillis() - meta.lastAt

@@ -81,6 +81,13 @@ internal class RelationTodoUi(private val activity: Activity, private val talker
         scope.launch {
             val key = resolveKey(selected)
             contactKey = key
+            // 记下这条档案对应哪个聊天和备注名，到期通知点开才能进对会话。
+            if (key != null) {
+                val name = withContext(Dispatchers.IO) {
+                    runCatching { ReplyDatabaseHistory.displayNames(listOf(selected))[selected] }.getOrNull()
+                }
+                RelationFactBridge.rememberContact(activity, key, selected, name.orEmpty())
+            }
             if (key == null) {
                 showStatus("没能确认是哪个账号的聊天，先回到聊天页等一会儿", theme.warning)
                 listContainer.addView(kit.body("暂时读不到这个联系人的档案"))
@@ -219,6 +226,8 @@ internal class RelationTodoUi(private val activity: Activity, private val talker
                 return@launch
             }
             load(key)
+            // 标完成的不该继续挂在通知栏里：重算一次，没了就撤，还有别的就重发。
+            RelationReminder.refresh(activity, key, talker)
         }
     }
 
