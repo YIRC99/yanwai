@@ -537,6 +537,15 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                         RelationFactBridge.save(activity, key, extracted, System.currentTimeMillis(),
                             live.messages.lastOrNull()?.id ?: 0)
                     }
+                    if (saved == null) {
+                        if (!auto) state.text = "档案没能写入，确认言外在后台运行后再试"
+                        return@launch
+                    }
+                    // 请求可能晚于抽屉切换：A 的结果只写回 A 的库，不能改写当前 B 面板的 facts。
+                    if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())) {
+                        MoodLog.i("RELATION_FACTS_LATE key_hash=" + key.value.hashCode())
+                        return@launch
+                    }
                     facts = saved
                     if (!auto) state.text = "关系档案已更新：${saved.size} 条"
                 } catch (e: CancellationException) { throw e }
@@ -827,9 +836,13 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     if (!ownsDrawer() || !ModulePrefs.canGenerateReply) return@launch
                     if (!verifyAccount()) { window.dismiss(); return@launch }
                     if (current.messages.isEmpty() || current.messages.all { it.voiceState == VoiceState.FAILED }) {
-                        reference.fail(ticket)
-                        state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
-                        return@launch
+                        // 长按的是一张图片时没有文字历史也算正常：按上下文拟回复，别直接失败。
+                        if (current.targetImageDataUri == null) {
+                            reference.fail(ticket)
+                            state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
+                            return@launch
+                        }
+                        state.text = "本轮目标是一张图片，暂不识别内容，按上下文拟回复。"
                     }
                     if (!reference.complete(ticket, current.copy(facts = facts), MessageSniffer.currentReplyTalker())) return@launch
                     snapshot = current

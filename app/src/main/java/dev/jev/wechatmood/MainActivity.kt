@@ -185,7 +185,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val factsSwitch = binding.replySettings.switchRelationFacts
-        factsSwitch.isChecked = prefs.getBoolean(ModulePrefs.KEY_RELATION_FACTS, true)
+        // 与设置服务一致：没明确开启过按关闭处理。
+        factsSwitch.isChecked = prefs.getBoolean(ModulePrefs.KEY_RELATION_FACTS, false)
         factsSwitch.setOnCheckedChangeListener { _, value ->
             if (!syncingSwitches) {
                 save(ModulePrefs.KEY_RELATION_FACTS, value)

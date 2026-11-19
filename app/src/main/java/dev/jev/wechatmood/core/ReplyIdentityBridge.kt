@@ -31,14 +31,15 @@ object ReplyIdentityBridge {
             Bundle().apply { putString(SettingsProvider.KEY_GENERATION, generation.generation) })
         val payload = requireNotNull(result?.getString("payload"))
         return accept(generation, key, ContactBackground.decode(payload)).also {
-            ReplySnapshotCache.save(context, key.value, "bg", payload)
+            ReplySnapshotCache.save(context, key.value, "bg", payload, generation.token)
         }
     }
     fun background(context: Context, key: ReplyContactKey): ContactBackground? {
         val generation = runCatching { generation() }.getOrNull() ?: return null
         backgrounds.get(generation.token, key)?.let { return it }
-        // 主进程拉不起来时直接用上次成功读到的背景，别让分析整块停掉。
-        ReplySnapshotCache.load(context, key.value, "bg")?.let { cached ->
+        // 主进程拉不起来时用上次成功读到的背景；缓存只对写出它的角色版本有效，
+        // 角色被修改或重选后版本变化，旧背景不再进入模型请求。
+        ReplySnapshotCache.load(context, key.value, "bg", generation.token)?.let { cached ->
             runCatching { ContactBackground.decode(cached) }.getOrNull()?.let { value ->
                 return runCatching { accept(generation, key, value) }.getOrDefault(value)
             }
@@ -57,8 +58,8 @@ object ReplyIdentityBridge {
         val generation = generation()
         worker.execute {
             val result = runCatching { readBackground(app, key, generation) }.recoverCatching {
-                // 没有缓存也降级成「无背景」，不让抽屉打不开。
-                ReplySnapshotCache.load(app, key.value, "bg")
+                // 没有当前版本的缓存也降级成「无背景」，不让抽屉打不开，也不回退到旧内容。
+                ReplySnapshotCache.load(app, key.value, "bg", generation.token)
                     ?.let { runCatching { ContactBackground.decode(it) }.getOrNull() } ?: ContactBackground()
             }
             if (c.isActive) c.resumeWith(result)
@@ -76,6 +77,9 @@ object ReplyIdentityBridge {
                     Bundle().apply { putString("text", text); putString(SettingsProvider.KEY_GENERATION, generation.generation); putLong(ReplyIdentityProvider.KEY_ROLE_REVISION, generation.revision) })
                 ContactBackground.decode(requireNotNull(response?.getString("payload"))).also {
                     accept(generation, key, it)
+                    // The edit is already accepted by the provider: overwrite the fallback so a
+                    // cold start cannot resurrect the previous text.
+                    ReplySnapshotCache.save(context.applicationContext, key.value, "bg", it.encode(), generation.token)
                     ModulePrefs.backgroundChanged(owner.talker)
                 }
             }
@@ -91,10 +95,10 @@ object ReplyIdentityBridge {
                     Bundle().apply { putString(SettingsProvider.KEY_GENERATION, captured.generation) })
                 check(captured.current()) { "角色已变化，请重试" }
                 requireNotNull(response?.getStringArrayList("roles")).also {
-                    ReplySnapshotCache.saveRoles(app, it)
+                    ReplySnapshotCache.saveRoles(app, it, captured.token)
                 }.map(ReplyRole::decode)
             }.recoverCatching {
-                ReplySnapshotCache.loadRoles(app)?.map(ReplyRole::decode) ?: emptyList()
+                ReplySnapshotCache.loadRoles(app, captured.token)?.map(ReplyRole::decode) ?: emptyList()
             }
             if (c.isActive) c.resumeWith(result)
         }
@@ -119,6 +123,7 @@ object ReplyIdentityBridge {
                 val updated = generation()
                 check(updated.generation == captured.generation && updated.revision == revision) { "角色或设置已变化，请重新打开" }
                 val background = accept(updated, key, ContactBackground.decode(requireNotNull(response.getString("background"))))
+                ReplySnapshotCache.save(context.applicationContext, key.value, "bg", background.encode(), updated.token)
                 ModulePrefs.backgroundChanged(owner.talker)
                 AppliedReplyRole(ReplyIdentitySetting.decode(requireNotNull(response.getString("identity"))), background, revision)
             }
@@ -140,6 +145,7 @@ object ReplyIdentityBridge {
                         }))
                     val identity = ReplyIdentitySetting.decode(requireNotNull(response.getString("identity")))
                     val background = accept(captured, key, ContactBackground.decode(requireNotNull(response.getString("background"))))
+                    ReplySnapshotCache.save(context.applicationContext, key.value, "bg", background.encode(), captured.token)
                     ModulePrefs.backgroundChanged(owner.talker)
                     AppliedReplyRole(identity, background)
                 }
@@ -166,14 +172,17 @@ object ReplyIdentityBridge {
     }
     suspend fun load(context: Context, key: ReplyContactKey): ReplyIdentitySetting = suspendCancellableCoroutine { continuation ->
         val app = context.applicationContext
+        // 身份缓存同样要绑定角色版本：角色被改后旧身份不能再回流给模型。
+        val version = runCatching { generation().token }.getOrNull().orEmpty()
         queue(app).load(key) callback@{ result ->
             if (!continuation.isActive) return@callback
             result.fold({ value ->
-                ReplySnapshotCache.save(app, key.value, "id", value.encode())
+                if (version.isNotEmpty()) ReplySnapshotCache.save(app, key.value, "id", value.encode(), version)
                 continuation.resume(value)
             }, { error ->
-                val cached = ReplySnapshotCache.load(app, key.value, "id")
-                    ?.let { runCatching { ReplyIdentitySetting.decode(it) }.getOrNull() }
+                val cached = version.takeIf { it.isNotEmpty() }?.let {
+                    ReplySnapshotCache.load(app, key.value, "id", it)
+                }?.let { runCatching { ReplyIdentitySetting.decode(it) }.getOrNull() }
                 // 读不到就按「未指定身份」继续，用户仍可在抽屉里手动选。
                 continuation.resume(cached ?: ReplyIdentitySetting())
             })
@@ -181,7 +190,14 @@ object ReplyIdentityBridge {
     }
     fun save(context: Context, owner: ReplyIdentityOwner, value: ReplyIdentitySetting, verify: () -> String?, complete: (Boolean) -> Unit) {
         queue(context.applicationContext).save(owner, value, verify) { saved ->
-            if (saved) ModulePrefs.backgroundChanged(owner.talker)
+            if (saved) {
+                // 选择「未指定身份」时清空背景，缓存必须跟着失效，否则冷启动仍会带回旧背景。
+                if (value.roleId == null) owner.key?.let { key ->
+                    ReplySnapshotCache.clear(context.applicationContext, key.value, "bg")
+                    runCatching { generation() }.getOrNull()?.let { backgrounds.remove(it.token, key) }
+                }
+                ModulePrefs.backgroundChanged(owner.talker)
+            }
             complete(saved)
         }
     }

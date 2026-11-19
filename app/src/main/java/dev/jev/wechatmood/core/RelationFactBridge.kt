@@ -26,9 +26,12 @@ object RelationFactBridge {
         RelationMeta(bundle.getLong("last_at", 0L), bundle.getLong("last_message_id", 0L))
     }.getOrDefault(RelationMeta())
 
-    /** 返回合并后的完整列表；失败时返回本次想写入的内容，不影响调用方继续。 */
+    /**
+     * 写入并返回合并后的完整列表。
+     * 返回 null 表示没写进磁盘——调用方必须按失败处理，不能再拿本次内容冒充成功。
+     */
     fun save(context: Context, key: ReplyContactKey, facts: List<RelationFact>,
-        lastAt: Long, lastMessageId: Long): List<RelationFact> = runCatching {
+        lastAt: Long, lastMessageId: Long): List<RelationFact>? = runCatching {
         val array = JSONArray()
         facts.forEach { array.put(it.encode()) }
         val result = SettingsTransport.call(context, "relation_facts_put", key.value, Bundle().apply {
@@ -36,9 +39,9 @@ object RelationFactBridge {
             putLong("last_at", lastAt)
             putLong("last_message_id", lastMessageId)
             generation()?.let { putString(SettingsProvider.KEY_GENERATION, it) }
-        })
-        decode(result?.getStringArrayList("facts").orEmpty()).ifEmpty { facts }
-    }.getOrDefault(facts)
+        }) ?: return@runCatching null
+        decode(result.getStringArrayList("facts").orEmpty())
+    }.getOrNull()
 
     fun clear(context: Context, key: ReplyContactKey) {
         runCatching {

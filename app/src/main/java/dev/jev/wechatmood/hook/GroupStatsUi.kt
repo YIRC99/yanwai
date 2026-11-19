@@ -60,7 +60,7 @@ object StatsFilter {
 
 /** 群聊统计窗口：数字 + 活跃成员 + 一次 AI 解读，结果可复制。 */
 internal class GroupStatsUi(private val activity: Activity, private val context: ReplyContext,
-    private val dbMessages: List<dev.jev.wechatmood.reply.ReplyMessage> = emptyList(),
+    private var dbMessages: List<dev.jev.wechatmood.reply.ReplyMessage> = emptyList(),
     private val accountScope: String? = null,
     private val reload: (() -> Unit)? = null) {
     private val kit = PanelKit(activity)
@@ -119,11 +119,28 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
     }
 
     private fun spanText(): String {
-        val first = context.messages.firstOrNull { it.time > 0 }?.time
-        val last = context.messages.lastOrNull { it.time > 0 }?.time
-        if (first == null || last == null) return "未知"
+        // 按筛选后的消息算范围，避免「一千多条却只有十几分钟」这种对不上的显示。
+        val stamps = filtered.map { if (it.time > 1_000_000_000_000L) it.time else it.time * 1000 }
+            .filter { it > 0 }
+        if (stamps.isEmpty()) return "暂无数据"
         val format = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA)
-        return format.format(java.util.Date(first)) + "–" + format.format(java.util.Date(last))
+        return format.format(java.util.Date(stamps.min())) + "–" + format.format(java.util.Date(stamps.max()))
+    }
+
+    /** 换筛选后按新条件重新查库；只重算内存旧数据的话，放宽条数或时段不会生效。 */
+    private suspend fun reloadDb() {
+        val account = accountScope ?: return
+        val limit = if (StatsFilter.limit == 0) 5000 else StatsFilter.limit
+        val rows = runCatching {
+            ReplyDatabaseHistory.statMessages(context.talker, StatsFilter.sinceMillis(), limit, account)
+        }.getOrDefault(emptyList())
+        dev.jev.wechatmood.core.MoodLog.i("STATS_RELOAD rows=" + rows.size + " limit=" + limit)
+        if (rows.isEmpty()) return
+        dbMessages = rows.map {
+            dev.jev.wechatmood.reply.ReplyMessage(it.messageId, it.speaker(), it.createdAt,
+                it.analysisText() ?: "[媒体]", type = it.type)
+        }
+        stats = computeStats()
     }
 
     fun show() {
@@ -216,6 +233,16 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
             analysisText = ""
             aiButton.text = "让 AI 说说这群在聊什么"
             scope.launch {
+                // 范围放宽时原来的缓存不够用：按新条件重查一次，数字才会跟着变。
+                reloadDb()
+                summaryLine.text = summaryText()
+                spanLine.text = "数据范围 " + spanText()
+                cells[0].second.text = "" + stats.total
+                cells[1].second.text = "" + stats.senders
+                cells[2].second.text = "" + (stats.media + stats.voice)
+                cells[3].second.text = "" + stats.activeHours.size
+                renderTop(currentNames)
+                renderActiveHours(activeBox)
                 val names = runCatching {
                     ReplyDatabaseHistory.displayNames(stats.members.map { it.name }, accountScope)
                 }.getOrDefault(emptyMap())
@@ -483,6 +510,10 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
                 ?: "群友${labels.size + 1}"
         }
         val sample = sampleSource.joinToString("\n") { "${speakerLabel(it.speaker)}: ${it.text.take(80)}" }
+        // 活跃榜同样换成显示名：原来直接拼 stats.topSenders，数据库查不到时会把 wxid 交给模型。
+        val displayStats = stats.copy(
+            topSenders = stats.topSenders.map { (raw, count) -> speakerLabel(raw) to count }
+        )
         val client = ReplyHttpClient()
         var limit = 3000
         repeat(2) { attempt ->
@@ -491,7 +522,7 @@ internal class GroupStatsUi(private val activity: Activity, private val context:
                 .put("messages", JSONArray()
                     .put(JSONObject().put("role", "system").put("content", summaryPrompt))
                     .put(JSONObject().put("role", "user").put("content",
-                        "统计：${stats.lines().joinToString("；")}\n最近消息：\n$sample")))
+                        "统计：${displayStats.lines().joinToString("；")}\n最近消息：\n$sample")))
             val raw = withContext(Dispatchers.IO) {
                 client.request(current, payload, parse = { body ->
                     val choice = JSONObject(body).getJSONArray("choices").getJSONObject(0)

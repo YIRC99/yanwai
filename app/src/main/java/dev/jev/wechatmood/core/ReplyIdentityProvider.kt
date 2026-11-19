@@ -56,7 +56,8 @@ object ReplyIdentityProvider {
         }
         if (method == "relation_facts_enabled") {
             val prefs = context.getSharedPreferences(ModulePrefs.FILE_NAME, 0)
-            return Bundle().apply { putBoolean("enabled", prefs.getBoolean(ModulePrefs.KEY_RELATION_FACTS, true)) }
+            // 默认关闭：没明确开启过就不读聊天、不上传，和设置页文案保持一致。
+            return Bundle().apply { putBoolean("enabled", prefs.getBoolean(ModulePrefs.KEY_RELATION_FACTS, false)) }
         }
         val requested = ReplyContactKey(requireNotNull(arg))
         val key = ReplyContactKey(AnalysisCacheKey.digest(caller.toString(), requested.value))

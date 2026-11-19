@@ -66,14 +66,16 @@ object ModulePrefs {
     private fun warmReplySnapshot() {
         if (warmScheduled) return
         val ctx = context ?: return
-        val generation = session.current?.generation ?: return
+        val current = session.current ?: return
+        val generation = current.generation
+        val version = "${current.generation}:${current.rolesRevision}"
         warmScheduled = true
         bridgeWorker.execute {
             runCatching {
                 val response = SettingsTransport.call(ctx, "reply_role_list", null,
                     Bundle().apply { putString(SettingsProvider.KEY_GENERATION, generation) })
                 val roles = response?.getStringArrayList("roles") ?: return@runCatching
-                ReplySnapshotCache.saveRoles(ctx, roles)
+                ReplySnapshotCache.saveRoles(ctx, roles, version)
                 MoodLog.i("REPLY_ROLES_WARMED count=${roles.size}")
             }.onFailure {
                 warmScheduled = false
@@ -82,12 +84,9 @@ object ModulePrefs {
         }
     }
     fun init(context: Context) {
-        val startedAt = android.os.SystemClock.elapsedRealtime()
         val app = context.applicationContext ?: context
         this.context = app
-        // 打开 SQLite 属于磁盘 IO，放到后台，别卡启动。
-        runCatching { java.util.concurrent.Executors.newSingleThreadExecutor().execute { AnalysisResultCache.init(app) } }
-        UsageReporter.init(app)
+        AnalysisResultCache.init(app)
         if (app.packageName == "com.tencent.mm" && conversations == null) {
             val local = app.getSharedPreferences("yanwai_conversations", Context.MODE_PRIVATE)
             conversations = ConversationSwitches(local.getStringSet("enabled_chats", emptySet()).orEmpty()) {
@@ -106,7 +105,6 @@ object ModulePrefs {
             }
             requestReload(force = true)
         } else reload(force = true)
-        MoodLog.i("STARTUP_PREFS took=${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
     }
 
     private fun cachedSnapshot(): RuntimeSettings? = runCatching {
@@ -127,7 +125,12 @@ object ModulePrefs {
         val snapshot = SettingsSync.decode(bundle)
         if (snapshot == null) { MoodLog.w("SYNC_INVALID 广播配置不完整"); return }
         // Invalidate a changed installation immediately, without waiting for Provider I/O.
-        bridge.receive(snapshot)
+        val accepted = bridge.receive(snapshot)
+        // A broadcast that is rejected (unverified reset, retired generation, stale revision)
+        // must not overwrite the on-disk fallback with credentials the session never adopted.
+        if (accepted && analysisSettings()?.revision == snapshot.revision) {
+            context?.let { SettingsSnapshotCache.save(it, bundle) }
+        }
         MoodLog.protect(snapshot.api.apiKey)
         MoodLog.protect(snapshot.reply.apiKey)
         MoodLog.protect(snapshot.intent.llm.apiKey)

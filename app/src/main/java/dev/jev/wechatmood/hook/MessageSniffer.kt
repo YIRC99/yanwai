@@ -254,7 +254,10 @@ object MessageSniffer {
         val input = inputForView(view) ?: return false
         val identity = ManualAnalysis.identity(input) ?: return false
         if (identity != ManualAnalysis.identity(expected) || !ModulePrefs.selectMessage(input)) return false
-        SignalAnalyzer.retryFailure(ModulePrefs.analysisInput(input).key)
+        val analysisKey = ModulePrefs.analysisInput(input).key
+        // 弹窗被手动关掉后，同一消息会被「已展示」拦下；这里显式请求重开。
+        BubbleDecorator.request(analysisKey)
+        SignalAnalyzer.retryFailure(analysisKey)
         refresh()
         return true
     }
