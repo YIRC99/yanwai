@@ -2,6 +2,8 @@ package dev.jev.wechatmood.hook
 
 import android.app.Activity
 import android.app.Dialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -19,6 +21,7 @@ import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.RelationFactBridge
 import dev.jev.wechatmood.reply.FactTimes
 import dev.jev.wechatmood.reply.RelationFact
+import dev.jev.wechatmood.reply.RelationFacts
 import dev.jev.wechatmood.reply.RelationMeta
 import dev.jev.wechatmood.reply.ReplyContactKey
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +54,26 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
     private var contactKey: ReplyContactKey? = null
     private var refreshing = false
     private var removedExpanded = false
+    private var supersededExpanded = false
+    private var query = ""
+    private val searchField: EditText = EditText(activity).apply {
+        hint = "搜索档案内容"
+        setSingleLine(true)
+        setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, ReplyMetrics.TEXT_BODY)
+        setTextColor(theme.ink)
+        setHintTextColor(theme.muted)
+        background = theme.shape(theme.card, ReplyMetrics.RADIUS_CARD, theme.border)
+        setPadding(theme.dp(10), theme.dp(6), theme.dp(10), theme.dp(6))
+        visibility = View.GONE
+        addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(editable: android.text.Editable?) {
+                query = editable?.toString().orEmpty()
+                render()
+            }
+            override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) = Unit
+        })
+    }
     private var dialog: Dialog? = null
     private var addDialog: Dialog? = null
 
@@ -62,6 +85,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         column.addView(kit.caption("从聊天里整理出的事实；可以先补一条，也可以把不对的移出去").apply {
             setPadding(0, theme.dp(4), 0, theme.dp(8))
         })
+        column.addView(searchField, LinearLayout.LayoutParams(-1, -2).apply { topMargin = theme.dp(8) })
         column.addView(summaryText.apply {
             isClickable = true; isFocusable = true
             contentDescription = "整理设置，点击修改"
@@ -146,11 +170,20 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
 
     private fun render() {
         listContainer.removeAllViews()
-        val active = items.filter { it.isOpen }
-        val removed = items.filter { it.status == RelationFact.STATUS_CANCELLED }
+        searchField.visibility = if (items.size >= 6) View.VISIBLE else View.GONE
+        // 搜索只影响列表；顶部「有效 N 条」始终是全部档案的数量。
+        val activeAll = items.count { it.isOpen }
+        val matched = if (query.isBlank()) items else items.filter {
+            it.text.contains(query, true) || it.kind.contains(query, true)
+        }
+        val active = matched.filter { it.isOpen }
+        val removed = matched.filter { it.status == RelationFact.STATUS_CANCELLED }
+            .sortedByDescending { it.updatedAt }.take(REMOVED_LIMIT)
+        val superseded = matched.filter { it.status == RelationFact.STATUS_SUPERSEDED }
             .sortedByDescending { it.updatedAt }.take(REMOVED_LIMIT)
         val head = buildString {
-            append(if (items.isEmpty()) "还没有整理过" else "有效 ${active.size} 条")
+            append(if (items.isEmpty()) "还没有整理过" else "有效 $activeAll 条")
+            if (query.isNotBlank()) append(" · 匹配 ${matched.size} 条")
             if (meta.lastAt > 0) append(" · 最近整理 ").append(FactTimes.formatLocal(meta.lastAt, "MM-dd HH:mm"))
         }
         // 「采集最近 N 条」是设置入口；不加颜色和箭头，看不出来能点。
@@ -173,6 +206,9 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             val group = active.filter { it.kind == kind }.sortedByDescending { it.updatedAt }
             if (group.isEmpty()) continue
             listContainer.addView(kit.sectionLabel("$kind · ${group.size} 条"))
+            if (group.size > 1 && kind in RelationFacts.SINGLE_VALUE_KINDS) {
+                listContainer.addView(kit.caption("同类有多条，可能有一条已经过时，点开可以移出旧的"))
+            }
             group.forEach { listContainer.addView(factRow(it), rowParams()) }
         }
         if (removed.isNotEmpty()) {
@@ -187,16 +223,38 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             listContainer.addView(toggle)
             if (removedExpanded) removed.forEach { listContainer.addView(factRow(it), rowParams()) }
         }
+        if (superseded.isNotEmpty()) {
+            // 改期、换工作留下的旧说法：默认不展开，但能翻出来还原。
+            val toggle = kit.sectionLabel(
+                if (supersededExpanded) "已作废 · ${superseded.size} 条 ▴" else "已作废 · ${superseded.size} 条 ▾"
+            ).apply {
+                isClickable = true; isFocusable = true
+                contentDescription = "已作废 ${superseded.size} 条，${if (supersededExpanded) "点击收起" else "点击展开"}"
+                setOnClickListener { supersededExpanded = !supersededExpanded; render() }
+            }
+            listContainer.addView(toggle)
+            if (supersededExpanded) superseded.forEach { listContainer.addView(factRow(it), rowParams()) }
+        }
     }
 
     /** 一条事实：正文在上，来源与时间在下；整行可点。 */
     private fun factRow(fact: RelationFact): View {
         val removed = fact.status == RelationFact.STATUS_CANCELLED
+        val superseded = fact.status == RelationFact.STATUS_SUPERSEDED
+        val settled = removed || superseded
         val note = buildString {
-            if (removed) append("已移出") else append(if (fact.source == "manual") "手动添加" else "自动整理")
-            if (!removed && ModulePrefs.relationShowUpdated() && fact.updatedAt > 0) {
+            when {
+                removed -> append("已移出")
+                superseded -> append("已作废 · 被后来的说法替换")
+                else -> append(if (fact.source == "manual") "手动添加" else "自动整理")
+            }
+            if (!settled && ModulePrefs.relationShowUpdated() && fact.updatedAt > 0) {
                 if (isNotEmpty()) append(" · ")
                 append("整理于 ").append(FactTimes.formatLocal(fact.updatedAt, "MM-dd HH:mm"))
+            }
+            if (!settled && fact.source != "manual" && fact.confidence < 0.4) {
+                if (isNotEmpty()) append(" · ")
+                append("模型不确定")
             }
             if (fact.occurredAt > 0) {
                 if (isNotEmpty()) append(" · ")
@@ -212,7 +270,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             contentDescription = "${fact.kind}，${fact.text}，$note，点击操作"
             setOnClickListener { ask(fact) }
         }
-        card.addView(theme.label(fact.text, ReplyMetrics.TEXT_ITEM, if (removed) theme.muted else theme.ink))
+        card.addView(theme.label(fact.text, ReplyMetrics.TEXT_ITEM, if (settled) theme.muted else theme.ink))
         card.addView(theme.label(note, ReplyMetrics.TEXT_CAPTION, theme.muted).apply {
             setPadding(0, theme.dp(2), 0, 0)
         })
@@ -227,6 +285,9 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             if (fact.isOpen) {
                 add("移出档案（可恢复）")
                 add("彻底删除")
+            } else if (fact.status == RelationFact.STATUS_SUPERSEDED) {
+                add("恢复为档案（现行那条会让位）")
+                add("彻底删除")
             } else {
                 add("恢复为档案")
                 add("彻底删除")
@@ -237,6 +298,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
                 "看依据消息" -> showEvidence(fact)
                 "移出档案（可恢复）" -> update(fact, RelationFact.STATUS_CANCELLED)
                 "恢复为档案" -> update(fact, RelationFact.STATUS_ACTIVE)
+                "恢复为档案（现行那条会让位）" -> restore(fact)
                 "彻底删除" -> confirmDelete(fact)
             }
         }
@@ -254,13 +316,17 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         val items = listOf(
             "采集范围 · 最多 ${ModulePrefs.relationFactLimit()} 条",
             "整理方式 · ${if (ModulePrefs.relationFactIncremental()) "仅新增" else "全量重看"}",
-            "显示整理时间 · ${if (ModulePrefs.relationShowUpdated()) "开" else "关"}"
+            "显示整理时间 · ${if (ModulePrefs.relationShowUpdated()) "开" else "关"}",
+            "导出档案到剪贴板 · ${this.items.size} 条",
+            "从剪贴板导入档案"
         )
         kit.picker("整理设置", items) { index ->
             when (index) {
                 0 -> pickLimit()
                 1 -> pickMode()
                 2 -> toggleUpdated()
+                3 -> exportFacts()
+                4 -> importFacts()
             }
         }
     }
@@ -278,6 +344,50 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             } else {
                 showStatus("设置没保存成功，重试一次", theme.error)
             }
+        }
+    }
+
+    /** 导出全部条目（含已移出、已作废）：换机或清数据前留一份。 */
+    private fun exportFacts() {
+        if (items.isEmpty()) {
+            showStatus("还没有可以导出的档案", theme.muted)
+            return
+        }
+        val json = org.json.JSONArray(items.map { it.encode().toString() }).toString()
+        val clipboard = activity.getSystemService(Activity.CLIPBOARD_SERVICE) as? ClipboardManager
+        if (clipboard == null) {
+            showStatus("这台手机没有可用的剪贴板", theme.error)
+            return
+        }
+        clipboard.setPrimaryClip(ClipData.newPlainText("言外关系档案", json))
+        MoodLog.i("RELATION_ARCHIVE_EXPORT count=" + items.size)
+        showStatus("已复制 " + items.size + " 条档案到剪贴板", theme.success)
+    }
+
+    /** 从剪贴板导入：与自动整理同一套合并，同一句话不会变成两条。 */
+    private fun importFacts() {
+        val key = contactKey ?: return
+        val clipboard = activity.getSystemService(Activity.CLIPBOARD_SERVICE) as? ClipboardManager
+        val text = runCatching { clipboard?.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString() }.getOrNull()
+            .orEmpty()
+        val array = runCatching { org.json.JSONArray(text) }.getOrNull()
+        val facts = array?.let { payload -> (0 until payload.length()).mapNotNull { payload.optJSONObject(it)?.let(RelationFact::decode) } }
+            .orEmpty()
+        if (facts.isEmpty()) {
+            showStatus("剪贴板里没有可导入的档案", theme.error)
+            return
+        }
+        showStatus("正在导入…", theme.muted)
+        scope.launch {
+            val open = withContext(Dispatchers.IO) {
+                runCatching { RelationFactBridge.importFacts(activity, key, facts) }.getOrDefault(-1)
+            }
+            if (open < 0) {
+                showStatus("导入失败，剪贴板内容可能不是档案 JSON", theme.error)
+                return@launch
+            }
+            showStatus("已导入，现在有效 " + open + " 条", theme.success)
+            load(key)
         }
     }
 
@@ -329,6 +439,20 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             MoodLog.i("RELATION_ARCHIVE_STATUS ok=$saved status=$status")
             if (!saved) {
                 showStatus("没保存成功，档案可能刚被更新过，重开一次再试", theme.error)
+                return@launch
+            }
+            load(key)
+        }
+    }
+
+    private fun restore(fact: RelationFact) {
+        val key = contactKey ?: return
+        showStatus("正在恢复…", theme.muted)
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) { RelationFactBridge.restore(activity, key, fact.factId) }
+            MoodLog.i("RELATION_ARCHIVE_RESTORE ok=$saved")
+            if (!saved) {
+                showStatus("没恢复成功，可能刚被重新整理过，重开一次再试", theme.error)
                 return@launch
             }
             load(key)

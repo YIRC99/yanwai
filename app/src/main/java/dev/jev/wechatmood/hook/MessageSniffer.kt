@@ -216,9 +216,12 @@ object MessageSniffer {
         visibleKeys = emptySet()
         active = WeakReference(activity)
         main.post(tick)
+        // 停在聊天页一会儿就顺手整理一次，不必打开「帮我回」。
+        RelationAutoRefresh.schedule(activity)
     }
 
     fun pause(activity: Activity) {
+        RelationAutoRefresh.cancel()
         if (active.get() !== activity) return
         ReplyDatabaseHistory.resetAccountScope()
         main.removeCallbacks(tick)

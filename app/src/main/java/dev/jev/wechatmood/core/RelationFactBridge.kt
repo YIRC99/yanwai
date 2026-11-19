@@ -55,8 +55,22 @@ object RelationFactBridge {
         return merged.filter { it.isOpen }
     }
 
+    /** 从剪贴板导入：走与自动整理相同的合并逻辑，重复条目不会翻倍。 */
+    fun importFacts(context: Context, key: ReplyContactKey, facts: List<RelationFact>): Int {
+        val store = store(context)
+        val merged = RelationFacts.merge(store.listAll(key), facts, System.currentTimeMillis())
+        store.replace(key, merged)
+        MoodLog.i("RELATION_FACT_IMPORT incoming=" + facts.size + " open=" + merged.count { it.isOpen })
+        return merged.count { it.isOpen }
+    }
+
     fun setStatus(context: Context, key: ReplyContactKey, factId: String, status: String): Boolean {
         return store(context).setStatus(key, factId, status)
+    }
+
+    /** 还原被作废的条目；返回 false 表示它已经不在作废状态。 */
+    fun restore(context: Context, key: ReplyContactKey, factId: String): Boolean {
+        return store(context).restore(key, factId)
     }
 
     fun addManual(context: Context, key: ReplyContactKey, kind: String, text: String, occurredAt: Long = 0): List<RelationFact>? {

@@ -73,12 +73,14 @@ internal object RelationFactRefresher {
         }
         MoodLog.i("RELATION_FACT_INPUT page=${live.messages.size} used=${messages.size} limit=$limit incremental=$incremental")
         if (messages.isEmpty()) return Result(emptyList(), 0, incremental)
-        val extracted = withContext(Dispatchers.IO) { FactExtractor().extract(settings, messages, limit = limit) }
+        // 把已有档案一起给模型，它才能指出哪条被替换（换工作、搬家、改称呼）。
+        val existing = withContext(Dispatchers.IO) { runCatching { RelationFactBridge.load(context, key) }.getOrDefault(emptyList()) }
+        val extracted = withContext(Dispatchers.IO) { FactExtractor().extract(settings, messages, existing, limit = limit) }
         if (extracted.isEmpty()) return Result(emptyList(), messages.size, false)
         val saved = withContext(Dispatchers.IO) {
             RelationFactBridge.save(context, key, extracted, System.currentTimeMillis(), messages.lastOrNull()?.id ?: 0)
         }
-        MoodLog.i("RELATION_FACT_SAVED count=${saved.size}")
+        MoodLog.i("RELATION_FACT_SAVED count=${saved.size} replaced=${extracted.count { it.replaces.isNotEmpty() }}")
         return Result(saved, messages.size, false)
     }
 }

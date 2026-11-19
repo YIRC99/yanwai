@@ -217,4 +217,21 @@ class RelationFactStoreTest {
         store.clearAll()
         assertEquals(0, store.listAll(key).size)
     }
+    @Test fun `restore brings back a superseded fact and retires the current one`() {
+        val key = ReplyContactKey("c".repeat(64))
+        val store = RelationFactStore(db())
+        store.replace(key, RelationFacts.merge(emptyList(),
+            listOf(RelationFact("工作", "在游戏公司做运营")), 1000))
+        // 换工作：新事实指出替换了旧的那条
+        store.replace(key, RelationFacts.merge(store.listAll(key),
+            listOf(RelationFact("工作", "在游戏公司做运营主管").copy(replaces = "在游戏公司做运营")), 2000))
+        val superseded = store.listAll(key).single { it.status == RelationFact.STATUS_SUPERSEDED }
+        assertTrue(store.restore(key, superseded.factId))
+
+        val after = store.listAll(key)
+        assertEquals(1, after.count { it.isOpen })
+        assertEquals("在游戏公司做运营", after.single { it.isOpen }.text)
+        assertEquals(1, after.count { it.status == RelationFact.STATUS_SUPERSEDED })
+    }
+
 }

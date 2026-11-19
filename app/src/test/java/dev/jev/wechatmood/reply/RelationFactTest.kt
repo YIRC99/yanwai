@@ -29,10 +29,61 @@ class RelationFactTest {
         assertEquals(2, merged.size)
     }
 
-    @Test fun `manual facts keep their source when merged`() {
+    @Test fun `manual facts keep their source and text when merged`() {
         val existing = listOf(RelationFact("工作", "在做运营", 100, 100, source = "manual"))
         val merged = RelationFacts.merge(existing, listOf(fact("工作", "在做运营主管", 200)), 300)
         assertEquals("manual", merged[0].source)
+        // 手动写的条目只允许人工改，自动整理的措辞不能覆盖它。
+        assertEquals("在做运营", merged[0].text)
+        assertEquals(1, merged.size)
+    }
+
+    @Test fun `removed fact is not revived by the next extract`() {
+        val existing = listOf(fact("工作", "在游戏公司做运营", 100).copy(status = RelationFact.STATUS_CANCELLED))
+        val merged = RelationFacts.merge(existing, listOf(fact("工作", "在游戏公司做运营", 200)), 300)
+        assertEquals(1, merged.size)
+        assertEquals(RelationFact.STATUS_CANCELLED, merged[0].status)
+    }
+
+    @Test fun `finished promise is not revived by the next extract`() {
+        val day = FactTimes.parseLocal("2026-10-24T19:00")
+        val existing = listOf(RelationFact("约定", "周六一起吃饭", occurredAt = day,
+            status = RelationFact.STATUS_DONE))
+        val merged = RelationFacts.merge(existing, listOf(RelationFact("约定", "周六一起吃饭", occurredAt = day)), 300)
+        assertEquals(1, merged.size)
+        assertEquals(RelationFact.STATUS_DONE, merged[0].status)
+    }
+
+    @Test fun `same promise moved to another day still becomes a new todo`() {
+        val saturday = FactTimes.parseLocal("2026-10-24T19:00")
+        val sunday = FactTimes.parseLocal("2026-10-25T19:00")
+        val existing = listOf(RelationFact("约定", "周六一起吃饭", occurredAt = saturday,
+            status = RelationFact.STATUS_DONE))
+        val merged = RelationFacts.merge(existing, listOf(RelationFact("约定", "周六一起吃饭", occurredAt = sunday)), 300)
+        assertEquals(2, merged.size)
+        assertTrue(merged.any { it.occurredAt == sunday && it.isOpen })
+    }
+
+    @Test fun `model marked replacement supersedes the old fact`() {
+        val existing = listOf(fact("工作", "在游戏公司做运营", 100))
+        val incoming = RelationFact("工作", "在星巴克做咖啡", 200).copy(replaces = "在游戏公司做运营")
+        val merged = RelationFacts.merge(existing, listOf(incoming), 300)
+        assertTrue(merged.any { it.text == "在游戏公司做运营" && it.status == RelationFact.STATUS_SUPERSEDED })
+        assertTrue(merged.any { it.text == "在星巴克做咖啡" && it.isOpen })
+        assertEquals(1, merged.count { it.isOpen })
+    }
+
+    @Test fun `extractor keeps the replacement hint`() {
+        val extractor = FactExtractor()
+        val content = org.json.JSONArray()
+            .put(org.json.JSONObject().put("kind", "城市").put("text", "搬到杭州了")
+                .put("replaces", "住在成都"))
+            .toString()
+        val body = org.json.JSONObject().put("choices", org.json.JSONArray().put(
+            org.json.JSONObject().put("message", org.json.JSONObject().put("content", content)))).toString()
+        val facts = extractor.parse(body)
+        assertEquals(1, facts.size)
+        assertEquals("住在成都", facts[0].replaces)
     }
 
     @Test fun `list is capped`() {

@@ -118,6 +118,11 @@ object ReplyIdentityProvider {
                 }
                 Bundle().apply { putBoolean("saved", true) }
             }
+            "relation_facts_restore" -> {
+                val factId = requireNotNull(extras?.getString("fact_id")).trim()
+                check(storage(context).facts.restore(key, factId)) { "这条已经变化，请重新打开" }
+                Bundle().apply { putBoolean("saved", true) }
+            }
             "relation_facts_delete" -> {
                 val factId = requireNotNull(extras?.getString("fact_id")).trim()
                 check(storage(context).facts.delete(key, factId)) { "这条已经变化，请重新打开" }

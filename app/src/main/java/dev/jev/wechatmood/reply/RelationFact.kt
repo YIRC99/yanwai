@@ -32,6 +32,8 @@ data class RelationFact(
     val occurredAt: Long = 0,
     /** 依据消息的 localId；0 表示只知道批次，不知道具体哪条。 */
     val sourceChatMessageId: Long = 0,
+    /** 模型说这条替换了档案里的哪条旧事实（原句）；只在合并时用，不写库。 */
+    val replaces: String = "",
 ) {
     val isOpen: Boolean get() = status == STATUS_ACTIVE
     val isTimed: Boolean get() = kind in TIMED_KINDS
@@ -282,6 +284,32 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
         return true
     }
 
+    /**
+     * 还原一条被作废的事实（改期前的旧约定、换工作前的旧说法）。
+     * 同 kind 相近的现行条目会让位，避免还原后两条同义并存。
+     */
+    fun restore(key: ReplyContactKey, factId: String): Boolean {
+        if (!factId.matches(RelationFact.ID_PATTERN)) return false
+        val items = listAll(key)
+        val target = items.firstOrNull { it.factId == factId } ?: return false
+        if (target.status != RelationFact.STATUS_SUPERSEDED) return false
+        val stamp = now()
+        // 与合并时一致的阈值：时间型宽一点，静态条目严一点。
+        val threshold = if (target.isTimed) 0.45 else 0.55
+        val next = items.map { other ->
+            when {
+                other.factId == factId -> other.copy(status = RelationFact.STATUS_ACTIVE, updatedAt = stamp)
+                other.isOpen && other.kind == target.kind &&
+                    RelationFacts.similarity(other.text, target.text) >= threshold ->
+                    other.copy(status = RelationFact.STATUS_SUPERSEDED, updatedAt = stamp)
+                else -> other
+            }
+        }
+        replace(key, next)
+        MoodLog.i("RELATION_FACT_RESTORED kind=" + target.kind)
+        return true
+    }
+
     /** 手动补一条档案；类型和长度照抽取的同一套约束，重复添加同一句只会留下一条。 */
     fun addManual(key: ReplyContactKey, kind: String, text: String, occurredAt: Long = 0): List<RelationFact>? {
         val clean = text.trim()
@@ -330,15 +358,47 @@ object RelationFacts {
     private const val SAME_TEXT = 0.55
     private const val SAME_EVENT_TEXT = 0.45
 
+    /** 用户手动处理过的状态（完成、移出），自动整理不该覆盖。 */
+    private val USER_SETTLED = setOf(RelationFact.STATUS_DONE, RelationFact.STATUS_CANCELLED)
+
+    /** 单值维度：同 kind 出现多条时大概率有一条已经过时，档案页会提示。 */
+    val SINGLE_VALUE_KINDS = setOf("工作", "城市", "称呼")
+
     /** 合并后返回全部条目（含已作废）；调用方用 [RelationFact.isOpen] 过滤后再展示或注入。 */
     fun merge(existing: List<RelationFact>, incoming: List<RelationFact>, now: Long): List<RelationFact> {
         val result = existing.toMutableList()
         for (raw in incoming) {
             val fact = raw.copy(id = raw.factId, status = RelationFact.STATUS_ACTIVE,
                 updatedAt = if (raw.updatedAt > 0) raw.updatedAt else now)
+            // 用户手动标了完成或移出的条目，不再被自动整理拉回来。
+            if (suppressed(result, fact)) continue
+            applyReplaces(result, fact, now)
             if (fact.isTimed) mergeTimed(result, fact, now) else mergeStatic(result, fact, now)
         }
         return trim(result)
+    }
+
+    /**
+     * 用户已经处理过的条目（完成、移出）不该被下一次整理复活。
+     * 时间型只在同一天才算同一件事：改到另一天是新约定，允许重新进待办。
+     */
+    private fun suppressed(result: List<RelationFact>, fact: RelationFact): Boolean = result.any { previous ->
+        previous.status in USER_SETTLED && previous.kind == fact.kind &&
+            similarity(previous.text, fact.text) >= (if (fact.isTimed) SAME_EVENT_TEXT else SAME_TEXT) &&
+            (!fact.isTimed || fact.occurredAt <= 0 || previous.occurredAt <= 0 ||
+                FactTimes.sameDay(previous.occurredAt, fact.occurredAt))
+    }
+
+    /** 模型明确说这条替换了哪条旧事实时直接作废旧条，不用等相似度凑够阈值。 */
+    private fun applyReplaces(result: MutableList<RelationFact>, fact: RelationFact, now: Long) {
+        val replaced = fact.replaces.trim()
+        if (replaced.isEmpty()) return
+        val index = result.indexOfFirst { it.isOpen && it.kind == fact.kind && it.factId != fact.factId &&
+            (it.text == replaced || similarity(it.text, replaced) >= SAME_TEXT) }
+        if (index >= 0) {
+            result[index] = result[index].copy(status = RelationFact.STATUS_SUPERSEDED, updatedAt = now)
+            MoodLog.i("RELATION_FACT_REPLACED kind=" + fact.kind)
+        }
     }
 
     private fun mergeStatic(result: MutableList<RelationFact>, fact: RelationFact, now: Long) {
@@ -364,19 +424,23 @@ object RelationFacts {
         result += fact
     }
 
-    /** 保留最初看到这条事实的时间，用来判断它有多旧；手动来源不被自动结果盖掉。 */
-    private fun updated(previous: RelationFact, fact: RelationFact, now: Long): RelationFact = fact.copy(
-        id = previous.factId,
-        evidenceTime = when {
-            previous.evidenceTime <= 0 -> fact.evidenceTime
-            fact.evidenceTime <= 0 -> previous.evidenceTime
-            else -> minOf(previous.evidenceTime, fact.evidenceTime)
-        },
-        updatedAt = now,
-        source = if (previous.source == "manual") "manual" else fact.source,
-        status = RelationFact.STATUS_ACTIVE,
-        sourceChatMessageId = if (fact.sourceChatMessageId > 0) fact.sourceChatMessageId else previous.sourceChatMessageId,
-    )
+    /** 保留最初看到这条事实的时间，用来判断它有多旧。 */
+    private fun updated(previous: RelationFact, fact: RelationFact, now: Long): RelationFact {
+        // 手动添加的条目只允许人工改：自动整理撞到同一条时保留原文，免得被模型措辞覆盖。
+        if (previous.source == "manual") return previous
+        return fact.copy(
+            id = previous.factId,
+            evidenceTime = when {
+                previous.evidenceTime <= 0 -> fact.evidenceTime
+                fact.evidenceTime <= 0 -> previous.evidenceTime
+                else -> minOf(previous.evidenceTime, fact.evidenceTime)
+            },
+            updatedAt = now,
+            source = fact.source,
+            status = RelationFact.STATUS_ACTIVE,
+            sourceChatMessageId = if (fact.sourceChatMessageId > 0) fact.sourceChatMessageId else previous.sourceChatMessageId,
+        )
+    }
 
     /** 有效事实按上限裁剪，作废记录单独留一小段便于回溯，不让它们挤掉有效条目。 */
     fun trim(facts: List<RelationFact>): List<RelationFact> {

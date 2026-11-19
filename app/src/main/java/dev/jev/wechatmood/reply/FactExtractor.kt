@@ -16,6 +16,7 @@ import java.util.Locale
  */
 class FactExtractor(private val client: ReplyHttpClient = ReplyHttpClient()) {
     suspend fun extract(settings: ReplySettings, messages: List<ReplyMessage>,
+        existing: List<RelationFact> = emptyList(),
         now: Long = System.currentTimeMillis(), limit: Int = MAX_MESSAGES): List<RelationFact> {
         check(settings.isConfigured) { "请先配置回复模型" }
         val usable = messages.filter { it.text.isNotBlank() && !it.text.startsWith("【引用") }
@@ -28,13 +29,14 @@ class FactExtractor(private val client: ReplyHttpClient = ReplyHttpClient()) {
             // 推理模型会把预算花在思考上：800 时实测 finish=length 且 content 为空，给足空间。
             .put("max_tokens", 6000).put("temperature", 0.2)
             .put("messages", JSONArray()
-                .put(JSONObject().put("role", "system").put("content", instructions(now)))
+                .put(JSONObject().put("role", "system").put("content", instructions(now, existing)))
                 .put(JSONObject().put("role", "user").put("content", transcript)))
         val messageIdAt: (Int) -> Long = { index -> usable.getOrNull(index - 1)?.id ?: 0 }
         val messageTimeAt: (Int) -> Long = { index -> usable.getOrNull(index - 1)?.time ?: 0 }
         return client.request(settings, payload, parse = { body -> this.parse(body, messageIdAt, messageTimeAt) })
             .also { MoodLog.i("RELATION_FACT_EXTRACT total=${it.size} timed=${it.count { fact -> fact.isTimed }} " +
-                "dated=${it.count { fact -> fact.occurredAt > 0 }} evidence=${it.count { fact -> fact.sourceChatMessageId > 0 }}") }
+                "dated=${it.count { fact -> fact.occurredAt > 0 }} evidence=${it.count { fact -> fact.sourceChatMessageId > 0 }} " +
+                "replaced=${it.count { fact -> fact.replaces.isNotEmpty() }}") }
     }
 
     internal fun parse(body: String, messageIdAt: (Int) -> Long = { 0 },
@@ -57,13 +59,15 @@ class FactExtractor(private val client: ReplyHttpClient = ReplyHttpClient()) {
                 // 模型给的是本地时间字符串，先换成毫秒再走统一解码，解码失败就当作没有时间语义。
                 val occurredAt = FactTimes.parseLocal(item.optString("occurred_at"))
                 val evidence = item.optInt("evidence", 0)
+                // 模型指出的被替换旧句：只用来在合并时标作废，不写库。
+                val replaces = item.optString("replaces").trim().take(RelationFact.MAX_TEXT)
                 item.put("occurred_at", occurredAt)
                 if (evidence > 0) {
                     item.put("source_chat_message_id", messageIdAt(evidence))
                     // 依据消息的时间让「这条事实有多旧」可判断，之前一直是 0。
                     item.put("evidence_time", messageTimeAt(evidence))
                 }
-                RelationFact.decode(item)
+                RelationFact.decode(item)?.copy(replaces = replaces)
             }
             .distinctBy { Triple(it.kind, it.text, it.occurredAt) }
     }.onFailure { MoodLog.w("FACT_PARSE_FAILED ${it.javaClass.simpleName}") }.getOrDefault(emptyList())
@@ -75,7 +79,16 @@ class FactExtractor(private val client: ReplyHttpClient = ReplyHttpClient()) {
         const val MAX_FACTS = 12
 
         /** 把「周五」「下周三」换算成绝对日期需要一个明确基准，所以当前时间写进提示词。 */
-        private fun instructions(now: Long): String {
+        private const val MAX_EXISTING = 20
+
+        /** 已有档案只给一句摘要，让模型判断“哪条被替换了”，不是让它照着抄。 */
+        private fun existingBlock(existing: List<RelationFact>): String {
+            val items = existing.filter { it.isOpen }.sortedByDescending { it.updatedAt }.take(MAX_EXISTING)
+            if (items.isEmpty()) return "（暂无档案）"
+            return items.joinToString("\n") { "- [" + it.kind + "] " + it.text }
+        }
+
+        private fun instructions(now: Long, existing: List<RelationFact> = emptyList()): String {
             val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm EEEE", Locale.CHINA).format(Date(now))
             return """你是资料整理助手。下面是一段微信聊天记录，每行形如「[序号] 说话人: 内容」。
 「我」是用户自己，其他说话人都是「对方」。只提取关于对方的信息，不要提取我自己的。
@@ -86,6 +99,10 @@ kind 只能是：工作、城市、家人、喜好、忌口、宠物、重要日
 - text：不超过 30 个字的陈述句，例如「在游戏公司做运营」
 - evidence：这条取自哪条消息的序号，不确定填 0
 - occurred_at：只有「约定」「重要日期」要填，格式 YYYY-MM-DDTHH:mm，只说了日期就写 YYYY-MM-DDT00:00，含糊说法（过两天、有空、改天）填空字符串
+- replaces：这条替换了下面已有档案里的哪一条，就填那条的原句；换了工作、搬了城市、改了称呼、约定改期都算。没有就填空字符串
+
+下面是我已经存下的档案，只用来判断哪条被替换，不要当成新的信息复述：
+${existingBlock(existing)}
 当前时间：$stamp（换算「周五」「下周三」以它为准）。
 提取范围，只要对方原话说过或明确确认过就算：
 - 工作、职业、公司、所在城市、住的区域
