@@ -6,16 +6,17 @@ import org.json.JSONObject
 /** 合并转发的摘要请求：只要一段纯文本要点，不强制 JSON，兼容性最好。 */
 object ForwardDigestProtocol {
     fun payload(settings: ReplySettings, message: ForwardDigest.Message, stream: Boolean = true): JSONObject {
+        val startedAt = System.currentTimeMillis()
         val transcript = message.transcript()
-        // 记录实际入参开头，便于核对填充是不是从这里进去的（不含正文全文）。
-        dev.jev.wechatmood.core.MoodLog.i(
-            "FORWARD_PROMPT len=${transcript.length} items=${message.items.size} " +
-                "head=${transcript.take(80).replace("\n", "|")}")
         val messages = JSONArray()
             .put(JSONObject().put("role", "system").put("content", instructions))
             .put(JSONObject().put("role", "user").put("content", transcript))
         val request = JSONObject().put("model", settings.model).put("stream", stream)
         if (stream) request.put("stream_options", JSONObject().put("include_usage", true))
+        // 只记条数、长度和耗时：转录里有标题、姓名和聊天正文，日志可以被导出去。
+        dev.jev.wechatmood.core.MoodLog.i(
+            "FORWARD_PROMPT items=${message.items.size} chars=${transcript.length} " +
+                "ms=${System.currentTimeMillis() - startedAt}")
         return request.put("max_tokens", 450).put("temperature", 0.3).put("messages", messages)
     }
 

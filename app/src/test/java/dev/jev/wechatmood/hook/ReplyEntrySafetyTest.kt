@@ -64,4 +64,14 @@ class ReplyEntrySafetyTest {
         assertTrue(guide.contains("长按横条左侧「分析」"))
         assertTrue(guide.contains("帮我回 / 上次建议"))
     }
+
+    @Test fun `合并转发的菜单判定在提前返回之前`() {
+        val menu = source("MessageMenu")
+        val lookup = menu.indexOf("val forward = MessageSniffer.forwardForView(view)")
+        val earlyReturn = menu.indexOf("if (input == null && replyTarget == null && forward == null) return@runCatching")
+        val addForward = menu.indexOf("val digest = add.invoke(menu, FORWARD_ITEM_ID")
+        assertTrue("转发目标必须在提前返回前取得", lookup in 0 until earlyReturn)
+        assertTrue("提前返回条件要包含转发目标", earlyReturn in 0 until addForward)
+        assertEquals("转发目标只取一次", 2, menu.split("forwardForView(view)").size)
+    }
 }

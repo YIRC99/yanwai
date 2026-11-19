@@ -17,7 +17,15 @@ object ForwardDigest {
     const val MAX_RAW_CHARS = 512 * 1024
     /** datatype=17 是嵌套的聊天记录，内层完整 XML 在 <recordxml> 里。 */
     private const val DATATYPE_CHAT_RECORD = 17
-    private const val MAX_DEPTH = 6
+    /** 展开深度上限；测试要构造超深嵌套，所以不设成 private。 */
+    internal const val MAX_DEPTH = 6
+    /** 纯拟声和感叹，删掉不影响“这事有没有结果”。 */
+    private const val CHATTER_CHARS = "哈呵嘿嘻哦喔噢啊呀哇诶欸唉嗷呜吧呢啦咯嘛嘞噗"
+    /** 应答词的口语后缀：「好的」「行吧」「收到啦」都要认出来。 */
+    private const val ACK_SUFFIX = "了啦吧呀啊哦的哈咯嘛呢"
+    /** 能单独成句的应答字：「好」「对」「行」「在」往往是整段记录唯一的结论。 */
+    private const val ACK_KEYS = "好对是行可以成在来去嗯"
+    private val ACK_WORDS = setOf("收到", "明白", "知道", "同意", "可以", "没问题", "没有", "有空", "来了")
     private const val FILLER_MIN_LENGTH = 120
     private const val FILLER_MAX_PERIOD = 8
     private const val FILLER_PREFIX_MIN = 32
@@ -55,12 +63,15 @@ object ForwardDigest {
         var budget = MAX_TOTAL_CHARS
         collect(body, depth = 1, out = items, budget = { budget }, spend = { budget -= it },
             omitted = { omitted++ }, nested = { nested++ })
+        // 截在记录内部时前缀里仍可能有完整条目，只要解析出东西就照常返回。
         if (items.isEmpty()) return null
         // 结构解析之外再兜底扫一遍所有 datadesc：四层嵌套时按 dataitem 配对容易漏，
-        // 漏掉的内容不该因为层级对不上就消失。
-        val merged = compress(supplement(body, items))
+        // 漏掉的内容不该因为层级对不上就消失；但补扫和结构解析共用同一份预算，
+        // 否则超过总字数或深度限制的内容会从这条通路重新加回来。
+        val merged = compress(supplement(body, items, budget))
         dev.jev.wechatmood.core.MoodLog.i(
-            "FORWARD_DIGEST parsed=${items.size} merged=${merged.size} nested=$nested omitted=$omitted raw=${safe.length}")
+            "FORWARD_DIGEST parsed=${items.size} merged=${merged.size} nested=$nested omitted=$omitted " +
+                "raw=${safe.length} truncated=$truncatedRaw")
         return Message(tag(body, "title").decode().cleanNoise().stripFiller(), tag(body, "isChatRoom") == "1",
             merged, omitted, nested, truncatedRaw)
     }
@@ -117,6 +128,8 @@ object ForwardDigest {
                     }
                     // 只有平铺文本时，退化成「昵称: 内容」行，不再递归。
                     text = tag(itemBody, "datadesc").decode()
+                    // 记录被截断、内层闭合不上时展开不了，别把原始 XML 当正文塞给模型。
+                    if (text.contains("<recordinfo")) text = "[聊天记录]"
                 } else {
                     text = "[聊天记录]"
                 }
@@ -168,12 +181,23 @@ object ForwardDigest {
         return out
     }
 
+    /**
+     * 取 `<recordinfo>` 的内容。
+     * 原始 XML 可能因为长度上限被截断，也可能本身就是残缺的：
+     * 这时不再要求 CDATA 和 recordinfo 都闭合，直接把起点之后的部分交给解析器，
+     * `<dataitem>` 配对会自己停在最后一条完整记录上。
+     */
     private fun recordInfo(raw: String): String? {
         val cdata = Regex("""<recorditem>\s*<!\[CDATA\[(.*?)]]></recorditem>""", RegexOption.DOT_MATCHES_ALL)
             .find(raw)?.groupValues?.get(1)
         if (cdata != null) return cdata
-        // 少数包不带 CDATA，直接取 recordinfo。
-        return Regex("""<recordinfo>.*</recordinfo>""", RegexOption.DOT_MATCHES_ALL).find(raw)?.value
+        val cdataOpen = Regex("""<recorditem>\s*<!\[CDATA\[""").find(raw)
+        if (cdataOpen != null) return raw.substring(cdataOpen.range.last + 1)
+        // 少数包不带 CDATA，直接取 recordinfo；未闭合时取到末尾。
+        val open = Regex("""<recordinfo(?:\s[^>]*)?>""").find(raw) ?: return null
+        val start = open.range.last + 1
+        val close = Regex("</recordinfo>").find(raw, start)
+        return if (close != null) raw.substring(start, close.range.first) else raw.substring(start)
     }
 
     /**
@@ -195,28 +219,68 @@ object ForwardDigest {
         return out
     }
 
-    /** 只有语气、表情或标点的短句，没有信息量。 */
+    /**
+     * 只有语气、表情或标点的短句，没有信息量。
+     * 但“好”“对”“收到”这类短应答是“有没有结果”的关键，不能一起丢掉。
+     */
     internal fun String.isChatter(): Boolean {
         val core = replace(Regex("[\\s\\p{Punct}，。！？、~～…：；]"), "")
         if (core.isEmpty()) return true
         if (core.length > 4) return false
-        return core.all { it in "哈呵嗯哦喔噢行好对是的在啊呀吧了呢收到来了去" }
+        if (core.isAck()) return false
+        return core.all { it in CHATTER_CHARS }
     }
 
-    /** 用全局 datadesc 补齐结构解析漏掉的条目，只按文本去重，不重复计算字数。 */
-    private fun supplement(raw: String, parsed: List<Item>): List<Item> {
-        if (parsed.size >= MAX_ITEMS) return parsed
+    /** 短应答：整段转发里可能就这么一句结论，必须留下。 */
+    private fun String.isAck(): Boolean {
+        var word = lowercase()
+        while (word.isNotEmpty() && word.last() in ACK_SUFFIX) word = word.dropLast(1)
+        if (word.isEmpty()) return false
+        return word in ACK_WORDS || (word.length <= 2 && word.all { it in ACK_KEYS })
+    }
+
+    /**
+     * 用全局 datadesc 补齐结构解析漏掉的条目，只按文本去重，不重复计算字数。
+     * 预算与结构解析共用：结构解析已经用掉的字数不能再从补扫里加回来；
+     * 超过展开深度的 datadesc 也不补，否则等于绕开了 MAX_DEPTH。
+     */
+    internal fun supplement(raw: String, parsed: List<Item>, budget: Int): List<Item> {
+        if (parsed.size >= MAX_ITEMS || budget <= 0) return parsed
         val seen = parsed.mapTo(HashSet()) { it.text }
         val extra = mutableListOf<Item>()
         var room = MAX_ITEMS - parsed.size
+        var remaining = budget
+        var cursor = 0
+        var depth = 0
         // 全局扫描：结构解析在四层嵌套时只切出外层几条，内层的 datadesc 全靠这里补。
         for (match in DESC.findAll(raw)) {
-            if (room <= 0) break
+            if (room <= 0 || remaining <= 0) break
+            // 增量推进 `<recordinfo>` 开关，算出这条 datadesc 所在层级。
+            while (true) {
+                val nextOpen = raw.indexOf("<recordinfo", cursor)
+                val nextClose = raw.indexOf("</recordinfo>", cursor)
+                val next = when {
+                    nextOpen < 0 -> nextClose
+                    nextClose < 0 -> nextOpen
+                    else -> minOf(nextOpen, nextClose)
+                }
+                if (next < 0 || next >= match.range.first) break
+                if (next == nextOpen) {
+                    depth++
+                    cursor = nextOpen + "<recordinfo".length
+                } else {
+                    depth = maxOf(0, depth - 1)
+                    cursor = nextClose + "</recordinfo>".length
+                }
+            }
+            if (depth > MAX_DEPTH) continue
             val text = match.groupValues[1].decode().cleanNoise().trimFillerPrefix().stripFiller().take(MAX_ITEM_CHARS)
             // 占位符（[聊天记录]、[图片]）不补，否则数量会虚增。
             if (text.isBlank() || text.isFiller() || text.matches(PLACEHOLDER) || !seen.add(text)) continue
+            if (text.length > remaining) break
             extra += Item(0, "", text, "", nested = true)
             room--
+            remaining -= text.length
         }
         return if (extra.isEmpty()) parsed else parsed + extra
     }

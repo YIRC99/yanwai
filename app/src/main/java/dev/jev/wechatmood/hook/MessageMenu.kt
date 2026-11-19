@@ -93,7 +93,10 @@ object MessageMenu {
                         val view = param.args[1] as? View ?: return@runCatching
                         val input = MessageSniffer.inputForView(view)?.takeIf { ManualAnalysis.identity(it) != null }
                         val replyTarget = MessageSniffer.replyTargetForView(view)
-                        if (input == null && replyTarget == null) return@runCatching
+                        // 合并转发不分接收方向：自己转出去的记录既没有意图分析目标也没有回复目标，
+                        // 先取转发再看要不要继续，否则摘要菜单永远出不来。
+                        val forward = MessageSniffer.forwardForView(view)
+                        if (input == null && replyTarget == null && forward == null) return@runCatching
                         val menu = param.args[0] ?: return@runCatching
                         if (menu is Menu && (menu.findItem(ITEM_ID) != null || menu.findItem(REPLY_ITEM_ID) != null ||
                                 menu.findItem(FORWARD_ITEM_ID) != null)) return@runCatching
@@ -115,7 +118,6 @@ object MessageMenu {
                             val reply = add.invoke(menu, REPLY_ITEM_ID, "帮我回", icon) as? MenuItem
                             if (reply != null) targets[reply] = Target(WeakReference(view), reply = replyTarget)
                         }
-                        val forward = MessageSniffer.forwardForView(view)
                         if (forward != null) {
                             val digest = add.invoke(menu, FORWARD_ITEM_ID, "摘要这条转发", icon) as? MenuItem
                             if (digest != null) targets[digest] = Target(WeakReference(view), forward = forward)
