@@ -59,7 +59,14 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
                         val own = record.plainText().orEmpty()
                         val quoted = record.quotedMessage()
                         val quotedText = quoted?.text?.takeIf { it.isNotBlank() }?.take(200)
+                        // 合并转发：正文是 XML，回复时模型看不到，先把内容摊平给它。
+                        val forwarded = if (own.isBlank() && quotedText == null && ForwardDigest.isForward(record.content))
+                            ForwardDigest.parse(record.content) else null
                         when {
+                            forwarded != null -> "【合并转发：${forwarded.title.take(40)}】\n" +
+                                forwarded.items.take(40).joinToString("\n") { item ->
+                                    (if (item.sender.isBlank()) "" else item.sender + ": ") + item.text.take(150)
+                                }.take(4000)
                             quotedText != null -> "【引用${quoted.displayName?.take(32).orEmpty()}：$quotedText】$own"
                             own.isNotBlank() -> own
                             else -> "【引用消息，内容未能解析】"
