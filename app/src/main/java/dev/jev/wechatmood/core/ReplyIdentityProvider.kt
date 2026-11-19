@@ -34,9 +34,9 @@ object ReplyIdentityProvider {
             }).also { store = it }
         } catch (error: Exception) { db.close(); throw error }
     }
-    /** 清空所有联系人的关系档案（App 进程内直接调用）。 */
+    /** 清空所有联系人的关系档案：档案现在存在微信进程里，只能发命令让它自己删。 */
     @Synchronized fun clearAllFacts(context: Context) {
-        storage(context).facts.clearAll()
+        context.sendBroadcast(android.content.Intent(RelationFactBridge.CLEAR_ALL_ACTION).setPackage("com.tencent.mm"))
     }
 
     @Synchronized fun roles(context: Context): List<ReplyRole> = storage(context).roles.list()

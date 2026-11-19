@@ -2,6 +2,11 @@ package dev.jev.wechatmood.hook
 
 import android.app.Activity
 import android.app.Dialog
+import android.graphics.Typeface
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -144,12 +149,21 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         val active = items.filter { it.isOpen }
         val removed = items.filter { it.status == RelationFact.STATUS_CANCELLED }
             .sortedByDescending { it.updatedAt }.take(REMOVED_LIMIT)
-        summaryText.text = buildString {
+        val head = buildString {
             append(if (items.isEmpty()) "还没有整理过" else "有效 ${active.size} 条")
             if (meta.lastAt > 0) append(" · 最近整理 ").append(FactTimes.formatLocal(meta.lastAt, "MM-dd HH:mm"))
-            append(" · 采集最近 ").append(ModulePrefs.relationFactLimit()).append(" 条")
-            if (ModulePrefs.relationFactIncremental()) append("（仅新增）")
         }
+        // 「采集最近 N 条」是设置入口；不加颜色和箭头，看不出来能点。
+        val tail = buildString {
+            append("整理：")
+            append(if (ModulePrefs.relationFactIncremental()) "仅新增" else "全量重看")
+            append(" · 最多 ").append(ModulePrefs.relationFactLimit()).append(" 条 ▾")
+        }
+        val summary = SpannableStringBuilder(if (items.isEmpty()) tail else head + " · " + tail)
+        val start = summary.length - tail.length
+        summary.setSpan(ForegroundColorSpan(theme.accent), start, summary.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        summary.setSpan(StyleSpan(Typeface.BOLD), start, summary.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        summaryText.text = summary
 
         if (active.isEmpty()) {
             listContainer.addView(kit.body("这个联系人还没有档案"))
@@ -238,7 +252,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
     /** 整理设置：范围、方式、是否显示整理时间。都只存在本机微信进程里。 */
     private fun openSettings() {
         val items = listOf(
-            "采集范围 · 最近 ${ModulePrefs.relationFactLimit()} 条",
+            "采集范围 · 最多 ${ModulePrefs.relationFactLimit()} 条",
             "整理方式 · ${if (ModulePrefs.relationFactIncremental()) "仅新增" else "全量重看"}",
             "显示整理时间 · ${if (ModulePrefs.relationShowUpdated()) "开" else "关"}"
         )
@@ -252,7 +266,10 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
     }
 
     private fun pickMode() {
-        val options = listOf("仅新增（快，默认）", "全量重看（慢，能补漏）")
+        val options = listOf(
+            "仅新增：只看上次之后的新消息",
+            "全量重看：每次重读最近 ${ModulePrefs.relationFactLimit()} 条"
+        )
         val current = if (ModulePrefs.relationFactIncremental()) 0 else 1
         kit.picker("整理方式", options, current) { index ->
             if (ModulePrefs.setRelationFactIncremental(index == 0)) {
@@ -278,7 +295,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
     private fun pickLimit() {
         val values = ModulePrefs.RELATION_FACT_LIMIT_VALUES
         val current = ModulePrefs.relationFactLimit()
-        kit.picker("一次整理读多少条聊天", values.map { "最近 $it 条" }, values.indexOf(current)) { index ->
+        kit.picker("单次最多读多少条历史", values.map { "最近 $it 条" }, values.indexOf(current)) { index ->
             val value = values.getOrNull(index) ?: return@picker
             if (ModulePrefs.setRelationFactLimit(value)) {
                 render()

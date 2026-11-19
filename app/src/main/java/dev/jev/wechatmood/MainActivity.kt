@@ -196,7 +196,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.replySettings.buttonClearFacts.setOnClickListener {
             dev.jev.wechatmood.core.ReplyIdentityProvider.clearAllFacts(this)
-            binding.replySettings.factsStatus.text = "已清空所有联系人的关系档案"
+            binding.replySettings.factsStatus.text = "已请求清空，微信下次打开档案时生效"
         }
         binding.buttonDebug.setOnClickListener {
             val open = binding.debugPanel.visibility != View.VISIBLE

@@ -3,7 +3,11 @@ package dev.jev.wechatmood.xposed
 import android.app.Activity
 import android.app.Application
 import android.app.Instrumentation
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.widget.Toast
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -12,6 +16,7 @@ import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.core.ModulePrefs
+import dev.jev.wechatmood.core.RelationFactBridge
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.Diagnostics
 import dev.jev.wechatmood.hook.MessageSniffer
@@ -64,12 +69,42 @@ class HookEntry : IXposedHookLoadPackage {
         })
     }
 
+    /**
+     * App 侧的「清空所有联系人的关系档案」：档案在微信进程里，只能由模块自己删。
+     * 只认言外 App 的 UID，别的应用发同样广播不会生效。
+     */
+    private fun registerClearReceiver(context: Context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, intent: Intent) {
+                if (intent.action != RelationFactBridge.CLEAR_ALL_ACTION) return
+                val from = if (Build.VERSION.SDK_INT >= 34) sentFromUid else -1
+                val appUid = runCatching {
+                    c.packageManager.getPackageUid("dev.jev.wechatmood", 0)
+                }.getOrDefault(-1)
+                if (appUid <= 0 || from != appUid) {
+                    MoodLog.w("RELATION_FACT_CLEAR_REJECT from=$from")
+                    return
+                }
+                RelationFactBridge.clearAllLocal(c)
+            }
+        }
+        runCatching {
+            val filter = IntentFilter(RelationFactBridge.CLEAR_ALL_ACTION)
+            if (Build.VERSION.SDK_INT >= 33) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, filter)
+            }
+        }.onFailure { MoodLog.w("RELATION_FACT_CLEAR_RECEIVER_FAIL " + it.javaClass.simpleName) }
+    }
+
     @Synchronized private fun initialize(context: Context) {
         if (installed) return
         runCatching {
             MoodLog.init(context)
             ModulePrefs.init(context)
             MessageSniffer.install(context)
+            registerClearReceiver(context)
             installed = true
             MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
             // 环境采集、日志上报、WCDB 反射扫描都不参与首帧，放后台线程。
