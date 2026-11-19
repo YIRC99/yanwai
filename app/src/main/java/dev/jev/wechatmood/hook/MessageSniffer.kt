@@ -243,7 +243,7 @@ object MessageSniffer {
         if (!isVisible(view)) return null
         val scope = chatNodes(activity.window.decorView)
         if (view !in scope) return null
-        val current = records(scope)
+        val current = records(scope, useCache = false)
         val talker = conversation(activity, scope, current) ?: return null
         val ancestors = generateSequence(view) { it.parent as? View }.toSet()
         return current.filter { it.first in ancestors }.mapNotNull { it.second.input }
@@ -255,6 +255,7 @@ object MessageSniffer {
         val identity = ManualAnalysis.identity(input) ?: return false
         if (identity != ManualAnalysis.identity(expected) || !ModulePrefs.selectMessage(input)) return false
         val analysisKey = ModulePrefs.analysisInput(input).key
+        // 弹窗被手动关掉后，同一消息会被「已展示」拦下；这里显式请求重开。
         BubbleDecorator.request(analysisKey)
         SignalAnalyzer.retryFailure(analysisKey)
         refresh()
@@ -264,17 +265,30 @@ object MessageSniffer {
     fun replyTargetForView(view: View): MessageMetadata? {
         val activity = active.get() ?: return null
         val scope = chatNodes(activity.window.decorView)
-        val current = records(scope)
+        val current = records(scope, useCache = false)
         val talker = conversation(activity, scope, current) ?: return null
         val ancestors = generateSequence(view) { it.parent as? View }.toSet()
         return current.filter { it.first in ancestors }.mapNotNull { it.second.metadata }
             .filter { it.talker == talker && it.isReplyTarget(allowMedia = true) }.distinct().singleOrNull()
     }
 
+    /** 长按没出菜单时用：只记数量与哈希，不记聊天内容。 */
+    fun describeTarget(view: View): String = runCatching {
+        val activity = active.get() ?: return "no_activity"
+        val scope = chatNodes(activity.window.decorView)
+        if (scope.isEmpty()) return "no_scope"
+        val current = records(scope, useCache = false)
+        val talker = conversation(activity, scope, current) ?: return "no_talker rows=${current.size}"
+        val ancestors = generateSequence(view) { it.parent as? View }.toSet()
+        val candidates = current.filter { it.first in ancestors }.mapNotNull { it.second.metadata }
+        "talker=${talker.hashCode()} rows=${current.size} matched=${candidates.size} " +
+            "targets=${candidates.count { it.isReplyTarget(allowMedia = true) }}"
+    }.getOrElse { "error=" + it.javaClass.simpleName }
+
     fun suggestReply(view: View, expected: MessageMetadata): Boolean {
         val target = replyTargetForView(view) ?: return false
         if (target != expected) return false
-        // 图片/表情从已渲染的气泡取图，避开发送前还要解密微信文件。
+        // 图片/表情从已经渲染的气泡取图，绕开微信的 .dat 加密文件。
         val image = if (target.type == 3 || target.type == 47) MediaImage.capture(view) else null
         return ui?.suggestReply(target.messageId, image) == true
     }
@@ -329,7 +343,7 @@ object MessageSniffer {
         }
         val result = ReplyContext.collect(talker, messages.asReversed())
         check(result.historyAnchor != null || result.messages.isNotEmpty()) { "暂时无法核对当前聊天，请重新进入后重试" }
-        // 图片/表情本身不进 messages，只记下目标类型，供请求层提示模型。
+        // 图片/表情本身不进 messages，只记下目标类型与引用里的媒体，供请求层提示模型。
         val target = if (focusId > 0) messages.firstOrNull { it.messageId == focusId } else null
         val targetMedia = when {
             target == null -> null
@@ -342,7 +356,18 @@ object MessageSniffer {
             }
             else -> null
         }
-        return result.copy(trimmed = result.trimmed || messages.size < count, focusMessageId = focusId, targetMedia = targetMedia)
+        // 目标消息可能不在最近 N 条里，单独带一份正文，避免模型只能看到别的消息。
+        val focusText = target?.let { record ->
+            val own = record.plainText()
+            val quoted = record.quotedMessage()
+            when {
+                own == null -> quoted?.text
+                quoted?.text != null -> "【引用${quoted.displayName.orEmpty()}：${quoted.text}】$own"
+                else -> own
+            }
+        }
+        return result.copy(trimmed = result.trimmed || messages.size < count, focusMessageId = focusId,
+            targetMedia = targetMedia, focusText = focusText)
     }
 
     /** Cheap live boundary check, without re-reading 100 messages on every scan. */
@@ -404,7 +429,7 @@ object MessageSniffer {
         return ConversationIdentity.resolve(records.map { it.second.talker }, footerTalker, dedicated)
     }
 
-    private fun records(scope: List<View>): List<Pair<View, BoundMessage>> {
+    private fun records(scope: List<View>, useCache: Boolean = true): List<Pair<View, BoundMessage>> {
         val lists = scope.filterIsInstance<ListView>()
         var signature = 17L
         for (list in lists) {
@@ -419,7 +444,8 @@ object MessageSniffer {
             bindings.keys.forEach { signature = signature * 31 + System.identityHashCode(it) }
             signature = signature * 31 + bindings.size
         }
-        recordsSnapshot?.takeIf { it.signature == signature }?.let { return it.rows }
+        // 长按是对着具体 View 找行的，缓存里的旧 View 引用可能已经被回收复用，必须重建。
+        if (useCache) recordsSnapshot?.takeIf { it.signature == signature }?.let { return it.rows }
         val records = mutableListOf<Pair<View, BoundMessage>>()
         for (list in lists) {
             for (index in 0 until list.childCount) {

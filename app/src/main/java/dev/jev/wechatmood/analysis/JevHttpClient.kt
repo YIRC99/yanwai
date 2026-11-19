@@ -70,6 +70,10 @@ class JevHttpClient(private val client: Call.Factory = HttpClients.shared.newBui
             }
             throw IllegalStateException("$reason（HTTP ${response.code}）")
         }
+        val usage = json?.optJSONObject("usage")
+        dev.jev.wechatmood.core.UsageReporter.report(
+            usage?.optLong("prompt_tokens", 0L) ?: 0L,
+            usage?.optLong("completion_tokens", 0L) ?: 0L)
         return body
     }
 

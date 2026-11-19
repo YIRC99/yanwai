@@ -26,8 +26,25 @@ android {
         multiDexEnabled = true
     }
 
+    // 固定签名：CI 每个 runner 生成的 debug keystore 都不同，会让覆盖安装直接失败。
+    // 设了 YANWAI_KEYSTORE 就用它签 debug 和 release；没设则沿用各环境默认调试签名。
+    val fixedStore = System.getenv("YANWAI_KEYSTORE")?.takeIf { it.isNotBlank() && File(it).exists() }
+    signingConfigs {
+        if (fixedStore != null) {
+            create("fixed") {
+                storeFile = File(fixedStore)
+                storePassword = System.getenv("YANWAI_KEYSTORE_PASSWORD").orEmpty()
+                keyAlias = System.getenv("YANWAI_KEY_ALIAS") ?: "yanwai"
+                keyPassword = System.getenv("YANWAI_KEY_PASSWORD").orEmpty()
+            }
+        }
+    }
     buildTypes {
+        debug {
+            signingConfigs.findByName("fixed")?.let { signingConfig = it }
+        }
         release {
+            signingConfigs.findByName("fixed")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

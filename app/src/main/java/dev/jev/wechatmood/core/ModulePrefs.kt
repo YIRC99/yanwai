@@ -10,6 +10,8 @@ import java.util.concurrent.TimeUnit
 object ModulePrefs {
     const val FILE_NAME = "wechatmood_config"
     const val KEY_EXPLORE = "explore_mode"
+    /** 关系档案自动提取，默认关闭；开启后才会在打开「帮我回」时顺带跑一次。 */
+    const val KEY_RELATION_FACTS = "relation_facts_auto"
     const val KEY_API_KEY = "api_key"
     const val KEY_API_BASE = "api_base"
     const val KEY_API_PROVIDER = "api_provider"

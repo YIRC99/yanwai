@@ -42,6 +42,10 @@ class SettingsProvider : ContentProvider() {
                         Bundle().apply { putBoolean("saved", true) }
                     }
                 }
+                // 关系档案的读写也走同一个分发入口；之前没登记，落盘请求会落到 Unknown method，
+                // 调用方 runCatching 吞掉异常后表现为「提示已更新、重开就没了」。
+                "relation_facts_get", "relation_facts_put", "relation_facts_clear", "relation_facts_enabled" ->
+                    ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
                 "reply_role_list", "reply_role_apply", "reply_role_put", "reply_identity_get", "reply_identity_put", "contact_background_get", "contact_background_put" -> {
                     val result = ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
                     if (method == "reply_role_put") publish(ctx)
@@ -50,6 +54,18 @@ class SettingsProvider : ContentProvider() {
                         runCatching { ctx.contentResolver.notifyChange(ReplyIdentityProvider.CHANGES_URI, null) }
                     }
                     result
+                }
+                "usage_add" -> {
+                    UsageMeter.add(ctx, extras?.getLong("prompt", 0L) ?: 0L, extras?.getLong("completion", 0L) ?: 0L)
+                    Bundle()
+                }
+                "usage_today" -> {
+                    val usage = UsageMeter.today(ctx)
+                    Bundle().apply {
+                        putInt("requests", usage.requests)
+                        putLong("prompt", usage.promptTokens)
+                        putLong("completion", usage.completionTokens)
+                    }
                 }
                 "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
                 "config" -> snapshot(ctx)

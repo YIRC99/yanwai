@@ -7,7 +7,9 @@ import dev.jev.wechatmood.voice.VoiceState
 import dev.jev.wechatmood.voice.VoiceText
 
 data class ReplyMessage(val id: Long, val speaker: String, val time: Long, val text: String,
-    val voice: VoiceSource? = null, val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING)
+    val voice: VoiceSource? = null, val voiceState: VoiceState = if (voice == null) VoiceState.NONE else VoiceState.WAITING,
+    /** 原始消息类型：统计要按 3/47 计图片、按 34 计语音，不能用正文猜。 */
+    val type: Int = 1)
 /** Identity check only. Media payloads stay out of the reply context and model input. */
 data class ReplyHistoryAnchor(val id: Long, val type: Int, val sent: Int, val time: Long, val digest: String) {
     fun matches(record: MessageMetadata): Boolean = this == from(record)
@@ -23,7 +25,8 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
     val source: ReplyContextSource = ReplyContextSource.LOADED_PAGE, val historyFailure: String? = null,
     val requestedMessages: Int = ReplyHistoryLimit.DEFAULT, val historyAnchor: ReplyHistoryAnchor? = null,
     val background: ContactBackground = ContactBackground(), val focusMessageId: Long = 0,
-    val targetMedia: String? = null, val targetImageDataUri: String? = null) {
+    val targetMedia: String? = null, val targetImageDataUri: String? = null, val focusText: String? = null,
+    val facts: List<RelationFact> = emptyList()) {
     val fingerprint: String get() {
         val text = messages.joinToString("\u0000") { "${it.id}:${it.speaker.length}:${it.speaker}:${it.time}:${it.text.length}:${it.text}:${it.voice?.key.orEmpty()}:${it.voiceState}" }
         return MessageDigest.getInstance("SHA-256").digest("$talker:$latestLoadedId:${background.revision}:$text".toByteArray())
@@ -75,7 +78,8 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
                 val cut = body.take(end)
                 if (cut.length != body.length) trimmed = true
                 budget -= cut.length
-                ReplyMessage(record.messageId, record.speaker(), record.createdAt, cut, record.voiceSource())
+                ReplyMessage(record.messageId, record.speaker(), record.createdAt, cut, record.voiceSource(),
+                    type = record.type)
             }.asReversed()
             return ReplyContext(talker, selected, same.count { it.type !in setOf(1, 34) }, trimmed, same.lastOrNull()?.messageId ?: 0,
                 requestedMessages = maxMessages,
