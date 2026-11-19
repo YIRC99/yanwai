@@ -1,3 +1,6 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:pathData="M4,4H20V17H12L7,21V17H4ZM8,10H16M13,7L16,10L13,13" android:fillColor="@android:color/transparent" android:strokeColor="@color/text_secondary" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <!-- 对话气泡：保留「聊天」语义 -->
+    <path android:pathData="M4,5H20V16.5H12.2L7.5,20.5V16.5H4Z" android:fillColor="@android:color/transparent" android:strokeColor="@color/text_secondary" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <!-- 中心四角星芒：AI 的通用符号 -->
+    <path android:pathData="M12,8.1L12.72,10.28L14.9,11L12.72,11.72L12,13.9L11.28,11.72L9.1,11L11.28,10.28Z" android:fillColor="@color/text_secondary" />
 </vector>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="20dp" android:text="备用回复模型" />
+    <TextView android:id="@+id/backupReplyStatus" style="@style/Goutoujunshi.Badge" android:layout_marginTop="12dp" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/backupEndpointLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API 地址" app:helperText="填写服务商的 Base URL（如 https://example.com/v1）或完整 /chat/completions 地址。">
+        <com.google.android.material.textfield.TextInputEditText android:id="@+id/backupEndpoint" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textUri" android:maxLines="3" android:importantForAutofill="no" android:saveEnabled="false" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/backupKeyLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="API Key" app:endIconMode="password_toggle" app:helperText="填写这个服务商的 Key，仅保存在本机。">
+        <com.google.android.material.textfield.TextInputEditText android:id="@+id/backupApiKey" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textPassword" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <com.google.android.material.button.MaterialButton android:id="@+id/backupFetchModels" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="获取模型列表" />
+    <TextView android:id="@+id/backupModelsStatus" style="@style/Goutoujunshi.Caption" android:accessibilityLiveRegion="polite" android:text="填写 Key 后获取，或直接输入模型 ID。" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/backupModelLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="选择模型 / 输入模型 ID" app:helperText="输入名称可筛选列表，也可手动填写。请选择支持长上下文的聊天模型。">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/backupModel" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textVisiblePassword" android:completionThreshold="0" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="16dp" android:text="点击生成时，相关聊天、对方背景和本次要求会发送给所选模型。建议只供复制，由你粘贴发送。" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/backupTestReply" style="@style/Goutoujunshi.Button" android:layout_marginTop="16dp" android:text="保存并检测备用回复" />
+    <TextView style="@style/Goutoujunshi.Caption" android:text="检测会发送示例聊天和相关知识资料，可能产生 API 费用，不读取微信消息。列表可见不代表一定能调用。" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/backupSaveReply" style="@style/Goutoujunshi.Button.Text" android:text="仅保存备用配置" />
+    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/backupProgressReply" android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true" android:visibility="gone" android:contentDescription="正在检测备用回复模型" />
+    <TextView android:id="@+id/backupReplyResult" style="@style/Goutoujunshi.Body" android:layout_marginTop="12dp" android:padding="16dp" android:background="@drawable/status_pill" android:visibility="gone" android:accessibilityLiveRegion="polite" android:textIsSelectable="true" />
+</LinearLayout>

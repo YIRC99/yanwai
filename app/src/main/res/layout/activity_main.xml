@@ -4,164 +4,419 @@
     <androidx.core.widget.NestedScrollView android:id="@+id/pageScroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true" android:clipToPadding="false">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="20dp" android:paddingTop="12dp" android:paddingBottom="32dp">
             <LinearLayout android:id="@+id/homePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView style="@style/Yanwai.PageTitle" android:text="今天想用什么？" />
-                <TextView style="@style/Yanwai.Body" android:text="选好功能，回到微信里使用。" />
-                <LinearLayout android:id="@+id/entryAnalysis" style="@style/Yanwai.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="聊天分析，情绪判断 · 单条解读 · 自动分析" android:importantForAccessibility="yes">
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
-                        <TextView style="@style/Yanwai.Body" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="聊天分析" />
-                        <TextView style="@style/Yanwai.Caption" android:layout_marginTop="4dp" android:text="情绪判断 · 单条解读 · 自动分析" />
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="今天想用什么？" />
+                <LinearLayout android:id="@+id/entryStrategist" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="帮我回复，手动触发，生成回复与话题" android:importantForAccessibility="yes">
+                    <TextView android:id="@+id/emojiStrategist" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="22sp" android:importantForAccessibility="no" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView android:id="@+id/titleStrategist" style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" />
+                            <TextView android:id="@+id/badgeStrategist" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                            <TextView android:id="@+id/timeStrategist" style="@style/Goutoujunshi.Caption" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" />
+                        </LinearLayout>
                     </LinearLayout>
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
                 </LinearLayout>
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
-                <LinearLayout android:id="@+id/entryReply" style="@style/Yanwai.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="回复与话题，生成回复 · 找找话题 · 对方背景" android:importantForAccessibility="yes">
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
-                        <TextView style="@style/Yanwai.Body" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="回复与话题" />
-                        <TextView style="@style/Yanwai.Caption" android:layout_marginTop="4dp" android:text="生成回复 · 找找话题 · 对方背景" />
+                <LinearLayout android:id="@+id/entrySentinel" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="自动起草，自动读取通知，提前准备回复" android:importantForAccessibility="yes">
+                    <TextView android:id="@+id/emojiSentinel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="22sp" android:importantForAccessibility="no" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView android:id="@+id/titleSentinel" style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" />
+                            <TextView android:id="@+id/badgeSentinel" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                            <TextView android:id="@+id/timeSentinel" style="@style/Goutoujunshi.Caption" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" />
+                        </LinearLayout>
                     </LinearLayout>
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
                 </LinearLayout>
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
-                <LinearLayout android:id="@+id/entryDisplay" style="@style/Yanwai.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="卡片显示，选择分析卡片上要显示的内容" android:importantForAccessibility="yes">
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
-                        <TextView style="@style/Yanwai.Body" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="卡片显示" />
-                        <TextView style="@style/Yanwai.Caption" android:layout_marginTop="4dp" android:text="选择分析卡片上要显示的内容" />
+                <LinearLayout android:id="@+id/entryRelay" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="自动填充，在输入框预测接下来的内容" android:importantForAccessibility="yes">
+                    <TextView android:id="@+id/emojiRelay" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="22sp" android:importantForAccessibility="no" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView android:id="@+id/titleRelay" style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" />
+                            <TextView android:id="@+id/badgeRelay" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                            <TextView android:id="@+id/timeRelay" style="@style/Goutoujunshi.Caption" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" />
+                        </LinearLayout>
                     </LinearLayout>
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
                 </LinearLayout>
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
-                <LinearLayout android:id="@+id/entryGuide" style="@style/Yanwai.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="使用指南，启用模块和微信内的功能入口" android:importantForAccessibility="yes">
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
-                        <TextView style="@style/Yanwai.Body" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="使用指南" />
-                        <TextView style="@style/Yanwai.Caption" android:layout_marginTop="4dp" android:text="启用模块和微信内的功能入口" />
+                <LinearLayout android:id="@+id/entryIntel" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="人物档案，管理角色与背景" android:importantForAccessibility="yes">
+                    <TextView android:id="@+id/emojiIntel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="22sp" android:importantForAccessibility="no" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView android:id="@+id/titleIntel" style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" />
+                            <TextView android:id="@+id/badgeIntel" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                            <TextView android:id="@+id/timeIntel" style="@style/Goutoujunshi.Caption" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
+                <LinearLayout android:id="@+id/entryCommunicate" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="通知摘要，把 AI 总结推到超级岛" android:importantForAccessibility="yes">
+                    <TextView android:id="@+id/emojiCommunicate" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="22sp" android:importantForAccessibility="no" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView android:id="@+id/titleCommunicate" style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" />
+                            <TextView android:id="@+id/badgeCommunicate" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                            <TextView android:id="@+id/timeCommunicate" style="@style/Goutoujunshi.Caption" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
+                <LinearLayout android:id="@+id/entryAide" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="通知代办，从通知里提炼要事" android:importantForAccessibility="yes">
+                    <TextView android:id="@+id/emojiAide" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="22sp" android:importantForAccessibility="no" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView android:id="@+id/titleAide" style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" />
+                            <TextView android:id="@+id/badgeAide" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                            <TextView android:id="@+id/timeAide" style="@style/Goutoujunshi.Caption" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
+                <LinearLayout android:id="@+id/entryWarReview" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="我的风格，从我自己发过的话里学说话方式" android:importantForAccessibility="yes">
+                    <TextView android:id="@+id/emojiWarReview" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="22sp" android:importantForAccessibility="no" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical" android:importantForAccessibility="noHideDescendants">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView android:id="@+id/titleWarReview" style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" />
+                            <TextView android:id="@+id/badgeWarReview" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                            <TextView android:id="@+id/timeWarReview" style="@style/Goutoujunshi.Caption" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" />
+                        </LinearLayout>
                     </LinearLayout>
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
                 </LinearLayout>
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
                 <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" app:cardBackgroundColor="@color/panel_surface" app:cardCornerRadius="20dp" app:cardElevation="0dp" app:strokeWidth="1dp" app:strokeColor="@color/outline_subtle">
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-                        <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="微信模块" />
-                        <TextView android:id="@+id/textHostBadge" style="@style/Yanwai.Badge" />
-                        <TextView android:id="@+id/textFrameworkStatus" style="@style/Yanwai.Caption" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonOpenWechat" style="@style/Yanwai.Button" android:text="打开微信" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonSetupGuide" style="@style/Yanwai.Button.Text" android:text="查看启用与使用指南" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="微信模块" />
+                        <TextView android:id="@+id/textFrameworkStatus" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:accessibilityLiveRegion="polite" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonOpenWechat" style="@style/Goutoujunshi.Button" android:text="打开微信" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
-                <LinearLayout android:id="@+id/setupGuidePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                    <TextView style="@style/Yanwai.Section" android:text="第一次使用" />
-                    <TextView style="@style/Yanwai.Body" android:text="1. 在「分析」或「回复」中配置模型并检测。\n2. 在 LSPosed 启用言外，作用域勾选微信。\n3. 彻底关闭并重新打开微信，进入一个聊天。" />
-                    <TextView style="@style/Yanwai.Section" android:text="聊天里可以做什么" />
-                    <TextView style="@style/Yanwai.Body" android:text="自动分析：打开「＋」横条左侧「分析」，每个聊天单独记住开关，默认关闭。\n\n单条解读：长按对方消息，选择「翻译意图」，无需打开自动分析。\n\n回复与话题：展开「＋」点「帮我回 · 找话题」横条；也可长按横条左侧「分析」，选择「帮我回 / 上次建议」。选择对方身份和参考条数，再点「生成回复」或「找找话题」。生成后复制、自行粘贴发送。\n\n对方背景：在「帮我回」面板填写对方经历、偏好等长期信息；群聊不提供此项。" />
-                    <TextView style="@style/Yanwai.Section" android:text="消息与参考范围" />
-                    <TextView style="@style/Yanwai.Body" android:text="支持文字与微信语音转写。回复可选参考条数或自定义上限，以实际读到的内容为准；图片等其他媒体不参与理解。语音转写可能联网。\n\n分析卡片的三个显示开关在「更多」中调整，切换立即保存，不重新请求模型。" />
-                </LinearLayout>
             </LinearLayout>
-            <LinearLayout android:id="@+id/emotionPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                <TextView style="@style/Yanwai.PageTitle" android:text="聊天分析" />
-                <TextView style="@style/Yanwai.Body" android:text="选择怎样理解聊天，连接在模型页统一管理。" />
-                <include android:id="@+id/intentSettings" layout="@layout/intent_settings" />
+            <LinearLayout android:id="@+id/sentinelPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/sentinelTitle" style="@style/Goutoujunshi.PageTitle" />
+                <TextView android:id="@+id/sentinelDetail" style="@style/Goutoujunshi.Body" />
+                <TextView android:id="@+id/sentinelStage" style="@style/Goutoujunshi.Badge" />
+                <com.google.android.material.card.MaterialCardView style="@style/Goutoujunshi.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                                                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="启用" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchSentry" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="启用自动起草（收到消息时提前准备回复）" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="需要对狗头军师授予通知使用权。未授权时自动起草收不到消息。" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonSentryPermission" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="授予通知使用权" />
+                        <TextView android:id="@+id/textSentryStatus" style="@style/Goutoujunshi.Caption" android:accessibilityLiveRegion="polite" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="怎么生成" />
+                        <TextView android:id="@+id/textSentryCount" style="@style/Goutoujunshi.Caption" android:text="一次给几条备选" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderSentryCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="1" android:valueTo="5" />
+                        <TextView android:id="@+id/textSentryContext" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="参考最近多少条聊天记录" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderSentryContext" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="2" android:valueFrom="6" android:valueTo="60" />
+                        <TextView android:id="@+id/textSentryCooldown" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="同一聊天多久内不重复生成，避免连发几条反复请求模型" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderSentryCooldown" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="10" android:valueFrom="10" android:valueTo="300" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchSentryOnlyUnreplied" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="仅当最后一条是对方消息时生成" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:text="关掉后，即使你已经回复过也会继续准备建议。" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="什么时候收起" />
+                        <TextView android:id="@+id/textSentryTtl" style="@style/Goutoujunshi.Caption" android:text="超过这个时间的建议自动撤销；拉到最右为永不过期" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderSentryTtl" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="0" android:valueTo="18" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="哪些人不触发" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchSentryWhitelist" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="仅白名单用户触发" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="开启后只有名单内的联系人会准备回复。名单外的会话不会被读取，聊天内容也不会同步过来。" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonSentryWhitelist" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="选择联系人" />
+                        <TextView android:id="@+id/textSentryWhitelist" style="@style/Goutoujunshi.Caption" android:accessibilityLiveRegion="polite" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="本地数据" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonSentryUsersRefresh" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="8dp" android:text="查看本地用户清单" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="本地已同步的会话。白名单从这里挑人，名单状态一并标出。" />
+                        <LinearLayout android:id="@+id/listSentryUsers" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" android:visibility="gone" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="高级" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchSentryTestMode" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="测试模式（所有聊天显示示例建议）" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:text="打开后每个聊天窗口都会挂上示例卡片，用来确认显示是否正常；不发请求，也不影响真实建议。" />
+                        <TextView android:id="@+id/textSentrySyncUsers" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="微信被冻结时，靠这份聊天记录副本提前生成建议" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderSentrySyncUsers" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="1" android:valueTo="50" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/aidePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/aideTitle" style="@style/Goutoujunshi.PageTitle" />
+                <TextView android:id="@+id/aideDetail" style="@style/Goutoujunshi.Body" />
+                <com.google.android.material.card.MaterialCardView style="@style/Goutoujunshi.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="启用" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchAide" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="启用通知代办（从通知里提炼要事）" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="通知到达时先入队，攒够后按下面设定的间隔批量送模型提取，不和通知摘要抢请求。" />
+                        <TextView android:id="@+id/textAideIntervalLabel" style="@style/Goutoujunshi.Caption" android:layout_marginTop="12dp" android:text="投送间隔：5 分钟" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderAideInterval" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="1" android:valueTo="60" android:stepSize="1" android:value="5" />
+                        <TextView android:id="@+id/textAideQueue" style="@style/Goutoujunshi.Caption" android:layout_marginTop="2dp" android:textColor="@color/text_secondary" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView style="@style/Goutoujunshi.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="可识别的类型" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" android:text="模型只会往这些类型里归。改描述比改代码有效——描述决定它怎么判断这一类。" />
+                        <LinearLayout android:id="@+id/listAideTypes" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonAideAddType" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="添加自定义类型" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView style="@style/Goutoujunshi.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="关键用户" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" android:text="名单、值班表这类内容里往往有几十个人，你只关心自己那几行。填上名字之后，只会有和这些人相关的事项被记下来。留空则全部都记。" />
+                        <TextView android:id="@+id/textAideKeyUsers" style="@style/Goutoujunshi.Caption" android:layout_marginTop="10dp" android:textColor="@color/text_primary" android:text="未设置 · 所有事项都会记下来" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonAideKeyUsers" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="编辑名单" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView style="@style/Goutoujunshi.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="记下的事" />
+                        <TextView android:id="@+id/textAideEmpty" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="还没有记下任何要事。开着开关，等微信来消息就行。" />
+                        <LinearLayout android:id="@+id/listAideItems" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonAideClear" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="清空全部" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/communicatePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/communicateTitle" style="@style/Goutoujunshi.PageTitle" />
+                <TextView android:id="@+id/communicateDetail" style="@style/Goutoujunshi.Body" />
+                <com.google.android.material.card.MaterialCardView style="@style/Goutoujunshi.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="启用" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchCommunicate" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="启用通知摘要（消息到达时发 AI 通知）" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:text="和自动起草完全独立，关掉自动起草不影响发通知。" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="测试" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonCommunicateTest" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="抽一条聊天记录试推" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="从最近的微信聊天里抽一条，走一遍和真实消息相同的 AI 总结再发通知，用来确认链路是否正常。" />
+                        <TextView android:id="@+id/textCommunicateStatus" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:accessibilityLiveRegion="polite" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="触发条件" />
+                        <TextView android:id="@+id/textCommunicateTrigger" style="@style/Goutoujunshi.Caption" android:text="正文至少多少字才总结" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderCommunicateTrigger" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="0" android:valueTo="80" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" android:text="短于这个长度的消息直接跳过：不调 AI，也不发归纳通知（微信原文照常保留）。设 0 表示每条都总结。只数正文，不算发信人名称。" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="等待" />
+                        <TextView android:id="@+id/textCommunicateAiTimeout" style="@style/Goutoujunshi.Caption" android:text="AI 最多等多久" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderCommunicateAiTimeout" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="3" android:valueTo="20" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" android:text="AI 回来才弹通知。超过这个时间还没结果，就直接把原文当通知发出去，不会一直没消息。" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="展示" />
+                        <TextView android:id="@+id/textCommunicateDisplay" style="@style/Goutoujunshi.Caption" android:text="通知停留多久" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderCommunicateDisplay" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="3" android:valueTo="30" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" android:text="到点自动消失。微信原来那条不动，所以通知栏会同时有两条，我们的过一会儿自己走。" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="显示" />
+                        <TextView android:id="@+id/textCommunicateSenderChars" style="@style/Goutoujunshi.Caption" android:text="发信人名字最多几个字" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderCommunicateSenderChars" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="3" android:valueTo="12" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" android:text="有些微信名特别长，不压会把标题挤爆。AI 会挑能认出是谁的那部分，配一个 emoji。" />
+                        <TextView android:id="@+id/textCommunicateMaxChars" style="@style/Goutoujunshi.Caption" android:layout_marginTop="12dp" android:text="让 AI 把归纳压到多少字以内" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderCommunicateMaxChars" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="4" android:valueTo="16" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="只是给 AI 的写作目标，不会硬截断。" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="通知" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:text="微信原来那条不动，我们额外发一条 AI 归纳。关掉微信的悬浮通知后，屏幕顶部只会弹出归纳后的版本。" />
+                        <TextView android:id="@+id/textCommunicateJump" style="@style/Goutoujunshi.Caption" android:layout_marginTop="12dp" android:text="点通知直接进对应聊天" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchCommunicateRootJump" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="用 root 跳转会话" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:text="开启后不再尝试普通方式，直接用 su 代发启动命令。微信的聊天界面不对外开放，普通 app 起不来。第一次会弹 Magisk 授权。" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/relayPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/relayTitle" style="@style/Goutoujunshi.PageTitle" />
+                <TextView android:id="@+id/relayDetail" style="@style/Goutoujunshi.Body" />
+                <TextView android:id="@+id/relayStage" style="@style/Goutoujunshi.Badge" />
+                <com.google.android.material.card.MaterialCardView style="@style/Goutoujunshi.SettingsCard">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="0dp" android:text="自动填充" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchRelay" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="启用自动填充（输入框内灰字预测）" android:textColor="@color/text_primary" />
+                        <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="默认关闭。打开后重新进入微信生效；只在聊天输入框里工作，不自动发送。" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="16dp" android:text="触发字数" />
+                        <TextView android:id="@+id/textRelayMinPrefix" style="@style/Goutoujunshi.Caption" android:text="输入达到该字数后才开始预测" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderRelayMinPrefix" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="2" android:valueTo="20" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="16dp" android:text="上下文条数" />
+                        <TextView android:id="@+id/textRelayContextLimit" style="@style/Goutoujunshi.Caption" android:text="自动填充预测时读取最近多少条聊天记录" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderRelayContextLimit" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="10" android:valueFrom="10" android:valueTo="100" />
+                        <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="16dp" android:text="候选条数" />
+                        <TextView android:id="@+id/textRelayCandidates" style="@style/Goutoujunshi.Caption" android:text="一次生成多少条备选，命中率越高越不用等模型" />
+                        <com.google.android.material.slider.Slider android:id="@+id/sliderRelayCandidates" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="5" android:valueFrom="5" android:valueTo="150" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+                <TextView style="@style/Goutoujunshi.Section" android:text="怎么用" />
+                <TextView style="@style/Goutoujunshi.Body" android:text="打字时输入框里会出现灰色预测，点一下即填入；不点就继续输入，灰字会自动消失。\n预测依据是最近的聊天记录加上你已经打出的内容。" />
             </LinearLayout>
             <LinearLayout android:id="@+id/replyPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                <TextView style="@style/Yanwai.PageTitle" android:text="回复与话题" />
-                <com.google.android.material.card.MaterialCardView style="@style/Yanwai.SettingsCard">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-                        <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="在微信里使用" />
-                        <TextView style="@style/Yanwai.Body" android:text="在微信聊天中展开「＋」，点击「帮我回 · 找话题」。选择对方身份和参考条数，再点击生成。" />
-                        <TextView android:id="@+id/replySummary" style="@style/Yanwai.Badge" android:layout_marginTop="16dp" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/openReplyModel" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="配置回复模型" />
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="AI" />
+                <TextView style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="模型配置与超时策略。" />
+                <LinearLayout android:id="@+id/entryUsageTier" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="一次设定所有 AI 功能的用量" android:importantForAccessibility="yes">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                            <TextView style="@style/Goutoujunshi.Body" android:layout_width="wrap_content" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="用量档位" />
+                            <TextView android:id="@+id/badgeUsageTier" style="@style/Goutoujunshi.Badge" android:layout_marginStart="8dp" />
+                        </LinearLayout>
+                        <TextView android:id="@+id/taglineUsageTier" style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" />
+                    </LinearLayout>
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
+                <LinearLayout android:id="@+id/entryPrimaryAi" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="主模型配置">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView style="@style/Goutoujunshi.Body" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="主 AI" />
+                    </LinearLayout>
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
+                <LinearLayout android:id="@+id/entryBackupAi" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="主模型超时后的兜底">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView style="@style/Goutoujunshi.Body" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="备用 AI" />
+                    </LinearLayout>
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
+                <LinearLayout android:id="@+id/entryTimeout" style="@style/Goutoujunshi.Entry" android:orientation="horizontal" android:gravity="center_vertical" android:contentDescription="切换与兜底两级等待">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView style="@style/Goutoujunshi.Body" android:textSize="17sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="超时与输出" />
+                    </LinearLayout>
+                    <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="12dp" android:src="@drawable/ic_chevron" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/outline_subtle" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/usageTierPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="用量档位" />
+                <TextView style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="一个开关管住所有 AI 功能的用量：上下文读多少条、一次给几个候选、多久触发一次、单次最多输出多少。手动改动其中任何一个参数，档位会自动变成自定义。" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="20dp" android:text="档位" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                    <com.google.android.material.button.MaterialButton android:id="@+id/tierLow" style="@style/Goutoujunshi.Button.Outline" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="6dp" android:text="低" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/tierMedium" style="@style/Goutoujunshi.Button.Outline" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="6dp" android:text="中" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/tierHigh" style="@style/Goutoujunshi.Button.Outline" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="6dp" android:text="高" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/tierCustom" style="@style/Goutoujunshi.Button.Outline" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="自定义" />
+                </LinearLayout>
+                <TextView android:id="@+id/textUsageTierHint" style="@style/Goutoujunshi.Caption" android:layout_marginTop="10dp" android:accessibilityLiveRegion="polite" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="20dp" android:text="当前生效" />
+                <TextView android:id="@+id/textUsageTierParams" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/aiPrimaryPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="主 AI" />
+                <TextView style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="「帮我回复」和「找话题」共用这份配置，保存后微信内立即生效。" />
+                <include android:id="@+id/replySettings" layout="@layout/reply_settings" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="思考模式" />
+                <TextView style="@style/Goutoujunshi.Caption" android:text="思考会让模型先推理再回答，明显更慢也更贵。各家关闭参数不一样，先选一段；列表里没有就手填。" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonThinkingTemplate" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="关闭片段：不注入" />
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/thinkingCustomLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:visibility="gone" android:hint="自定义片段（JSON）" app:helperText="合并进请求体顶层，例如 {&quot;thinking&quot;:{&quot;type&quot;:&quot;disabled&quot;}}">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputThinkingCustom" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="text" android:maxLines="4" android:importantForAutofill="no" android:saveEnabled="false" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" android:text="下面这些开关：打开 = 关闭对应功能的思考，关闭 = 保持服务商默认。" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchThinkingReply" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="帮我回复" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchThinkingTopics" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="找话题" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchThinkingRelay" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="自动填充" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchThinkingAide" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="通知代办（事项提取）" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchThinkingIntel" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="人物档案（画像总结）" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchThinkingCommunicate" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="通知摘要" />
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchThinkingWarReview" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="我的风格（画像整理）" />
+                <TextView android:id="@+id/textThinkingSupport" style="@style/Goutoujunshi.Caption" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonAiProbe" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="8dp" android:text="检查模型是否可用" />
+                <TextView android:id="@+id/textAiProbeResult" style="@style/Goutoujunshi.Caption" android:accessibilityLiveRegion="polite" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/aiBackupPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="备用 AI" />
+                <TextView style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="主模型在「切换超时」内没有响应时，自动改用这里。三项留空表示不启用备用。" />
+                <include android:id="@+id/replySettingsBackup" layout="@layout/reply_settings_backup" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="思考模式" />
+                <TextView style="@style/Goutoujunshi.Caption" android:text="备用模型往往换了服务商，关闭思考的字段也可能不同，所以单独选一段。留空时沿用主 AI 的片段。" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonBackupThinkingTemplate" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="关闭片段：沿用主 AI" />
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/backupThinkingCustomLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:visibility="gone" android:hint="备用自定义片段（JSON）" app:helperText="合并进请求体顶层，例如 {&quot;thinking&quot;:{&quot;type&quot;:&quot;disabled&quot;}}">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputBackupThinkingCustom" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="text" android:maxLines="4" android:importantForAutofill="no" android:saveEnabled="false" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/aiTimeoutPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="超时与输出" />
+                <TextView style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="两级等待：主模型等不到就切备用，备用也等不到才算失败。" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="切换备用 AI 的超时" />
+                <TextView android:id="@+id/textFailover" style="@style/Goutoujunshi.Caption" android:text="主模型超过这个时间没有响应，就改问备用模型" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderFailover" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="1" android:valueFrom="3" android:valueTo="30" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="16dp" android:text="兜底超时" />
+                <TextView android:id="@+id/textFinal" style="@style/Goutoujunshi.Caption" android:text="备用模型也超过这个时间还没回，就判定失败" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderFinal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="5" android:valueFrom="10" android:valueTo="120" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="16dp" android:text="输出长度上限" />
+                <TextView android:id="@+id/textMaxTokens" style="@style/Goutoujunshi.Caption" android:text="模型单次最多输出多少 token" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderMaxTokens" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="100" android:valueFrom="200" android:valueTo="8200" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonSaveTimeouts" style="@style/Goutoujunshi.Button" android:layout_marginTop="16dp" android:text="保存设置" />
+                <TextView android:id="@+id/textTimeoutStatus" style="@style/Goutoujunshi.Caption" android:accessibilityLiveRegion="polite" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/warReviewPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="🪞 我的风格" />
+                <TextView style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="定期把你自己发过的话整理成一段语言画像，生成回复时用它校准口吻。只在本机处理，不上传。" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="启用" />
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchWarReview" android:saveEnabled="false" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="启用我的风格（定期学习我的说话方式）" android:textColor="@color/text_primary" />
+                <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="只采集纯文字消息，并且会剔掉 AI 帮你写过的话。攒够样本才整理，整理时调一次 AI。" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="当前状态" />
+                <TextView android:id="@+id/textWarReviewStats" style="@style/Goutoujunshi.Caption" android:accessibilityLiveRegion="polite" />
+                <TextView android:id="@+id/textWarReviewUpdated" style="@style/Goutoujunshi.Caption" android:layout_marginTop="4dp" />
+                <TextView android:id="@+id/headerWarReviewProfile" style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:paddingVertical="8dp" android:minHeight="48dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true" android:background="?attr/selectableItemBackground" android:text="整体概述" />
+                <LinearLayout android:id="@+id/boxWarReviewProfile" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                    <TextView android:id="@+id/textWarReviewProfile" style="@style/Goutoujunshi.Body" android:layout_marginTop="8dp" android:text="还没有画像。攒够样本后会自动整理，也可以点下面的按钮立即整理。" />
+                </LinearLayout>
+                <TextView android:id="@+id/headerWarReviewVocab" style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:paddingVertical="8dp" android:minHeight="48dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true" android:background="?attr/selectableItemBackground" android:text="我的常用词" />
+                <LinearLayout android:id="@+id/boxWarReviewVocab" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                    <TextView style="@style/Goutoujunshi.Caption" android:text="整理画像时一起归纳的，每条是「某类意思 → 你习惯怎么说」。下面就是生成回复时实际发给 AI 的内容，你看到什么，它就看到什么。" />
+                    <LinearLayout android:id="@+id/listWarReviewVocab" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                </LinearLayout>
+                <TextView android:id="@+id/headerWarReviewRecent" style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:paddingVertical="8dp" android:minHeight="48dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true" android:background="?attr/selectableItemBackground" android:text="还没并进画像的话" />
+                <LinearLayout android:id="@+id/boxWarReviewRecent" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                    <TextView style="@style/Goutoujunshi.Caption" android:text="这里只列整理后新攒下的。已经吸收进画像的不再重复展示。" />
+                    <LinearLayout android:id="@+id/listWarReviewRecent" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                </LinearLayout>
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="整理频率" />
+                <TextView android:id="@+id/textWarReviewInterval" style="@style/Goutoujunshi.Caption" android:text="每隔多久整理一次" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderWarReviewInterval" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="6" android:valueFrom="6" android:valueTo="72" />
+                <TextView android:id="@+id/textWarReviewMinSamples" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="攒够多少条才整理" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderWarReviewMinSamples" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="20" android:valueFrom="40" android:valueTo="400" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonWarReviewNow" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="16dp" android:text="立即整理" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonWarReviewRestart" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="清空已采集" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonWarReviewClear" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="清空画像" />
+                <TextView android:id="@+id/textWarReviewHint" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:accessibilityLiveRegion="polite" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/intelPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/intelTitle" style="@style/Goutoujunshi.PageTitle" android:text="人物档案" />
+                <TextView android:id="@+id/intelDetail" style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="为每个聊天对象建立角色与背景。生成回复和话题时会读这张卡，用来校准称呼、分寸和话题取舍。" />
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchIntel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="启用人物档案（自动为聊天对象累积画像）" android:textColor="@color/text_primary" />
+                <TextView android:id="@+id/textIntelMinSamples" style="@style/Goutoujunshi.Caption" android:layout_marginTop="8dp" android:text="攒够 20 条新消息就整理一次" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderIntelMinSamples" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="5" android:value="20" android:valueFrom="5" android:valueTo="100" />
+                <TextView android:id="@+id/textIntelInterval" style="@style/Goutoujunshi.Caption" android:layout_marginTop="12dp" android:text="只按条数，不按时间" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderIntelInterval" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:stepSize="6" android:value="0" android:valueFrom="0" android:valueTo="168" />
+                <TextView style="@style/Goutoujunshi.Caption" android:layout_marginTop="16dp" android:text="对象画像" />
+                <TextView android:id="@+id/textIntelEmpty" style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="还没有画像。开着开关，等聊天记录攒够就会自动生成。" />
+                <LinearLayout android:id="@+id/listIntelProfiles" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonIntelClearAll" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="清空全部画像" />
+                <com.google.android.material.card.MaterialCardView android:id="@+id/intelDetailCard" style="@style/Goutoujunshi.SettingsCard" android:visibility="gone">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                        <com.google.android.material.button.MaterialButton android:id="@+id/intelDetailBack" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:insetLeft="0dp" android:insetRight="0dp" android:paddingLeft="0dp" android:paddingRight="0dp" android:text="‹ 返回画像列表" />
+                        <TextView android:id="@+id/intelDetailTitle" style="@style/Goutoujunshi.Section" android:layout_marginTop="4dp" android:text="" />
+                        <TextView android:id="@+id/intelDetailMeta" style="@style/Goutoujunshi.Caption" android:layout_marginTop="2dp" android:text="" />
+                        <TextView android:id="@+id/intelDetailBody" style="@style/Goutoujunshi.Body" android:layout_marginTop="10dp" android:text="" android:lineSpacingMultiplier="1.4" />
+                        <TextView android:id="@+id/intelDetailEmpty" style="@style/Goutoujunshi.Caption" android:layout_marginTop="10dp" android:text="这张卡还没生成，攒够消息后会自动总结。" android:visibility="gone" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/intelDetailClear" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="清空这张画像" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
-                <include android:id="@+id/roleManager" layout="@layout/role_manager" />
-            </LinearLayout>
-            <LinearLayout android:id="@+id/modelsPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                <TextView style="@style/Yanwai.PageTitle" android:text="模型配置" />
-                <TextView style="@style/Yanwai.Body" android:text="连接单独保存，不会切换你的分析方式。" />
-                <com.google.android.material.button.MaterialButtonToggleGroup android:id="@+id/modelTabs" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:singleSelection="true" app:selectionRequired="true" app:checkedButton="@id/modelJev">
-                    <com.google.android.material.button.MaterialButton android:id="@+id/modelJev" style="@style/Yanwai.ModelTab" android:text="JEV" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/modelAnalysis" style="@style/Yanwai.ModelTab" android:text="分析 LLM" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/modelReply" style="@style/Yanwai.ModelTab" android:text="回复 LLM" />
-                </com.google.android.material.button.MaterialButtonToggleGroup>
-                <LinearLayout android:id="@+id/jevModelPage" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView android:id="@+id/modelSection" style="@style/Yanwai.Section" android:layout_marginTop="20dp" android:text="JEV 连接" />
-                <TextView android:id="@+id/jevSectionHint" style="@style/Yanwai.Caption" android:text="保存后自动检测，成功显示绿色，失败显示红色。" />
-                <TextView android:id="@+id/textModelStatus" style="@style/Yanwai.Badge" android:text="先选择渠道，再填写对应的 API Key。" />
-                <LinearLayout android:id="@+id/jevConfigPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                    <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutProvider" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:hint="服务渠道">
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/inputProvider" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="none" android:saveEnabled="false" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                    <TextView android:id="@+id/textProviderSummary" style="@style/Yanwai.Caption" android:layout_marginTop="8dp" android:text="预设渠道已匹配地址与模型，只需填写 Key。" />
-                    <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiBase" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:hint="API 地址" android:visibility="gone">
-                        <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiBase" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textUri" android:maxLines="3" android:importantForAutofill="no" android:saveEnabled="false" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                    <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiModel" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:hint="模型名" android:visibility="gone" app:helperText="按服务商文档填写，留空使用 jev-1.13.0。">
-                        <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiModel" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textVisiblePassword" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                    <com.google.android.material.textfield.TextInputLayout android:id="@+id/layoutApiKey" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:hint="API Key" app:endIconMode="password_toggle" app:helperText="使用当前渠道申请的 Key，仅保存在本机。">
-                        <com.google.android.material.textfield.TextInputEditText android:id="@+id/inputApiKey" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:inputType="textPassword" android:singleLine="true" android:importantForAutofill="no" android:saveEnabled="false" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonProviderHelp" style="@style/Yanwai.Button.Text" android:text="没有 Key？查看获取方法" />
-                    <LinearLayout android:id="@+id/providerHelpPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" android:background="@drawable/status_pill" android:padding="16dp">
-                        <TextView android:id="@+id/textProviderGuide" style="@style/Yanwai.Body" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonGetKey" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="前往申请 Key ↗" />
-                        <com.google.android.material.button.MaterialButton android:id="@+id/buttonProviderDocs" style="@style/Yanwai.Button.Text" android:text="查看渠道文档 ↗" />
-                    </LinearLayout>
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonTestModel" style="@style/Yanwai.Button" android:layout_marginTop="16dp" android:text="保存并检测连接" />
-                    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progressModel" android:layout_width="match_parent" android:layout_height="4dp" android:indeterminate="true" android:visibility="gone" app:trackCornerRadius="2dp" android:contentDescription="正在检测模型连接" />
-                    <TextView android:id="@+id/textTestResult" style="@style/Yanwai.Body" android:layout_marginTop="12dp" android:padding="16dp" android:background="@drawable/status_pill" android:accessibilityLiveRegion="polite" android:visibility="gone" />
-                </LinearLayout>
-                <TextView style="@style/Yanwai.Caption" android:layout_marginTop="8dp" android:text="检测只发送示例聊天，可能产生 API 费用。" />
-                </LinearLayout>
-                <include android:id="@+id/analysisModelSettings" layout="@layout/analysis_model_settings" />
-                <include android:id="@+id/replySettings" layout="@layout/reply_settings" />
             </LinearLayout>
             <LinearLayout android:id="@+id/aboutPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                <TextView style="@style/Yanwai.PageTitle" android:text="更多" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/openAllModels" style="@style/Yanwai.Button.Outline" android:text="模型配置" app:icon="@drawable/ic_settings" />
-                <TextView style="@style/Yanwai.Section" android:text="分析卡片显示" android:layout_marginTop="20dp" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showIntent" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="显示意图解析" android:saveEnabled="false" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showConcern" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="显示可能在意" android:saveEnabled="false" />
-                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/showTone" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="显示情绪倾向" android:saveEnabled="false" />
-                <TextView android:id="@+id/cardDisplayStatus" style="@style/Yanwai.Caption" android:text="切换立即保存，不重新分析。" android:accessibilityLiveRegion="polite" />
-                <TextView style="@style/Yanwai.Caption" android:layout_marginTop="8dp" android:text="只影响智能分析的三项解读；情绪指标和失败提示始终保留。" />
-                <TextView style="@style/Yanwai.Section" android:layout_marginTop="24dp" android:text="遇到问题" />
-                <TextView style="@style/Yanwai.Body" android:text="先复现一次，再导出日志。问题自行恢复后，也可以查看之前的记录。" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/buttonExportLog" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="导出运行日志" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/buttonDebug" style="@style/Yanwai.Button.Text" android:text="查看详细排查信息" />
-                <LinearLayout android:id="@+id/debugPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                    <TextView style="@style/Yanwai.Caption" android:text="桌面页包含本应用日志和微信最近上报的记录。若未收到微信日志，请在微信内长按「分析」或「言外」入口直接导出。" />
-                    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switchExplore" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="记录微信适配信息" />
-                    <TextView style="@style/Yanwai.Caption" android:text="排查版本兼容问题时开启，重启微信后生效。" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonRefreshLog" style="@style/Yanwai.Button.Text" android:text="刷新状态与日志" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonCopyLog" style="@style/Yanwai.Button.Text" android:text="复制完整日志" />
-                    <TextView android:id="@+id/textLog" style="@style/Yanwai.Caption" android:textIsSelectable="true" android:fontFamily="monospace" />
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="更多" />
+                <TextView style="@style/Goutoujunshi.Section" android:layout_marginTop="24dp" android:text="使用统计" />
+                <TextView style="@style/Goutoujunshi.Body" android:text="各项功能调用模型的次数、延迟与 token 消耗，只记在本机，不上传。" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonAiStats" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="查看 AI 调用统计" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonExportLog" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="导出运行日志" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/statsPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/Goutoujunshi.PageTitle" android:text="调用统计" />
+                <TextView style="@style/Goutoujunshi.Body" android:layout_marginTop="4dp" android:text="只记在这台手机上，不上传。点某一项，看它自己的今日、本周、总计和最近调用。" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="vertical" android:background="@color/panel_surface" android:padding="16dp">
+                    <TextView style="@style/Goutoujunshi.Caption" android:text="今日总消耗" android:textColor="@color/text_secondary" />
+                    <TextView android:id="@+id/textStatsTotalToday" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textSize="32sp" android:fontFamily="sans-serif-medium" android:textColor="@color/text_primary" android:text="—" />
+                    <TextView android:id="@+id/textStatsTotalDetail" style="@style/Goutoujunshi.Caption" android:layout_marginTop="6dp" />
+                    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="14dp" android:background="@color/outline_subtle" />
+                    <TextView android:id="@+id/textStatsTotalAll" style="@style/Goutoujunshi.Caption" android:layout_marginTop="12dp" />
                 </LinearLayout>
-                <TextView style="@style/Yanwai.Section" android:layout_marginTop="24dp" android:text="版本与更新" />
-                <TextView android:id="@+id/textUpdateStatus" style="@style/Yanwai.Caption" android:accessibilityLiveRegion="polite" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/buttonCheckUpdate" style="@style/Yanwai.Button.Text" android:text="检查更新" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/buttonReleasePage" style="@style/Yanwai.Button.Text" android:text="GitHub 发布页 ↗" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/toggleContact" style="@style/Yanwai.Button.Text" android:text="联系作者  ▾" />
-                <LinearLayout android:id="@+id/contactPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                    <TextView style="@style/Yanwai.Body" android:text="使用反馈或交流建议，可以添加作者微信。" />
-                    <ImageView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:adjustViewBounds="true" android:maxHeight="280dp" android:scaleType="fitCenter" android:src="@drawable/author_wechat_qr" android:contentDescription="作者微信二维码，微信号 YIRC99" />
-                    <TextView style="@style/Yanwai.Body" android:layout_marginTop="12dp" android:gravity="center" android:text="作者微信：YIRC99" android:textColor="@color/text_primary" android:fontFamily="sans-serif-medium" android:textIsSelectable="true" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonCopyAuthor" style="@style/Yanwai.Button.Text" android:text="复制作者微信号" />
-                </LinearLayout>
-                <com.google.android.material.button.MaterialButton android:id="@+id/toggleSource" style="@style/Yanwai.Button.Text" android:text="免费与开源  ▾" />
-                <LinearLayout android:id="@+id/sourcePanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                    <TextView style="@style/Yanwai.Badge" android:text="言外完全免费" android:textColor="@color/status_success" android:backgroundTint="@color/status_success_bg" />
-                    <TextView style="@style/Yanwai.Body" android:layout_marginTop="12dp" android:text="本项目不收费，没有会员或付费解锁。\n第三方模型服务可能按其规则收费，费用不属于言外。" />
-                    <TextView style="@style/Yanwai.Caption" android:layout_marginTop="16dp" android:text="项目开源地址" />
-                    <TextView style="@style/Yanwai.Body" android:layout_marginTop="4dp" android:text="https://github.com/YIRC99/yanwai" android:textColor="@color/brand_primary" android:textIsSelectable="true" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/buttonOpenSource" style="@style/Yanwai.Button.Outline" android:layout_marginTop="8dp" android:text="查看开源代码 ↗" />
-                    <TextView style="@style/Yanwai.Caption" android:layout_marginTop="16dp" android:text="理解多一种可能，不替你下结论。\n模型判断仅供参考。" android:gravity="center" />
-                    <TextView style="@style/Yanwai.Section" android:text="回复逻辑来自狗头军师" />
-                    <TextView style="@style/Yanwai.Body" android:text="基于开源项目 goutoujunshi 的回复流程与知识资料。原始知识完整随应用打包，生成时按对方身份选用恋爱、家庭、日常接话等资料，调整口吻并拆成自然短消息。由你配置的模型生成，言外负责上下文和交互适配。" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/knowledgeSource" style="@style/Yanwai.Button.Outline" android:layout_marginTop="12dp" android:text="了解狗头军师 ↗" />
-                    <TextView style="@style/Yanwai.Caption" android:layout_marginTop="8dp" android:text="MIT License · Copyright (c) 2026 powerycy\n知识版本：6db7354 · 模型建议仅供参考。" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/knowledgeLicense" style="@style/Yanwai.Button.Text" android:text="查看开源许可" />
-                </LinearLayout>
+                <LinearLayout android:id="@+id/statsDogList" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="vertical" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonStatsClear" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="24dp" android:text="清空统计" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/statsDogPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/textDogStatsTitle" style="@style/Goutoujunshi.PageTitle" android:text="统计" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/buttonDogStatsBack" style="@style/Goutoujunshi.Button.Outline" android:layout_marginTop="12dp" android:text="← 返回统计" />
+                <LinearLayout android:id="@+id/statsDogBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-    <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@+id/navigation" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="80dp" android:background="@color/panel_surface" app:itemIconSize="24dp" app:itemPaddingTop="12dp" app:itemPaddingBottom="12dp" app:itemTextAppearanceActive="@style/Yanwai.NavigationLabel" app:itemTextAppearanceInactive="@style/Yanwai.NavigationLabel" app:itemActiveIndicatorStyle="@style/Yanwai.NavigationIndicator" app:menu="@menu/settings_navigation" app:labelVisibilityMode="labeled" app:itemIconTint="@color/navigation_item" app:itemTextColor="@color/navigation_item" app:itemHorizontalTranslationEnabled="false" />
+    <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@+id/navigation" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="80dp" android:background="@color/panel_surface" app:itemIconSize="24dp" app:itemPaddingTop="12dp" app:itemPaddingBottom="12dp" app:itemTextAppearanceActive="@style/Goutoujunshi.NavigationLabel" app:itemTextAppearanceInactive="@style/Goutoujunshi.NavigationLabel" app:itemActiveIndicatorStyle="@style/Goutoujunshi.NavigationIndicator" app:menu="@menu/settings_navigation" app:labelVisibilityMode="labeled" app:itemIconTint="@color/navigation_item" app:itemTextColor="@color/navigation_item" app:itemHorizontalTranslationEnabled="false" />
 </LinearLayout>

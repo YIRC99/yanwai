@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  队列清零时的胶囊底色：灰绿，配合 status_neutral 的文字色，不抢注意力。
+  和 warning 版只差 solid 色，形状保持一致，切换时高度和圆角不跳。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#E5EDE8" />
+    <corners android:radius="9dp" />
+</shape>
