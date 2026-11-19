@@ -184,6 +184,20 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "重新启动微信后生效", Toast.LENGTH_SHORT).show()
             }
         }
+        val factsSwitch = binding.replySettings.switchRelationFacts
+        factsSwitch.isChecked = prefs.getBoolean(ModulePrefs.KEY_RELATION_FACTS, true)
+        factsSwitch.setOnCheckedChangeListener { _, value ->
+            if (!syncingSwitches) {
+                save(ModulePrefs.KEY_RELATION_FACTS, value)
+                Toast.makeText(this,
+                    if (value) "下次打开「帮我回」时整理，每个联系人每天最多一次" else "已关闭自动整理",
+                    Toast.LENGTH_SHORT).show()
+            }
+        }
+        binding.replySettings.buttonClearFacts.setOnClickListener {
+            dev.jev.wechatmood.core.ReplyIdentityProvider.clearAllFacts(this)
+            binding.replySettings.factsStatus.text = "已清空所有联系人的关系档案"
+        }
         binding.buttonDebug.setOnClickListener {
             val open = binding.debugPanel.visibility != View.VISIBLE
             binding.debugPanel.visibility = if (open) View.VISIBLE else View.GONE
@@ -481,6 +495,7 @@ class MainActivity : AppCompatActivity() {
         })
         val reply = ModulePrefs.replySettings()
         SettingsStatus.show(binding.replySummary, if (reply.isConfigured) "当前模型：" + reply.model else "先连接回复模型", if (reply.isConfigured) R.color.status_neutral else R.color.status_warning)
+        binding.usageSummary.text = dev.jev.wechatmood.core.UsageMeter.summary(this)
         binding.buttonTestModel.text = when (probeState) {
             ProbeState.CHECKING -> "正在检测…"
             ProbeState.FAILED -> "连接失败 · 点击重试"

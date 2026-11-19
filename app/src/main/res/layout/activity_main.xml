@@ -43,6 +43,7 @@
                         <TextView style="@style/Yanwai.Section" android:layout_marginTop="0dp" android:text="微信模块" />
                         <TextView android:id="@+id/textHostBadge" style="@style/Yanwai.Badge" />
                         <TextView android:id="@+id/textFrameworkStatus" style="@style/Yanwai.Caption" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" />
+                        <TextView android:id="@+id/usageSummary" style="@style/Yanwai.Badge" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" />
                         <com.google.android.material.button.MaterialButton android:id="@+id/buttonOpenWechat" style="@style/Yanwai.Button" android:text="打开微信" />
                         <com.google.android.material.button.MaterialButton android:id="@+id/buttonSetupGuide" style="@style/Yanwai.Button.Text" android:text="查看启用与使用指南" />
                     </LinearLayout>

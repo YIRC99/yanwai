@@ -6,6 +6,8 @@ import android.content.res.ColorStateList
 import android.view.View
 
 import android.widget.Switch
+import android.widget.Toast
+import kotlinx.coroutines.launch
 
 import dev.jev.wechatmood.analysis.SignalAnalyzer
 import dev.jev.wechatmood.core.ModulePrefs
@@ -14,7 +16,7 @@ import dev.jev.wechatmood.core.Diagnostics
 
 /** Owns chat actions; the analysis switch is mounted only in the expanded plus row. */
 class HostUi(private val activity: Activity) {
-    private val replyUi = ReplyHostUi(activity) { createAnalysisControl() }
+    private val replyUi = ReplyHostUi(activity, { createAnalysisControl() }, { showFeaturePanel() })
     private var control: Switch? = null
     private var syncing = false
     private var status = ""
@@ -111,6 +113,52 @@ class HostUi(private val activity: Activity) {
 
     private fun openSettings() = HostSettingsEntry.open(activity)
     fun suggestReply(focusMessageId: Long? = null, imageDataUri: String? = null) = replyUi.open(focusMessageId, imageDataUri)
+
+    /** ＋面板里「附加」弹出的功能面板。 */
+    private fun showFeaturePanel() {
+        val current = talker
+        // 关系档案只针对私聊：群聊没有联系人档案，显示出来只会误导。
+        val factsAvailable = current != null && !current.endsWith("@chatroom")
+        FeaturePanel(activity, current, topicsAvailable = current != null, factsAvailable = factsAvailable,
+            analysisEnabled = ModulePrefs.isChatEnabled(current),
+            onReply = { replyUi.open() },
+            onTopics = { replyUi.open(autoTopics = true) },
+            onStats = { showStats() },
+            onFacts = { RelationArchiveUi(activity, current).show() },
+            onTodos = { RelationTodoUi(activity, current).show() },
+            onAnalysisChanged = { value ->
+                if (current != null) {
+                    val saved = ModulePrefs.setChatEnabled(current, value)
+                    if (saved && !value) SignalAnalyzer.cancelConversation(current)
+                }
+            }).show()
+    }
+    private val statsScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+
+    /** 群聊统计：按选择的时段从数据库取，不再只看已加载的几十条。 */
+    private fun showStats() {
+        val context = runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrNull()
+        dev.jev.wechatmood.core.MoodLog.i(
+            "STATS_OPEN ok=${context != null} msgs=${context?.messages?.size ?: -1} talker=${context?.talker?.hashCode()}")
+        if (context == null || context.messages.isEmpty()) {
+            Toast.makeText(activity, "先在聊天页等一会儿，再打开统计", Toast.LENGTH_SHORT).show()
+            return
+        }
+        statsScope.launch {
+            val since = StatsFilter.sinceMillis()
+            val rows = runCatching {
+                ReplyDatabaseHistory.statMessages(context.talker, since,
+                    if (StatsFilter.limit == 0) 5000 else StatsFilter.limit)
+            }.getOrDefault(emptyList())
+            val mapped = rows.map {
+                dev.jev.wechatmood.reply.ReplyMessage(it.messageId, it.speaker(), it.createdAt,
+                    it.analysisText() ?: "[媒体]")
+            }
+            GroupStatsUi(activity, context, mapped) { showStats() }.show()
+        }
+    }
+
     fun hide() { replyUi.hide(); removeControl(); dialog?.dismiss(); messages = emptyList(); talker = null }
     fun dispose() { hide(); replyUi.dispose() }
     private fun removeControl() {

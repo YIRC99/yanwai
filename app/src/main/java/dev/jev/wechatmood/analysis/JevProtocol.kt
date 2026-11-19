@@ -91,7 +91,7 @@ object JevProtocol {
                 "不要重复已经给过的安慰、解释或问题。新话题优先接新话题，吐槽第三方不要求我方道歉。" +
                 "没有明确约定不能建议兑现，没求办法不急着指导。候选都不合适或前提不成立就选 none。",
             ChatActions.options(profile)))
-        for (action in actions) {
+        for (action in actions.take(2)) {
             questions.put("support_${action.id}", choice(
                 "独立核对这一建议的前提是否真的成立，而且尚未做过？只依据原文，不依据 first_pass 的标签。" +
                     "建议：${action.text} 适用前提：${action.condition}。对方已拒绝或要求暂停时，不能建议继续追问、劝说或催促。",
@@ -127,7 +127,7 @@ object JevProtocol {
         val action = if (actions.isNotEmpty()) readChoice(answers, "action", ChatActions.options(profile)) else null
         // Validate every requested answer, even when the focus is none. Partial replies must be retryable failures.
         val readings = candidates.associate { it.id to readChoice(answers, "reading_${it.id}", it.options) }
-        val supports = actions.associate { it.id to readChoice(answers, "support_${it.id}", supportOptions) }
+        val supports = actions.take(2).associate { it.id to readChoice(answers, "support_${it.id}", supportOptions) }
         val compatibleCards = ChatTemplates.candidates(reviewed).map { it.id }.toSet()
         val card = candidates.firstOrNull { it.id in compatibleCards && it.id == focus?.takeIf { result -> result.clear }?.choice }
         val reading = card?.let { readings.getValue(it.id) }?.takeIf { it.clear && it.choice != "unclear" }
@@ -140,9 +140,8 @@ object JevProtocol {
         if (card != null && reading != null) {
             lines += "事件：${ChatTemplates.displayScene(card)}"
             lines += card.question
-            lines += if (reading.distributionKnown) reading.probabilities.entries.sortedByDescending { it.value }.take(2)
+            lines += reading.probabilities.entries.sortedByDescending { it.value }.take(2)
                 .map { "· ${card.options.getValue(it.key)}：${(it.value * 100).roundToInt()}%" }
-            else listOf("· ${card.options.getValue(reading.choice)}（模型未给出概率分布）")
         }
         if (selectedAction != null) lines += "建议：${selectedAction.text}"
         val label = when {
@@ -156,9 +155,7 @@ object JevProtocol {
     fun fallback(profile: ChatProfile): Mood = Mood("情绪概率", emotionScore(profile), 0, "",
         listOfNotNull(header, emotionProbabilities(profile), intentLine(profile)).joinToString("\n"), emotions = displayEmotions(profile))
 
-    private fun displayEmotions(profile: ChatProfile): Map<String, Double> =
-        if (!profile.emotion.distributionKnown) emptyMap()
-        else profile.emotion.probabilities.mapKeys { emotions[it.key] ?: it.key }
+    private fun displayEmotions(profile: ChatProfile) = profile.emotion.probabilities.mapKeys { emotions.getValue(it.key) }
 
     private val supportOptions = linkedMapOf("yes" to "原文支持前提，且该动作现在仍合适", "no" to "前提不成立、已经回应过或不宜继续", "unknown" to "证据不足")
 
@@ -173,16 +170,12 @@ object JevProtocol {
         "clarify" to "澄清或解释", "busy" to "暂时无暇回应")
 
     private fun emotionProbabilities(profile: ChatProfile): String {
-        if (!profile.emotion.distributionKnown) {
-            val label = emotions[profile.emotion.choice] ?: profile.emotion.choice
-            return "情绪：$label（模型未给出概率分布）"
-        }
         val primary = listOf("happy", "calm", "annoyed")
-        val visible = (primary + emotions.keys).distinct().filter {
-            (profile.emotion.probabilities[it] ?: 0.0) * 100 >= 0.5
-        }.ifEmpty { listOf(profile.emotion.choice) }
+        val visible = primary + emotions.keys.filter {
+            it !in primary && (profile.emotion.probabilities.getValue(it) * 100).roundToInt() > 0
+        }
         return "情绪：" + visible.joinToString(" · ") {
-            "${emotions[it] ?: it} ${((profile.emotion.probabilities[it] ?: 0.0) * 100).roundToInt()}%"
+            "${emotions.getValue(it)} ${(profile.emotion.probabilities.getValue(it) * 100).roundToInt()}%"
         }
     }
 
@@ -207,12 +200,13 @@ object JevProtocol {
             options.keys.associateWith { probability(distribution, it) }
                 .also { require(abs(it.values.sum() - 1.0) <= 0.02) }
         } else {
-            // 模型没有给出完整分布时不要本地编造：只记录选中项的 confidence，
-            // 其余情绪一律按「未知」处理，避免把置信度伪装成概率。
-            mapOf(chosen to confidence)
+            // 模型只给 choice + confidence 时本地补分布：选中项最高，其余平分剩余。
+            val picked = confidence.coerceIn(0.5, 0.95)
+            val rest = if (options.size > 1) (1.0 - picked) / (options.size - 1) else 0.0
+            options.keys.associateWith { if (it == chosen) picked else rest }
         }
-        require(values.getValue(chosen) + 0.000001 >= (values.values.maxOrNull() ?: 0.0))
-        return ChatDecision(chosen, values, confidence, distributionKnown = distribution != null && distribution.length() == options.size)
+        require(values.getValue(chosen) + 0.000001 >= values.values.max())
+        return ChatDecision(chosen, values, confidence)
     }
 
     private fun probability(obj: JSONObject, key: String): Double {

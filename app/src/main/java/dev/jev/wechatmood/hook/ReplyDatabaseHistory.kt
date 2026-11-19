@@ -147,6 +147,117 @@ object ReplyDatabaseHistory {
         }
     }.getOrNull()
 
+    /** 按时间范围取统计用消息（不限已加载页），用于「今天 / 最近 N 小时」。 */
+    suspend fun statMessages(talker: String, sinceMillis: Long, limit: Int): List<MessageMetadata> = withContext(Dispatchers.IO) {
+        val out = mutableListOf<MessageMetadata>()
+        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        var since = sinceMillis
+        for (db in databases) {
+            // 微信不同版本 createTime 有秒也有毫秒，先看一条样本再决定。
+            val sample = runCatching {
+                var value = 0L
+                query(db, "SELECT createTime FROM message WHERE talker = ? LIMIT 1", arrayOf(talker)).use { cursor ->
+                    if (cursor.moveToFirst()) value = cursor.getLong(0)
+                }
+                value
+            }.getOrDefault(0L)
+            since = if (sample > 1_000_000_000_000L) sinceMillis else sinceMillis / 1000
+            runCatching {
+                query(db, "SELECT msgId, type, isSend, content, talker, createTime, imgPath, msgSvrId FROM message " +
+                    "WHERE talker = ? AND createTime >= ? ORDER BY createTime DESC LIMIT ?",
+                    arrayOf(talker, since.toString(), limit.coerceAtLeast(1).toString())).use { cursor ->
+                    while (cursor.moveToNext()) out += metadata(cursor)
+                }
+            }
+        }
+        dev.jev.wechatmood.core.MoodLog.i(
+            "STATS_RANGE talker=${talker.hashCode()} since=$since count=${out.size} " +
+                "first=${out.lastOrNull()?.createdAt} last=${out.firstOrNull()?.createdAt}")
+        out.reversed()
+    }
+
+    /** 档案条目回指依据：按 localId 取一条消息，只读，不改游标以外的任何状态。 */
+    suspend fun messageById(talker: String, msgId: Long): MessageMetadata? = withContext(Dispatchers.IO) {
+        if (msgId <= 0) return@withContext null
+        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        for (db in databases) {
+            val found = runCatching {
+                query(db, "SELECT * FROM message WHERE talker = ? AND msgId = ? LIMIT 1",
+                    arrayOf(talker, msgId.toString())).use { if (it.moveToFirst()) metadata(it) else null }
+            }.getOrNull()
+            if (found != null) return@withContext found
+        }
+        null
+    }
+
+    /** 诊断用：列出主库的表名，便于确认群昵称实际存在哪张表。 */
+    suspend fun tableNames(): List<String> = withContext(Dispatchers.IO) {
+        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        val names = mutableListOf<String>()
+        for (db in databases) {
+            runCatching {
+                query(db, "SELECT name FROM sqlite_master WHERE type='table'", emptyArray()).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        cursor.getString(0)?.let { names += it }
+                    }
+                }
+            }
+        }
+        dev.jev.wechatmood.core.MoodLog.i("STATS_TABLES_RAW count=${names.size} sample=${names.take(12)}")
+        val related = names.filter {
+            it.contains("contact", true) || it.contains("stranger", true) || it.contains("nick", true) ||
+                it.contains("userinfo", true) || it.contains("friend", true)
+        }
+        dev.jev.wechatmood.core.MoodLog.i("STATS_TABLES count=${names.size} related=$related")
+        names
+    }
+
+    /** 群成员昵称：逐个 wxid 查 rcontact / stranger，查不到就返回空。 */
+    suspend fun displayNames(usernames: List<String>): Map<String, String> = withContext(Dispatchers.IO) {
+        val wanted = usernames.filter { it.isNotBlank() }.distinct()
+        if (wanted.isEmpty()) return@withContext emptyMap()
+        val databases = synchronized(this@ReplyDatabaseHistory) { handles.mapNotNull { it.get() } }
+        val result = mutableMapOf<String, String>()
+        var errors = 0
+        for (name in wanted) {
+            for (db in databases) {
+                // 单条查询，避免 IN 参数或字段名差异导致整批失败。
+                val found = runCatching {
+                    var value: String? = null
+                    // 群消息里的 speaker 有时是微信号而不是 wxid，username 和 alias 一起查，
+                    // 备注、昵称、微信号依次回退，能多认出一批人。
+                    query(db, "SELECT conRemark, nickname, alias FROM rcontact WHERE username = ? OR alias = ? LIMIT 1",
+                        arrayOf(name, name)).use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            value = (0..2).asSequence()
+                                .mapNotNull { index -> runCatching { cursor.getString(index) }.getOrNull() }
+                                .map { dev.jev.wechatmood.core.TextClean.plain(it).trim() }
+                                .firstOrNull { it.isNotEmpty() && !it.equals("null", true) && !it.equals("uinull", true) }
+                        }
+                    }
+                    value
+                }.onFailure { errors++ }.getOrNull()
+                if (found != null) { result[name] = found; break }
+            }
+            if (name !in result) {
+                for (db in databases) {
+                    val found = runCatching {
+                        var value: String? = null
+                        query(db, "SELECT nickname FROM stranger WHERE username = ?", arrayOf(name)).use { cursor ->
+                            if (cursor.moveToFirst()) value = runCatching { cursor.getString(0) }.getOrNull()
+                                ?.let { dev.jev.wechatmood.core.TextClean.plain(it).trim() }
+                                ?.takeIf { it.isNotEmpty() && !it.equals("null", true) && !it.equals("uinull", true) }
+                        }
+                        value
+                    }.onFailure { errors++ }.getOrNull()
+                    if (found != null) { result[name] = found; break }
+                }
+            }
+        }
+        dev.jev.wechatmood.core.MoodLog.i("STATS_NAMES wanted=${wanted.size} found=${result.size} errors=$errors")
+        result
+    }
+
     suspend fun load(loaded: ReplyContext, limit: Int = ReplyContext.MAX_MESSAGES): ReplyContext = withContext(Dispatchers.IO) {
         require(limit in 1..ReplyContext.MAX_MESSAGES)
         val startedAt = android.os.SystemClock.elapsedRealtime()

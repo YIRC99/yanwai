@@ -61,14 +61,12 @@ class SettingsBridge(
         }
     }
 
-    /** @return true when the broadcast snapshot was accepted into the session. */
-    fun receive(snapshot: RuntimeSettings): Boolean {
+    fun receive(snapshot: RuntimeSettings) {
         val verify = synchronized(stateLock) {
             broadcastEpoch++
             !session.accept(snapshot, fromProvider = false)
         }
         if (verify) requestReload(force = true)
-        return !verify
     }
 
     /** Keep only the latest waiting status; transport and log collection run on the worker. */

@@ -9,7 +9,7 @@ class ReplyKnowledgeCatalogTest {
         val assets = listOf(File("src/main/assets"), File("app/src/main/assets")).first { it.isDirectory }
         ReplyRelationship.entries.forEach { role ->
             val paths = ReplyKnowledgeCatalog.paths(role)
-            assertTrue("unexpected path count ${paths.size} for $role", paths.size in 3..6)
+            assertTrue(paths.size in 3..5)
             assertEquals(paths.distinct(), paths)
             paths.forEach { path -> assertTrue("Missing $path for $role", File(assets, path).readText().isNotBlank()) }
         }

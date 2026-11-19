@@ -51,6 +51,30 @@ class SettingsProvider : ContentProvider() {
                     }
                     result
                 }
+                // 关系档案的开关与读写都在设置服务里完成。之前漏了这条路由，
+                // 微信侧每次调用都落到下面的 Unknown method，被 RelationFactBridge 的 runCatching 吞掉。
+                "relation_facts_enabled", "relation_facts_get", "relation_facts_put", "relation_facts_clear",
+                "relation_facts_status", "relation_facts_add", "relation_facts_delete" -> {
+                    val result = ReplyIdentityProvider.call(ctx, caller, method, arg, extras)
+                    // 状态、手动添加、彻底删除也算档案变化，界面与缓存要能收到通知。
+                    if (method.endsWith("_put") || method == "relation_facts_status" ||
+                        method == "relation_facts_add" || method == "relation_facts_delete") {
+                        runCatching { ctx.contentResolver.notifyChange(ReplyIdentityProvider.CHANGES_URI, null) }
+                    }
+                    result
+                }
+                "usage_add" -> {
+                    UsageMeter.add(ctx, extras?.getLong("prompt", 0L) ?: 0L, extras?.getLong("completion", 0L) ?: 0L)
+                    Bundle()
+                }
+                "usage_today" -> {
+                    val usage = UsageMeter.today(ctx)
+                    Bundle().apply {
+                        putInt("requests", usage.requests)
+                        putLong("prompt", usage.promptTokens)
+                        putLong("completion", usage.completionTokens)
+                    }
+                }
                 "cache_get", "cache_put" -> AnalysisCacheProvider.call(ctx, caller, method, arg, extras)
                 "config" -> snapshot(ctx)
                 "report" -> {

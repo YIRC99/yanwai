@@ -10,6 +10,15 @@ import java.util.concurrent.TimeUnit
 object ModulePrefs {
     const val FILE_NAME = "wechatmood_config"
     const val KEY_EXPLORE = "explore_mode"
+    /** 关系档案自动提取，默认开启；关闭后不会在打开「帮我回」时顺带整理。 */
+    const val KEY_RELATION_FACTS = "relation_facts_auto"
+    /** 一次整理读多少条聊天；只存在微信进程本地，不参与设置同步。 */
+    const val KEY_RELATION_FACT_LIMIT = "relation_fact_limit"
+    const val KEY_RELATION_FACT_INCREMENTAL = "relation_fact_incremental"
+    const val KEY_RELATION_SHOW_UPDATED = "relation_show_updated"
+    val RELATION_FACT_LIMIT_VALUES = intArrayOf(30, 50)
+    const val RELATION_FACT_LIMIT_DEFAULT = 50
+    private const val LOCAL_REPLY_FILE = "yanwai_reply_local"
     const val KEY_API_KEY = "api_key"
     const val KEY_API_BASE = "api_base"
     const val KEY_API_PROVIDER = "api_provider"
@@ -64,16 +73,14 @@ object ModulePrefs {
     private fun warmReplySnapshot() {
         if (warmScheduled) return
         val ctx = context ?: return
-        val current = session.current ?: return
-        val generation = current.generation
-        val version = "${current.generation}:${current.rolesRevision}"
+        val generation = session.current?.generation ?: return
         warmScheduled = true
         bridgeWorker.execute {
             runCatching {
                 val response = SettingsTransport.call(ctx, "reply_role_list", null,
                     Bundle().apply { putString(SettingsProvider.KEY_GENERATION, generation) })
                 val roles = response?.getStringArrayList("roles") ?: return@runCatching
-                ReplySnapshotCache.saveRoles(ctx, roles, version)
+                ReplySnapshotCache.saveRoles(ctx, roles)
                 MoodLog.i("REPLY_ROLES_WARMED count=${roles.size}")
             }.onFailure {
                 warmScheduled = false
@@ -82,9 +89,12 @@ object ModulePrefs {
         }
     }
     fun init(context: Context) {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         val app = context.applicationContext ?: context
         this.context = app
-        AnalysisResultCache.init(app)
+        // 打开 SQLite 属于磁盘 IO，放到后台，别卡启动。
+        runCatching { java.util.concurrent.Executors.newSingleThreadExecutor().execute { AnalysisResultCache.init(app) } }
+        UsageReporter.init(app)
         if (app.packageName == "com.tencent.mm" && conversations == null) {
             val local = app.getSharedPreferences("yanwai_conversations", Context.MODE_PRIVATE)
             conversations = ConversationSwitches(local.getStringSet("enabled_chats", emptySet()).orEmpty()) {
@@ -103,6 +113,7 @@ object ModulePrefs {
             }
             requestReload(force = true)
         } else reload(force = true)
+        MoodLog.i("STARTUP_PREFS took=${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
     }
 
     private fun cachedSnapshot(): RuntimeSettings? = runCatching {
@@ -123,12 +134,7 @@ object ModulePrefs {
         val snapshot = SettingsSync.decode(bundle)
         if (snapshot == null) { MoodLog.w("SYNC_INVALID 广播配置不完整"); return }
         // Invalidate a changed installation immediately, without waiting for Provider I/O.
-        val accepted = bridge.receive(snapshot)
-        // A broadcast that is rejected (unverified reset, retired generation, stale revision)
-        // must not overwrite the on-disk fallback with credentials the session never adopted.
-        if (accepted && analysisSettings()?.revision == snapshot.revision) {
-            context?.let { SettingsSnapshotCache.save(it, bundle) }
-        }
+        bridge.receive(snapshot)
         MoodLog.protect(snapshot.api.apiKey)
         MoodLog.protect(snapshot.reply.apiKey)
         MoodLog.protect(snapshot.intent.llm.apiKey)
@@ -208,6 +214,39 @@ object ModulePrefs {
         }
         saved
     }.onFailure { MoodLog.e("CHAT_SWITCH_SAVE_FAILED 本地会话开关保存失败", it) }.getOrDefault(false)
+
+    private fun localPrefs(): android.content.SharedPreferences? =
+        context?.getSharedPreferences(LOCAL_REPLY_FILE, Context.MODE_PRIVATE)
+
+    /** 采集范围：默认最近 50 条。30 条更快更省，50 条覆盖更全，再往上推理模型容易返回空。 */
+    fun relationFactLimit(): Int = runCatching {
+        localPrefs()?.getInt(KEY_RELATION_FACT_LIMIT, RELATION_FACT_LIMIT_DEFAULT)
+            ?.takeIf { it in RELATION_FACT_LIMIT_VALUES } ?: RELATION_FACT_LIMIT_DEFAULT
+    }.getOrDefault(RELATION_FACT_LIMIT_DEFAULT)
+
+    fun setRelationFactLimit(value: Int): Boolean = runCatching {
+        if (value !in RELATION_FACT_LIMIT_VALUES) return false
+        localPrefs()?.edit()?.putInt(KEY_RELATION_FACT_LIMIT, value)?.commit() ?: false
+    }.getOrDefault(false)
+
+    /** 默认只整理上次水位之后的新消息：日常更新快很多，首次没有水位时自动等于全量。 */
+    fun relationFactIncremental(): Boolean = runCatching {
+        localPrefs()?.getBoolean(KEY_RELATION_FACT_INCREMENTAL, true) ?: true
+    }.getOrDefault(true)
+
+    fun setRelationFactIncremental(value: Boolean): Boolean = runCatching {
+        localPrefs()?.edit()?.putBoolean(KEY_RELATION_FACT_INCREMENTAL, value)?.commit() ?: false
+    }.getOrDefault(false)
+
+    /** 档案条目是否附带「整理于」时间，默认关闭。 */
+    fun relationShowUpdated(): Boolean = runCatching {
+        localPrefs()?.getBoolean(KEY_RELATION_SHOW_UPDATED, false) ?: false
+    }.getOrDefault(false)
+
+    fun setRelationShowUpdated(value: Boolean): Boolean = runCatching {
+        localPrefs()?.edit()?.putBoolean(KEY_RELATION_SHOW_UPDATED, value)?.commit() ?: false
+    }.getOrDefault(false)
+
     fun report(status: String) = bridge.report(status)
 
     private fun reportNow(status: String) {

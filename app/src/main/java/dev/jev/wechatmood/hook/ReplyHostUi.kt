@@ -25,16 +25,18 @@ import dev.jev.wechatmood.BuildConfig
 import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.ReplyIdentityBridge
+import dev.jev.wechatmood.core.RelationFactBridge
 import dev.jev.wechatmood.core.ReplyLimitBridge
 import dev.jev.wechatmood.reply.*
 import kotlinx.coroutines.*
 
 /** Native widgets only: module resource IDs are not valid inside the host's resource table. */
-class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> View) {
+class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> View,
+    private val openPanel: () -> Unit = {}) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val session = ReplySession()
     private val history = ReplyHistory.process
-    private val plusEntry = ReplyPlusRow(activity, createAnalysisControl) { open() }
+    private val plusEntry = ReplyPlusRow(activity, createAnalysisControl) { openPanel(); true }
     private var job: Job? = null
     private var historyJob: Job? = null
     private var openingJob: Job? = null
@@ -46,6 +48,14 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
     private var snapshot: ReplyContext? = null
     private var newMessageNotice: TextView? = null
     private var invalidateRequest: (() -> Unit)? = null
+    /** 长按图片/表情时记住目标消息与已取的图，重新读取历史后也要留住。 */
+    private var targetFocusId: Long = 0
+    private var targetImage: String? = null
+    /** 当前会话的关系档案，生成回复时随上下文一起给模型。 */
+    private var facts: List<RelationFact> = emptyList()
+    private var draftTargetMedia: String? = null
+    private var draftText: String = ""
+    private var draftLastIncoming: String? = null
 
     fun update(currentTalker: String?) {
         if (dialog?.isShowing == true && savingRoleWindow !== dialog && drawerRolesRevision != ModulePrefs.analysisSettings()?.rolesRevision) hide()
@@ -92,13 +102,15 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         return found
     }
 
-    fun open(focusMessageId: Long? = null, imageDataUri: String? = null): Boolean {
+    fun open(focusMessageId: Long? = null, imageDataUri: String? = null, autoTopics: Boolean = false): Boolean {
+        targetFocusId = focusMessageId ?: 0
+        targetImage = imageDataUri
         val selectedTalker = talker ?: return false
         if (MessageSniffer.currentReplyTalker() != selectedTalker) return false
         if (dialog?.isShowing == true || openingJob?.isActive == true) return true
         val epoch = ReplyDatabaseHistory.pendingAccountScope()
         ownerEpoch = epoch
-        val live = runCatching { MessageSniffer.replyContext(requireBottom = false, focusId = focusMessageId ?: 0) }.getOrElse {
+        val live = runCatching { MessageSniffer.replyContext(requireBottom = false, focusId = targetFocusId) }.getOrElse {
             toast(it.message ?: "读取聊天失败"); return true
         }
         if (live.talker != selectedTalker) return false
@@ -114,27 +126,26 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 val owner = ReplyIdentityOwner(epoch, account, selectedTalker)
                 val identity = owner.key?.let { ReplyIdentityBridge.load(activity, it) } ?: ReplyIdentitySetting()
                 val background = owner.key?.let { ReplyIdentityBridge.loadBackground(activity, it) } ?: ContactBackground()
+                val loadedFacts = owner.key?.let { key -> withContext(Dispatchers.IO) { RelationFactBridge.load(activity, key) } }.orEmpty()
                 val preferredLimit = ReplyLimitBridge.load(activity, account)
                 ensureActive()
                 if (generation != ModulePrefs.analysisSettings()?.generation || rolesRevision != ModulePrefs.analysisSettings()?.rolesRevision) return@launch
                 if (!owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())) return@launch
-                val latestPage = MessageSniffer.replyContext(requireBottom = false)
+                val latestPage = MessageSniffer.replyContext(requireBottom = false, focusId = targetFocusId)
                 val latestAccount = withContext(Dispatchers.IO) { ReplyDatabaseHistory.replyAccount(latestPage) }
                 if (generation != ModulePrefs.analysisSettings()?.generation || rolesRevision != ModulePrefs.analysisSettings()?.rolesRevision ||
                     !owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker()) ||
                     !owner.acceptsAccount(latestAccount)) return@launch
                 // All reads finish before the editor is created, so a late load cannot erase typed text.
-                openResolved(focusMessageId, live, owner, identity, preferredLimit, background, imageDataUri)
+                openResolved(focusMessageId, live, owner, identity, preferredLimit, background, imageDataUri, loadedFacts, autoTopics)
             } catch (e: CancellationException) { throw e }
             catch (error: Exception) {
                 MoodLog.e("REPLY_SETTINGS_READ_FAILED", error)
                 if (epoch == ReplyDatabaseHistory.pendingAccountScope() && talker == selectedTalker) {
                     // 不再弹「去开自启动」的对话框；本地已有回退，失败只记日志。
-                    if (error is dev.jev.wechatmood.core.SettingsConnectionUnavailableException || !ModulePrefs.bridgeAvailable) {
-                        dev.jev.wechatmood.core.MoodLog.w("REPLY_OPEN_WITHOUT_BRIDGE 未能连接言外")
-                        // 首次使用没有可用快照时不能只写日志，否则用户点「帮我回」没有任何反应。
-                        toast("未能连接言外设置，请打开言外主应用后重试")
-                    } else toast("回复设置读取失败，请重试；长按分析开关可导出日志")
+                    if (error is dev.jev.wechatmood.core.SettingsConnectionUnavailableException || !ModulePrefs.bridgeAvailable)
+                        dev.jev.wechatmood.core.MoodLog.w("REPLY_OPEN_WITHOUT_BRIDGE 未能连接言外，已按本地缓存继续")
+                    else toast("回复设置读取失败，请重试；长按分析开关可导出日志")
                 }
             }
         }
@@ -143,7 +154,9 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
 
     private fun openResolved(focusMessageId: Long?, live: ReplyContext, owner: ReplyIdentityOwner,
         identity: ReplyIdentitySetting, preferredLimit: Int, contactBackground: ContactBackground,
-        imageDataUri: String? = null): Boolean {
+        imageDataUri: String? = null, loadedFacts: List<RelationFact> = emptyList(),
+        autoTopics: Boolean = false): Boolean {
+        facts = loadedFacts
         val selectedTalker = owner.talker
         val generation = ModulePrefs.analysisSettings()?.generation
         var rolesRevision = ModulePrefs.analysisSettings()?.rolesRevision
@@ -156,7 +169,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         val reference = ReplyHistorySelection(selectedTalker, remembered?.context?.takeIf { it.requestedMessages == preferredLimit })
         // Reopening saved content must not depend on scrolling to the latest message or text input mode.
         val captured = (remembered?.context ?: live).let { ctx ->
-            if (imageDataUri != null && ctx.targetImageDataUri == null) ctx.copy(targetImageDataUri = imageDataUri) else ctx
+            val image = imageDataUri ?: targetImage
+            if (image != null && ctx.targetImageDataUri == null) ctx.copy(targetImageDataUri = image) else ctx
         }
         if (captured.talker != selectedTalker) return false
         val initialEditor = editor()
@@ -219,12 +233,18 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         val roleRow = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
         fun roleLabel() = if (composition.relationship == ReplyRelationship.UNSPECIFIED) "选择对方身份 ▾"
             else "${composition.relationship.displayLabel(composition.customRelationship)} ▾"
-        val rolePicker = action(roleLabel()).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        val rolePicker = action(roleLabel()).apply { maxLines = 1 }
         rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.displayLabel(composition.customRelationship)}"
-        val historyPicker = action("参考最近 ${composition.historyLimit} 条 ▾")
-        listOf(rolePicker, historyPicker).forEach { it.textSize = 13f; it.setPadding(dp(8), dp(6), dp(8), dp(6)) }
+        val historyPicker = action("参考最近 ${composition.historyLimit} 条 ▾").apply { maxLines = 1 }
+        // 两格等宽；字号在 10–13sp 之间自适应，避免长身份名被截断。
+        listOf(rolePicker, historyPicker).forEach { button ->
+            button.textSize = 12f
+            button.setPadding(dp(6), dp(6), dp(4), dp(6))
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+                button, 10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
         roleRow.addView(rolePicker, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
-        roleRow.addView(historyPicker, LinearLayout.LayoutParams(0, -2, 1.2f))
+        roleRow.addView(historyPicker, LinearLayout.LayoutParams(0, -2, 1f))
         results.addView(roleRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
         var roleExpanded = composition.relationship == ReplyRelationship.OTHER && composition.customRelationship.isBlank()
         var instructionExpanded = false
@@ -262,7 +282,9 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             setText(composition.background.text)
         }
         roleEditor.addView(identityBackground, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
-        val saveIdentityButton = action("保存角色")
+        var refreshFacts: (Boolean) -> Unit = {}
+        roleEditor.addView(action("更新关系档案", quiet = true) { refreshFacts(false) },
+            LinearLayout.LayoutParams(-1, dp(40)).apply { bottomMargin = dp(6) })
         val instruction = EditText(activity).apply {
             hint = "这次想怎么回？如：委婉拒绝、别太正式（选填）"
             textSize = 14f; setTextColor(theme.ink); setHintTextColor(theme.muted)
@@ -270,15 +292,47 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             setPadding(dp(10), dp(10), dp(10), dp(10)); background = theme.shape(theme.card, 12, theme.border)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             filters = arrayOf(InputFilter.LengthFilter(2000)); isSaveEnabled = false
-            setText(remembered?.direction.orEmpty())
+            // 不再回填上次的补充要求：旧版本曾把模型输出写进这里，回填后会被当成要求发给模型。
+            setText("")
             setOnFocusChangeListener { _, focused -> background = theme.shape(theme.card, 12, if (focused) theme.accent else theme.border) }
         }
         results.addView(instruction, LinearLayout.LayoutParams(-1, -2))
+        // 草稿体检：只在输入框有文字时出现，点一下看这句会不会说错。
+        var lastRewrite: String? = null
+        var checkDraftAction: (() -> Unit)? = null
+        var backgroundSaveJob: Job? = null
+        val draftPanel = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = theme.shape(theme.card, 12, theme.accent)
+            visibility = View.GONE
+        }
+        val draftIssues = theme.label("", 13f, theme.ink)
+        val draftRewrite = theme.label("", 15f, theme.ink).apply { setPadding(0, dp(6), 0, 0) }
+        val draftUse = action("用这条替换") {
+            val rewrite = lastRewrite
+            if (rewrite.isNullOrBlank()) return@action
+            val target = editor()
+            if (target == null) {
+                toast("找不到微信输入框，请切回文字输入再试")
+                return@action
+            }
+            // 写的是微信聊天输入框，不是抽屉里的「本次补充」。
+            target.setText(rewrite)
+            target.setSelection(rewrite.length)
+            hide()
+            toast("已替换，自己确认后再发送")
+        }
+        draftPanel.addView(draftIssues)
+        draftPanel.addView(draftRewrite)
+        draftPanel.addView(draftUse, LinearLayout.LayoutParams(-2, dp(44)).apply { topMargin = dp(10) })
+        results.addView(draftPanel)
+        val checkDraft = action("检查输入框这句") { checkDraftAction?.invoke() }.apply { visibility = View.GONE }
         val generateButton = action("生成回复", primary = true)
         val topicButton = action("找找话题")
         val shorter = action("更简短", quiet = true)
         val generationActions = LinearLayout(activity)
-        listOf(saveIdentityButton, generateButton, topicButton).forEachIndexed { index, button ->
+        listOf(generateButton, topicButton, checkDraft).forEachIndexed { index, button ->
             button.textSize = 13f; button.setPadding(dp(4), dp(6), dp(4), dp(6))
             // Let large system fonts wrap instead of clipping an action or shrinking the touch target.
             generationActions.addView(button, LinearLayout.LayoutParams(0, -1, 1f).apply { if (index < 2) rightMargin = dp(6) })
@@ -289,41 +343,6 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             setPadding(0, dp(6), 0, dp(6))
         }
         results.addView(state)
-        // 流式：第一条候选先以可复制卡片出现，同时标明其余还在生成。
-        val streamCard = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = theme.shape(theme.card, 12, theme.accent)
-            visibility = View.GONE
-            isClickable = true; isFocusable = true
-        }
-        val streamTitle = theme.label("正在生成其余候选 · 点这条复制", 12f, theme.muted)
-        val streamText = theme.label("", 16f, theme.ink).apply { setPadding(0, dp(4), 0, 0) }
-        streamCard.addView(streamTitle)
-        streamCard.addView(streamText)
-        streamCard.setOnClickListener {
-            val text = streamText.text?.toString().orEmpty()
-            if (text.isBlank()) return@setOnClickListener
-            (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                .setPrimaryClip(ClipData.newPlainText("言外回复建议", text))
-            toast("已复制这一条")
-        }
-        results.addView(streamCard, results.indexOfChild(state) + 1)
-        // 候选都很短，首条和其余通常只差几百毫秒；先等一会儿再显示，避免卡片闪一下。
-        var streamPending: Runnable? = null
-        fun showStream(text: String) {
-            if (!ownsDrawer()) return
-            streamText.text = text
-            if (streamCard.visibility == View.VISIBLE) return
-            val reveal = Runnable { if (ownsDrawer()) streamCard.visibility = View.VISIBLE }
-            streamPending = reveal
-            streamCard.postDelayed(reveal, 700)
-        }
-        fun hideStream() {
-            streamPending?.let { streamCard.removeCallbacks(it) }
-            streamPending = null
-            streamCard.visibility = View.GONE
-        }
         val stale = action("有新消息 · 重新读取", quiet = true)
         stale.visibility = View.GONE; newMessageNotice = stale
         results.addView(stale, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(8) })
@@ -390,10 +409,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
         var findingTopics = false
         var applyingRole = false
         var identitySaving = false
-        fun hasUnsavedIdentityBackground() = !group && composition.relationship != ReplyRelationship.UNSPECIFIED &&
-            (identityBackground.text.toString() != composition.background.text ||
-                composition.relationship != selectedIdentity.relationship ||
-                composition.activeCustomRelationship != selectedIdentity.relationship.customValue(selectedIdentity.customText))
+        fun hasUnsavedIdentityBackground() = false
+        // 背景改为停止输入后自动保存，不再需要「未保存」拦截。
         fun topicKey(current: ReplyContext, draft: String, date: String) = TopicKey(current.fingerprint, current.requestedMessages,
             composition.relationship, instruction.text.toString(), draft, date, composition.activeCustomRelationship)
         fun preview(text: CharSequence, empty: String) = text.toString().trim().replace(Regex("\\s+"), " ").take(22).ifBlank { empty }
@@ -465,10 +482,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             instructionToggle.contentDescription = "本次补充，${if (instructionExpanded) "已展开，点击收起" else "已收起，点击展开"}"
             generateButton.contentDescription = "${generateButton.text}，已读取 ${ready?.messages?.size ?: 0} 条消息"
             identityBackground.visibility = if (editingIdentity) View.VISIBLE else View.GONE
-            saveIdentityButton.visibility = if (!group && composition.relationship != ReplyRelationship.UNSPECIFIED) View.VISIBLE else View.GONE
             identityBackground.isEnabled = !generating
-            saveIdentityButton.isEnabled = !generating && composition.hasValidRelationship
-            saveIdentityButton.text = if (identitySaving) "保存中…" else "保存角色"
             rolePicker.text = roleLabel()
             rolePicker.contentDescription = "选择对方身份，当前${composition.relationship.displayLabel(composition.customRelationship)}"
             historyPicker.isEnabled = !generating
@@ -483,6 +497,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 else "填入后可自由修改，发送永远由你点"
             state.visibility = if (state.text.isBlank()) View.GONE else View.VISIBLE
             if (window.isShowing) fitWindow()
+            // GONE 时剩下的两格按 weight 平分整行；有文字时三格三等分。
+            checkDraft.visibility = if (!generatingRequest && editor()?.text?.isNullOrBlank() == false) View.VISIBLE else View.GONE
         }
         roleToggle.setOnClickListener {
             if (!ownsDrawer() || busy) return@setOnClickListener
@@ -494,6 +510,135 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             val expand = !instructionExpanded
             collapseEditors(); instructionExpanded = expand; controls(false)
         }
+
+        fun doRefreshFacts(auto: Boolean) {
+            if (!auto && busy) return@doRefreshFacts
+            val key = owner.key
+            if (key == null) {
+                if (!auto) toast("账号或联系人尚未确认，暂时不能整理档案")
+                return@doRefreshFacts
+            }
+            val settings = ModulePrefs.replySettings()
+            if (!settings.isConfigured) {
+                if (!auto) toast("请先在「回复」里配置模型")
+                return@doRefreshFacts
+            }
+            if (!auto) state.text = "正在整理关系档案…"
+            // 独立 scope：关掉抽屉或切走聊天都不会把这次请求掐断。
+            val started = RelationFactRefresher.launch(activity, key, settings) { result, error ->
+                when {
+                    error != null -> {
+                        MoodLog.w("RELATION_FACTS_FAILED " + error.javaClass.simpleName)
+                        if (!auto && ownsDrawer()) state.text = "关系档案更新失败：" + (error.message ?: "请重试")
+                    }
+                    result == null -> Unit
+                    result.nothingNew -> if (!auto && ownsDrawer()) state.text = "最近没有新消息，不用整理"
+                    result.facts.isEmpty() -> if (!auto && ownsDrawer()) state.text = "这次没有提取到新的事实"
+                    else -> if (ownsDrawer()) {
+                        facts = result.facts
+                        if (!auto) state.text = "关系档案已更新：${result.facts.size} 条"
+                    }
+                }
+            }
+            if (!started && !auto && ownsDrawer()) state.text = "正在整理，稍等…"
+        }
+        fun showDraftCheck(check: DraftCheck) {
+            if (!check.parsed) {
+                draftPanel.visibility = View.GONE
+                state.text = "没看懂模型的返回，点一次重试；连续失败就看下模型配置"
+                return
+            }
+            if (check.isEmpty) {
+                draftPanel.visibility = View.GONE
+                if (check.verdict == null) {
+                    // 模型两次都没给结构时用本地判断兜底，避免只给一句「不擅长」。
+                    state.text = DraftFallback.hint(draftText, draftLastIncoming)
+                    return
+                }
+                state.text = "参考最近 ${check.referenceCount} 条 · 模型判断：" + check.verdict
+                return
+            }
+            state.text = check.verdict?.let { "模型判断：$it" }.orEmpty()
+            draftIssues.text = check.issues.joinToString("\n")
+            lastRewrite = check.rewrite
+            draftRewrite.text = check.rewrite?.let { "可以改成：$it" }.orEmpty()
+            draftRewrite.visibility = if (check.rewrite == null) View.GONE else View.VISIBLE
+            draftUse.visibility = if (check.rewrite == null) View.GONE else View.VISIBLE
+            draftPanel.visibility = View.VISIBLE
+        }
+        fun runDraftCheck() {
+            if (busy) { MoodLog.i("DRAFT_CHECK_SKIP busy"); return }
+            // 检查的是微信聊天输入框里已经写好的话，不是抽屉里的「本次补充要求」。
+            val text = editor()?.text?.toString()?.trim().orEmpty()
+            if (text.isEmpty()) {
+                MoodLog.i("DRAFT_CHECK_SKIP empty_input")
+                toast("先在微信输入框里写好要发的话")
+                return
+            }
+            // 脏话这类明显问题本地先兜一层，不依赖模型。
+            DraftGuard.hint(text)?.let { hint ->
+                MoodLog.i("DRAFT_CHECK_LOCAL_HIT chars=${text.length}")
+                showDraftCheck(DraftCheck(listOf(hint), null))
+                return
+            }
+            val settings = ModulePrefs.replySettings()
+            if (!settings.isConfigured) { MoodLog.i("DRAFT_CHECK_SKIP unconfigured"); toast("请先配置回复模型"); return }
+            // 手动点检查就给新结果：缓存会让同一句反复测试时一直显示旧结论。
+            val current = reference.context
+            draftTargetMedia = current?.targetMedia
+            draftText = text
+            draftLastIncoming = current?.messages?.lastOrNull { it.speaker != "我" }?.text
+            if (current == null) {
+                MoodLog.i("DRAFT_CHECK_SKIP no_context")
+                toast("先点一次「重新读取聊天记录」，再检查")
+                return
+            }
+            state.text = "正在检查这句…"
+            // 先清掉上一次的卡片，避免新结果和旧结论混在一起。
+            draftPanel.visibility = View.GONE
+            draftIssues.text = ""
+            draftRewrite.text = ""
+            lastRewrite = null
+            busy = true; controls(true)
+            scope.launch {
+                try {
+                    val payload = DraftCheckProtocol.payload(settings, current.copy(facts = facts), text,
+                        composition.relationship, composition.activeCustomRelationship, current.targetImageDataUri)
+                    val client = ReplyHttpClient()
+                    val lastIncoming = current.messages.lastOrNull { it.speaker != "我" }?.text
+                    val focus = current.focusText ?: lastIncoming
+                    var check = withContext(Dispatchers.IO) { client.request(settings, payload, DraftCheckProtocol::parse) }
+                    // 目标校验：模型说回应的片段要和 focus 或对方最后一句对得上，否则重问一次。
+                    check.responded?.let { responded ->
+                        if (focus != null && RelationFacts.similarity(responded, focus) < 0.2) {
+                            MoodLog.i("DRAFT_CHECK_TARGET_MISMATCH len=${responded.length}")
+                            check = withContext(Dispatchers.IO) { client.request(settings, payload, DraftCheckProtocol::parse) }
+                        }
+                    }
+                    // 模型偶尔不回结构：自动重试一次，别让用户再点。
+                    if (check.isEmpty && check.verdict == null) {
+                        MoodLog.i("DRAFT_CHECK_RETRY 首次没有判断依据")
+                        check = withContext(Dispatchers.IO) { client.request(settings, payload, DraftCheckProtocol::parse) }
+                    }
+                    // 两次都不给结构：换成「只要一句改写」的简单问法，至少拿到能用的建议。
+                    if (check.isEmpty && check.verdict == null) {
+                        MoodLog.i("DRAFT_CHECK_SIMPLE 换简化问法")
+                        val simple = DraftCheckProtocol.simplePayload(settings, text, focus, lastIncoming)
+                        val rewrite = withContext(Dispatchers.IO) {
+                            client.request(settings, simple, DraftCheckProtocol::simpleParse)
+                        }
+                        if (rewrite != null) {
+                            check = DraftCheck(emptyList(), rewrite, verdict = "模型没给出判断，只给了一条改写")
+                        }
+                    }
+                    showDraftCheck(check.copy(referenceCount = current.messages.size))
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { state.text = "检查失败：" + (e.message ?: "请重试") }
+                finally { busy = false; controls(false) }
+            }
+        }
+        checkDraftAction = { runDraftCheck() }
+        refreshFacts = ::doRefreshFacts
         fun revealReply() {
             collapseEditors(); controls(false)
             scroll.post { if (ownsDrawer()) scroll.smoothScrollTo(0, replyTitle.top) }
@@ -538,45 +683,24 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 }
             }
         }
-        saveIdentityButton.setOnClickListener {
-            if (!ownsDrawer() || busy || group) return@setOnClickListener
-            if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return@setOnClickListener }
-            if (owner.key == null) { toast("账号或联系人尚未确认，请重新打开后保存"); return@setOnClickListener }
-            val identityValue = ReplyIdentitySetting(composition.relationship, composition.customRelationship,
-                selectedIdentity.roleId, selectedIdentity.roleRevision)
-            val backgroundText = identityBackground.text.toString()
-            ++saveRevision
-            savingRoleWindow = window
-            identitySaving = true; controls(false)
-            scope.launch {
-                try {
-                    check(verifyAccount()) { "当前聊天或账号已变化" }
-                    val saved = ReplyIdentityBridge.saveRole(activity, owner, identityValue, backgroundText,
-                        { ReplyDatabaseHistory.replyAccount(live) })
-                    if (window === dialog && generation == ModulePrefs.analysisSettings()?.generation &&
-                        owner.isCurrent(ReplyDatabaseHistory.pendingAccountScope(), MessageSniffer.currentReplyTalker())) {
-                        rolesRevision = saved.catalogRevision
-                        drawerRolesRevision = rolesRevision
-                    }
-                    if (ownsDrawer()) {
-                        selectedIdentity = saved.identity
-                        composition.background = saved.background
-                        collapseEditors()
-                        renderParts(); toast("角色和背景已保存")
-                    }
-                } catch (e: CancellationException) { throw e }
-                catch (_: Exception) { if (ownsDrawer()) toast("身份或背景保存失败，请重试") }
-                finally {
-                    if (savingRoleWindow === window) savingRoleWindow = null
-                    identitySaving = false
-                    if (ownsDrawer()) controls(false) else if (window === dialog) hide()
-                }
-            }
-        }
         identityBackground.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: Editable?) { if (ownsDrawer()) controls(busy) }
+            override fun afterTextChanged(s: Editable?) {
+                if (ownsDrawer()) controls(busy)
+                if (applyingRole) return
+                // 停止输入 800ms 后自动存到当前联系人，不写角色库、不影响其他聊天。
+                backgroundSaveJob?.cancel()
+                backgroundSaveJob = scope.launch {
+                    delay(800)
+                    val key = owner.key ?: return@launch
+                    if (!ownsDrawer()) return@launch
+                    runCatching {
+                        ReplyIdentityBridge.saveBackground(activity, owner, s?.toString().orEmpty(),
+                            { ReplyDatabaseHistory.replyAccount(live) })
+                    }.onSuccess { saved -> composition.background = saved }
+                }
+            }
         })
         customRole.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -678,10 +802,9 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             failed = false
             state.text = ""; state.setTextColor(theme.muted)
             renderParts(); controls(false)
-            val loaded = runCatching { MessageSniffer.replyContext(requireBottom = false, focusId = focusMessageId ?: 0) }.getOrElse {
+            val loaded = runCatching { MessageSniffer.replyContext(requireBottom = false, focusId = targetFocusId) }.getOrElse {
                 reference.fail(ticket); state.text = it.message ?: "读取聊天失败，请重试"; controls(false); return
-            }.let { it.copy(focusMessageId = focusMessageId ?: it.latestLoadedId,
-                targetImageDataUri = imageDataUri ?: it.targetImageDataUri) }
+            }.let { ctx -> targetImage?.let { if (ctx.targetImageDataUri == null) ctx.copy(targetImageDataUri = it) else ctx } ?: ctx }
             if (loaded.talker != selectedTalker) { reference.cancel(); window.dismiss(); return }
             historyJob = scope.launch {
                 try {
@@ -700,14 +823,11 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                     if (!ownsDrawer() || !ModulePrefs.canGenerateReply) return@launch
                     if (!verifyAccount()) { window.dismiss(); return@launch }
                     if (current.messages.isEmpty() || current.messages.all { it.voiceState == VoiceState.FAILED }) {
-                        if (current.targetMedia == null) {
-                            reference.fail(ticket)
-                            state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
-                            return@launch
-                        }
-                        state.text = "本轮目标是一张${current.targetMedia}，暂不识别内容，按上下文拟回复。"
+                        reference.fail(ticket)
+                        state.text = "尚无可用正文，语音可能未能转写，请在条数菜单中重试"
+                        return@launch
                     }
-                    if (!reference.complete(ticket, current, MessageSniffer.currentReplyTalker())) return@launch
+                    if (!reference.complete(ticket, current.copy(facts = facts), MessageSniffer.currentReplyTalker())) return@launch
                     snapshot = current
                     state.text = when {
                         current.messages.any { it.voiceState == VoiceState.FAILED } ->
@@ -721,7 +841,10 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 catch (_: Exception) {
                     if (reference.isCurrent(ticket) && ownsDrawer()) state.text = "历史读取失败，请重试"
                 } finally {
-                    if (reference.isCurrent(ticket) && ownsDrawer()) { reference.fail(ticket); controls(busy) }
+                    // 无论界面是否还开着都要清 loading，否则 reference.loading 卡住后，
+                    // 生成、找话题、重新读取都会被开头的 loading 判断直接挡掉。
+                    reference.fail(ticket)
+                    if (reference.isCurrent(ticket) && ownsDrawer()) controls(busy)
                 }
             }
         }
@@ -795,7 +918,12 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             if (!composition.hasValidRelationship) { customRole.requestFocus(); toast("请先填写对方身份"); return }
             if (!ownsDrawer()) { window.dismiss(); return }
             if (!canGenerate()) { configure(); return }
-            val current = reference.context?.copy(background = composition.background) ?: run { prepareHistory(composition.historyLimit); return }
+            val current = reference.context?.let { ctx ->
+                // 历史重建后 focus 可能丢，按打开抽屉时记住的目标补回来。
+                ctx.copy(background = composition.background, facts = facts,
+                    focusMessageId = if (ctx.focusMessageId > 0) ctx.focusMessageId else targetFocusId,
+                    targetImageDataUri = ctx.targetImageDataUri ?: targetImage)
+            } ?: run { prepareHistory(composition.historyLimit); return }
             val latest = MessageSniffer.replyBoundary()
             if (latest != null && latest != current.latestLoadedId && current.messages.none { it.id == latest }) {
                 prepareHistory(composition.historyLimit); toast("聊天有更新，读取完成后再点生成"); return
@@ -814,6 +942,8 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                 renderParts(); revealReply(); remember(); return
             }
             job?.cancel()
+            // 生成前清掉上一次的检查卡片，避免和新结果混在一起。
+            draftPanel.visibility = View.GONE
             val config = ModulePrefs.replySettings()
             val ticket = session.begin(current.talker, current.fingerprint)
             val previous = if (composition.result?.topics == null) composition.previousText else ""
@@ -844,12 +974,7 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                         requireNotNull(time), previousTopics, customRelationship) else null
                     // 流式：第一条候选写完整就先显示在状态栏，不必等 3–5 条全部生成。
                     val suggestion = if (findTopics) null else client.generate(config, current, baselineDraft, direction,
-                        knowledge, previous, focusId, relationship, customRelationship) { partial ->
-                        activity.runOnUiThread {
-                            if (job?.isActive == true && ownsDrawer() &&
-                                session.accepts(ticket, MessageSniffer.currentReplyTalker())) showStream(partial)
-                        }
-                    }
+                        knowledge, previous, focusId, relationship, customRelationship)
                     val activeConfig = ModulePrefs.replySettings()
                     if (!session.accepts(ticket, MessageSniffer.currentReplyTalker()) || !ownsDrawer() || !ModulePrefs.canGenerateReply) return@launch
                     if (!verifyAccount()) { window.dismiss(); return@launch }
@@ -860,7 +985,6 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                         else composition.accept(current, requireNotNull(suggestion), notes, focusId, relationship, customRelationship)
                     if (!accepted) return@launch
                     snapshot = current
-                    hideStream()
                     reason.visibility = View.GONE; reasonToggle.text = "为什么这样回 ▾"; renderParts()
                     state.text = ""
                     revealReply()
@@ -874,7 +998,6 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
                         toast(e.message ?: "暂时无法生成，请重试")
                     }
                 } finally {
-                    hideStream()
                     if (session.accepts(ticket, talker) && ownsDrawer()) controls(false)
                 }
             }
@@ -905,6 +1028,23 @@ class ReplyHostUi(private val activity: Activity, createAnalysisControl: () -> V
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND); setDimAmount(0.32f)
         }
         window.show()
+        if (autoTopics) generate("", true)
+        // 开关打开时按条件静默整理一次：距上次超过 3 天，或这段时间新增了 30 条以上消息。
+        val factsKey = owner.key
+        val factsEnabled = RelationFactBridge.enabled(activity)
+        // 这里以前什么都不记，出问题时只能看到「档案没更新」。两个前置条件都写进日志。
+        MoodLog.i("RELATION_FACT_AUTO enabled=$factsEnabled key=${factsKey != null}")
+        if (factsEnabled && factsKey != null) {
+            scope.launch {
+                val meta = withContext(Dispatchers.IO) { RelationFactBridge.meta(activity, factsKey) }
+                val gap = System.currentTimeMillis() - meta.lastAt
+                val fresh = live.messages.count { it.id > meta.lastMessageId }
+                // 之前先判「不到 24 小时就返回」，导致新增几十条也永远不抽；两个条件应当并列。
+                val due = gap > 3 * 24 * 3600_000L || fresh >= 30
+                MoodLog.i("RELATION_FACT_AUTO meta_last=${meta.lastAt} gap_hours=${gap / 3600_000L} fresh=$fresh due=$due")
+                if (due) refreshFacts(true)
+            }
+        }
         fitWindow()
         body.requestFocus(); updateNotice()
         if (reference.context == null && canGenerate()) prepareHistory(composition.historyLimit)

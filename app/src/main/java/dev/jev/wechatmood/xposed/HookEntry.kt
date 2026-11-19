@@ -17,7 +17,14 @@ import dev.jev.wechatmood.core.Diagnostics
 import dev.jev.wechatmood.hook.MessageSniffer
 import dev.jev.wechatmood.hook.ReplyDatabaseHistory
 
-/** Direct package entry, independent of the optional initZygote callback. */
+/**
+ * 模块入口：微信主进程加载后直接初始化。
+ *
+ * 2.9.114/2.9.115 曾把初始化推到 resume 后、聊天页后，用来避开和 WeKit 抢首帧。
+ * 后来抓到的主线程堆栈显示白屏是 WeKit 自己在 Application.onCreate 的 hook 里
+ * 同步等待 native payload 加载（CompletableFuture.get），言外不在那条链上；
+ * 所以这里回到最初的写法，不再为第三方模块的启动问题做额外延迟。
+ */
 class HookEntry : IXposedHookLoadPackage {
     private var installed = false
     private var failedAnnounced = false
@@ -28,7 +35,9 @@ class HookEntry : IXposedHookLoadPackage {
         XposedBridge.log("WeChatMood ${BuildConfig.VERSION_NAME}: entered WeChat main process")
         XposedHelpers.findAndHookMethod(Application::class.java, "attach", Context::class.java,
             object : XC_MethodHook() {
-                override fun afterHookedMethod(p: MethodHookParam) { initialize(p.args[0] as Context) }
+                override fun afterHookedMethod(p: MethodHookParam) {
+                    initialize(p.args[0] as Context)
+                }
             })
         // Covers module loaders that attach after Application.attach has already run.
         XposedBridge.hookAllMethods(Instrumentation::class.java, "callActivityOnResume", object : XC_MethodHook() {
@@ -63,7 +72,7 @@ class HookEntry : IXposedHookLoadPackage {
             MessageSniffer.install(context)
             installed = true
             MoodLog.i("微信主进程已加载模块 ${BuildConfig.VERSION_NAME}")
-            // 环境采集、日志上报、WCDB 反射扫描都不参与首帧，挪出冷启动主线程。
+            // 环境采集、日志上报、WCDB 反射扫描都不参与首帧，放后台线程。
             Thread({
                 runCatching {
                     MoodLog.i("ENVIRONMENT\n${Diagnostics.environment(context)}")
