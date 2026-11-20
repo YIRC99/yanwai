@@ -2,6 +2,7 @@ package dev.jev.wechatmood.reply
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,5 +43,40 @@ class RelationDueTest {
         val text = RelationDue.line(overdue, now)
         assertTrue(text.contains("答应帮他看简历"))
         assertTrue(text.contains("已过"))
+    }
+
+    @Test fun `days late counts whole days for day only items`() {
+        val now = today(15)
+        assertEquals(0, RelationDue.daysLate(today(9), now))
+        assertEquals(1, RelationDue.daysLate(FactTimes.startOfDay(now) - 86_400_000L, now))
+        assertEquals(0, RelationDue.daysLate(0, now))
+    }
+
+    @Test fun `today item keeps a daily reminder`() {
+        val now = today(15)
+        val item = fact("约定", "今天下午见面", today(9))
+        val first = RelationDue.stampKey(listOf(item), now)
+        assertEquals(first, RelationDue.stampKey(listOf(item), now + 3_600_000L))
+        assertNotEquals(first, RelationDue.stampKey(listOf(item), now + 86_400_000L))
+    }
+
+    @Test fun `long overdue item drops to a three day cadence`() {
+        val start = FactTimes.startOfDay(System.currentTimeMillis())
+        val stale = fact("约定", "拖了很久的事", start - 10 * 86_400_000L)
+        val now = start + 12 * 3_600_000L
+        val first = RelationDue.stampKey(listOf(stale), now)
+        assertEquals(first, RelationDue.stampKey(listOf(stale), now + 5 * 3_600_000L))
+        // 隔三天必然跨档：同一条只会在跨档时再弹一次。
+        assertNotEquals(first, RelationDue.stampKey(listOf(stale), now + 3 * 86_400_000L))
+    }
+
+    @Test fun `mixed batch still uses the daily stamp`() {
+        val start = FactTimes.startOfDay(System.currentTimeMillis())
+        val now = start + 15 * 3_600_000L
+        val fresh = fact("约定", "今天见面", start + 9 * 3_600_000L)
+        val stale = fact("约定", "上个月的约定", start - 40 * 86_400_000L)
+        val stamp = RelationDue.stampKey(listOf(fresh, stale), now)
+        assertEquals(stamp, RelationDue.stampKey(listOf(stale, fresh), now))
+        assertNotEquals(stamp, RelationDue.stampKey(listOf(fresh, stale), now + 86_400_000L))
     }
 }

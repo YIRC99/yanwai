@@ -10,7 +10,7 @@ import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.RelationFactBridge
 
 /**
- * 通知上的两个动作：进聊天、标记完成。
+ * 通知上的三个动作：进聊天、标记完成、稍后再提醒。
  *
  * 不放在清单里：模块代码跑在微信进程，动态注册才收得到；广播由自己创建的
  * PendingIntent 发出，用 setPackage 限定到微信。别的应用要伪造也只能改「已完成」
@@ -19,12 +19,15 @@ import dev.jev.wechatmood.core.RelationFactBridge
 internal object RelationTodoActions {
     const val ACTION_DONE = "dev.jev.wechatmood.action.RELATION_TODO_DONE"
     const val ACTION_OPEN = "dev.jev.wechatmood.action.RELATION_TODO_OPEN"
+    const val ACTION_SNOOZE = "dev.jev.wechatmood.action.RELATION_TODO_SNOOZE"
     const val EXTRA_KEY = "contact_key"
     const val EXTRA_IDS = "fact_ids"
     const val EXTRA_TALKER = "talker"
     const val EXTRA_NOTICE = "notice_id"
+    const val EXTRA_MINUTES = "minutes"
 
     private val FACT_ID = Regex("[0-9a-f]{16}")
+    private val CONTACT_KEY = Regex("[0-9a-f]{64}")
     private val TALKER = Regex("[A-Za-z0-9_@.\\-]{1,256}")
 
     fun register(context: Context) {
@@ -33,6 +36,7 @@ internal object RelationTodoActions {
                 when (intent.action) {
                     ACTION_DONE -> markDone(c, intent)
                     ACTION_OPEN -> openChat(c, intent)
+                    ACTION_SNOOZE -> snooze(c, intent)
                 }
             }
         }
@@ -40,6 +44,7 @@ internal object RelationTodoActions {
             val filter = IntentFilter().apply {
                 addAction(ACTION_DONE)
                 addAction(ACTION_OPEN)
+                addAction(ACTION_SNOOZE)
             }
             if (Build.VERSION.SDK_INT >= 33) {
                 context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
@@ -50,7 +55,7 @@ internal object RelationTodoActions {
     }
 
     private fun markDone(c: Context, intent: Intent) {
-        val key = intent.getStringExtra(EXTRA_KEY) ?: return
+        val key = intent.getStringExtra(EXTRA_KEY)?.takeIf { it.matches(CONTACT_KEY) } ?: return
         val ids = intent.getStringExtra(EXTRA_IDS).orEmpty().split(",")
             .map { it.trim() }.filter { it.matches(FACT_ID) }.distinct()
         if (ids.isEmpty()) return
@@ -58,6 +63,14 @@ internal object RelationTodoActions {
         val changed = RelationFactBridge.markDone(c, key, ids)
         cancelNotice(c, intent)
         MoodLog.i("RELATION_TODO_DONE_BY_NOTICE asked=" + ids.size + " changed=" + changed)
+    }
+
+    /** 稍后提醒：先撤通知，到点后由下一次检查重新弹；不依赖微信进程一直活着。 */
+    private fun snooze(c: Context, intent: Intent) {
+        val key = intent.getStringExtra(EXTRA_KEY)?.takeIf { it.matches(CONTACT_KEY) } ?: return
+        val minutes = intent.getIntExtra(EXTRA_MINUTES, 60)
+        RelationReminder.snooze(c, key, minutes, intent.getIntExtra(EXTRA_NOTICE, 0))
+        MoodLog.i("RELATION_TODO_SNOOZE minutes=" + minutes)
     }
 
     /**

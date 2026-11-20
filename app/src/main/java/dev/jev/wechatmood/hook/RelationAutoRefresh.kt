@@ -69,7 +69,7 @@ internal object RelationAutoRefresh {
         val facts = withContext(Dispatchers.IO) { runCatching { RelationFactBridge.load(activity, key) }.getOrDefault(emptyList()) }
         // 哈希键换不回聊天对象：顺手把聊天对象和备注名记一份，提醒点开才能进对会话。
         withContext(Dispatchers.IO) {
-            val name = runCatching { ReplyDatabaseHistory.displayNames(listOf(talker))[talker] }.getOrNull()
+            val name = runCatching { ReplyDatabaseHistory.displayNames(listOf(talker), relaxed = true)[talker] }.getOrNull()
             RelationFactBridge.rememberContact(activity, key, talker, name.orEmpty())
         }
         RelationReminder.check(activity, key, talker, facts)

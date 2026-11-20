@@ -84,7 +84,7 @@ internal class RelationTodoUi(private val activity: Activity, private val talker
             // 记下这条档案对应哪个聊天和备注名，到期通知点开才能进对会话。
             if (key != null) {
                 val name = withContext(Dispatchers.IO) {
-                    runCatching { ReplyDatabaseHistory.displayNames(listOf(selected))[selected] }.getOrNull()
+                    runCatching { ReplyDatabaseHistory.displayNames(listOf(selected), relaxed = true)[selected] }.getOrNull()
                 }
                 RelationFactBridge.rememberContact(activity, key, selected, name.orEmpty())
             }

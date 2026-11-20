@@ -82,6 +82,14 @@ internal object RelationFactRefresher {
             runCatching { MessageSniffer.replyContext(requireBottom = false) }.getOrNull()
                 ?: error("读取聊天失败")
         }
+        // 只记过 talker 的聊天，到期提醒才点得开、叫得出名字。整理是档案的主要写入路径，
+        // 以前只在自动整理和档案窗口里记，走这里（「帮我回」面板点整理）写进去的档案就没有目录。
+        withContext(Dispatchers.IO) {
+            val name = runCatching {
+                ReplyDatabaseHistory.displayNames(listOf(live.talker), relaxed = true)[live.talker]
+            }.getOrNull()
+            RelationFactBridge.rememberContact(context, key, live.talker, name.orEmpty())
+        }
         // 页面上往往只有十几条，抽不出稳定事实；优先用本机历史补足，读不到再退回页面消息。
         val history = runCatching { ReplyDatabaseHistory.load(live, limit) }.getOrNull()
         val all = history?.messages?.takeIf { it.isNotEmpty() } ?: live.messages

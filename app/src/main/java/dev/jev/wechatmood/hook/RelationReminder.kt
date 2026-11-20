@@ -11,7 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.RelationFactBridge
-import dev.jev.wechatmood.reply.FactTimes
+import dev.jev.wechatmood.reply.DueContact
 import dev.jev.wechatmood.reply.RelationDue
 import dev.jev.wechatmood.reply.RelationFact
 import dev.jev.wechatmood.reply.ReplyContactKey
@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
  *
  * 两条触发线：进入这个私聊时检查一次；进入微信首页时把全部联系人扫一遍（15 分钟节流）。
  * 通知要写清「和谁、什么事、几点」——旧版只说「1 条约会今天到期」，点了还只落在微信首页，
- * 等于没有指向性。现在点通知直接进那个聊天，通知上还能一次标记完成。
+ * 等于没有指向性。现在点通知直接进那个聊天，通知上还能一次标记完成或稍后再提。
  *
  * 局限写在明处：档案存在微信自己的库里，微信进程不在时不发通知。
  */
@@ -36,8 +36,11 @@ internal object RelationReminder {
     private const val PREFS = "yanwai_relation_notice"
     private const val KEY_LAST_SCAN = "last_global_scan"
     private const val NOTICE_BASE = 1100
+    private const val SUMMARY_ID = 1099
     private const val LEGACY_NOTICE_ID = 1101
     private const val MAX_NOTICES = 5
+    private const val SLOT_COUNT = 512
+    private const val SNOOZE_MINUTES = 60
     private const val GLOBAL_THROTTLE_MS = 15 * 60_000L
     private const val GLOBAL_DELAY_MS = 3_000L
     private const val GROUP = "yanwai_relation_todo_group"
@@ -49,6 +52,10 @@ internal object RelationReminder {
     /** 单聊路径：刚打开聊天或刚整理完，看一眼今天有没有到期的。 */
     suspend fun check(context: Context, key: ReplyContactKey, talker: String?, facts: List<RelationFact>) {
         val now = System.currentTimeMillis()
+        if (snoozed(context, key.value, now)) {
+            MoodLog.i("RELATION_REMIND_SKIP_SNOOZED")
+            return
+        }
         val due = RelationDue.select(facts, now)
         if (due.isEmpty()) {
             cancel(context, key)
@@ -83,10 +90,26 @@ internal object RelationReminder {
         runCatching { manager.cancel(LEGACY_NOTICE_ID) }
     }
 
-    private fun clearNotified(context: Context, contactKey: String) {
-        runCatching {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(contactKey).apply()
+    /**
+     * 「稍后提醒」：撤掉当前通知，到点之后下一次检查再弹。
+     *
+     * 不挂 AlarmManager：微信进程一死，动态注册的接收器和闹钟就都不在了。这里只记一个时间点，
+     * 顺手把当天的提醒指纹清掉，用户下次进微信（或进这个聊天）过了时间自然会重新提醒。
+     */
+    fun snooze(context: Context, contactKey: String, minutes: Int, noticeId: Int) {
+        val span = minutes.coerceIn(1, 24 * 60)
+        val until = System.currentTimeMillis() + span * 60_000L
+        prefs(context).edit().putLong(snoozeKey(contactKey), until).remove(stampKey(contactKey)).apply()
+        if (noticeId > 0) {
+            runCatching {
+                (context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)?.cancel(noticeId)
+            }
         }
+        MoodLog.i("RELATION_REMIND_SNOOZE minutes=$span")
+    }
+
+    private fun clearNotified(context: Context, contactKey: String) {
+        runCatching { prefs(context).edit().remove(stampKey(contactKey)).apply() }
     }
 
     /**
@@ -95,24 +118,56 @@ internal object RelationReminder {
      */
     suspend fun checkAll(context: Context) {
         if (!takeGlobalSlot(context)) return
+        val now = System.currentTimeMillis()
         val groups = withContext(Dispatchers.IO) {
             runCatching { RelationFactBridge.dueContacts(context) }.getOrDefault(emptyList())
-        }
+        }.filter { !snoozed(context, it.key, now) }
         if (groups.isEmpty()) {
             MoodLog.i("RELATION_REMIND_ALL nothing_due")
             return
         }
-        val names = names(groups.mapNotNull { it.talker })
-        val now = System.currentTimeMillis()
-        var posted = 0
-        for (group in groups) {
-            if (posted >= MAX_NOTICES) break
-            if (!markNotified(context, group.key, group.facts, now)) continue
-            notify(context, group.key, group.talker, group.name.ifBlank { group.talker?.let { names[it] } ?: "" },
-                group.facts, now)
-            posted++
+        val resolved = fillMissing(context, groups)
+        val names = names(resolved.mapNotNull { it.talker })
+        fun label(group: DueContact) = displayName(
+            group.name.ifBlank { group.talker?.let { names[it] }.orEmpty() }, group.talker)
+        // 先把该提醒的挑出来再截断：旧写法到 5 个就直接 break，后面的联系人既没通知也没痕迹。
+        val fresh = resolved.filter { markNotified(context, it.key, it.facts, now) }
+        if (fresh.isEmpty()) {
+            MoodLog.i("RELATION_REMIND_ALL nothing_new contacts=" + resolved.size)
+            return
         }
-        MoodLog.i("RELATION_REMIND_ALL contacts=" + groups.size + " posted=" + posted)
+        val shown = fresh.take(MAX_NOTICES)
+        for (group in shown) {
+            notify(context, group.key, group.talker, label(group), group.facts, now)
+        }
+        if (fresh.size > 1) notifySummary(context, fresh.map { label(it) })
+        MoodLog.i("RELATION_REMIND_ALL contacts=" + groups.size + " posted=" + shown.size +
+            " summary=" + (fresh.size > 1) + " overflow=" + (fresh.size - shown.size))
+    }
+
+    /**
+     * 旧档案没记过聊天对象：提醒叫不出名字，也点不进会话。
+     * 这里按 rcontact 反解一次并补写目录；解不出来就退回「待办」，不编名字。
+     */
+    private suspend fun fillMissing(context: Context, groups: List<DueContact>): List<DueContact> {
+        val missingGroups = groups.filter { it.talker.isNullOrBlank() }
+        if (missingGroups.isEmpty()) return groups
+        // 档案里存过的依据消息是最好的线索：它能反查到当初是哪段聊天。
+        val evidence = missingGroups.associate { group ->
+            group.key to group.facts.mapNotNull { it.sourceChatMessageId }.filter { it > 0 }.distinct()
+        }
+        val found = withContext(Dispatchers.IO) {
+            runCatching { ReplyDatabaseHistory.resolveContacts(evidence.keys, evidence) }.getOrDefault(emptyMap())
+        }
+        if (found.isEmpty()) return groups
+        for ((key, pair) in found) {
+            val contactKey = runCatching { ReplyContactKey(key) }.getOrNull() ?: continue
+            RelationFactBridge.rememberContact(context, contactKey, pair.first, pair.second)
+        }
+        return groups.map { group ->
+            val hit = found[group.key] ?: return@map group
+            group.copy(talker = group.talker ?: hit.first, name = group.name.ifBlank { hit.second })
+        }
     }
 
     /** 进微信首页时排一次：延迟几秒避开首帧，重复调用作废上一次。 */
@@ -137,7 +192,8 @@ internal object RelationReminder {
 
     fun cancel(context: Context, key: ReplyContactKey) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-        runCatching { manager.cancel(noticeId(key.value)) }
+        val id = existingNoticeId(context, key.value) ?: return
+        runCatching { manager.cancel(id) }
     }
 
     private fun notify(context: Context, contactKey: String, talker: String?, name: String,
@@ -150,10 +206,11 @@ internal object RelationReminder {
         val big = if (rest > 0)
             lines.joinToString("\n") + "\n还有 " + rest + " 条，进聊天后从「附加 · 待办」查看"
         else lines.joinToString("\n")
-        val noticeId = noticeId(contactKey)
+        val noticeId = noticeId(context, contactKey)
+        val title = title(name, talker)
         val builder = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(if (name.isNotBlank()) "待办 · " + name else "待办 · 未获取备注名")
+            .setContentTitle(title)
             .setContentText(lines.firstOrNull().orEmpty())
             .setStyle(Notification.BigTextStyle().bigText(big))
             .setGroup(GROUP)
@@ -166,10 +223,59 @@ internal object RelationReminder {
                 if (facts.size > 1) "全部标记完成" else "标记完成",
                 doneIntent(context, contactKey, facts, noticeId)).build())
         }.onFailure { MoodLog.w("RELATION_REMIND_ACTION_FAILED " + it.javaClass.simpleName) }
+        runCatching {
+            builder.addAction(Notification.Action.Builder(
+                Icon.createWithResource("android", android.R.drawable.ic_menu_recent_history),
+                "一小时后",
+                snoozeIntent(context, contactKey, noticeId)).build())
+        }.onFailure { MoodLog.w("RELATION_REMIND_ACTION_FAILED " + it.javaClass.simpleName) }
+        prefs(context).edit().remove(snoozeKey(contactKey)).apply()
         runCatching { manager.notify(noticeId, builder.build()) }
             .onFailure { MoodLog.w("RELATION_REMIND_NOTIFY_FAILED " + it.javaClass.simpleName) }
-        MoodLog.i("RELATION_REMIND posted items=" + facts.size + " named=" + name.isNotBlank() +
+        MoodLog.i("RELATION_REMIND posted items=" + facts.size + " title=" + title +
             " talker=" + (talker != null))
+    }
+
+    /**
+     * 多联系人时的汇总条：详细通知只发得下几条，剩下的不能凭空消失。
+     * 点汇总回到微信首页，逐个点开各自的详细通知。
+     */
+    private fun notifySummary(context: Context, names: List<String>) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        ensureChannel(manager)
+        val unique = names.filter { it.isNotBlank() }.distinct()
+        val unnamed = names.count { it.isBlank() }
+        val head = unique.take(6).joinToString("、")
+        val tail = if (unique.size > 6) "等 " + unique.size + " 位联系人" else ""
+        val fallback = if (unnamed > 0) (if (unique.isEmpty()) "" else "、") + "还有 $unnamed 位没对上名字" else ""
+        val builder = Notification.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("待办 · " + names.size + " 位联系人")
+            .setContentText((head + tail + fallback).ifBlank { "有到期的约定与重要日期" })
+            .setStyle(Notification.BigTextStyle().bigText(
+                (unique.joinToString("、") + fallback).ifBlank { "有到期的约定与重要日期" } +
+                    "\n点开各自的提醒可以直接进聊天"))
+            .setGroup(GROUP)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(context, "", null, SUMMARY_ID))
+        runCatching { manager.notify(SUMMARY_ID, builder.build()) }
+            .onFailure { MoodLog.w("RELATION_REMIND_SUMMARY_FAILED " + it.javaClass.simpleName) }
+    }
+
+    /** 名字、微信号都没有时至少写「待办」，不再出现「未获取备注名」这种说了等于没说的标题。 */
+    private fun title(name: String, talker: String?): String {
+        val shown = displayName(name, talker)
+        return if (shown.isBlank()) "待办" else "待办 · " + shown
+    }
+
+    /** 备注名 → 微信昵称（由 displayNames 解析）→ 微信号/wxid，逐级回退。 */
+    private fun displayName(name: String, talker: String?): String {
+        val clean = name.trim()
+        if (clean.isNotEmpty()) return clean
+        val id = talker?.trim().orEmpty()
+        if (id.isEmpty()) return ""
+        return if (id.length > 24) id.take(24) + "…" else id
     }
 
     /**
@@ -199,6 +305,16 @@ internal object RelationReminder {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
+    private fun snoozeIntent(context: Context, contactKey: String, noticeId: Int): PendingIntent {
+        val intent = Intent(RelationTodoActions.ACTION_SNOOZE)
+            .setPackage("com.tencent.mm")
+            .putExtra(RelationTodoActions.EXTRA_KEY, contactKey)
+            .putExtra(RelationTodoActions.EXTRA_NOTICE, noticeId)
+            .putExtra(RelationTodoActions.EXTRA_MINUTES, SNOOZE_MINUTES)
+        return PendingIntent.getBroadcast(context, noticeId + 1, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
     private fun ensureChannel(manager: NotificationManager) {
         if (android.os.Build.VERSION.SDK_INT < 26) return
         manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, CHANNEL_NAME,
@@ -207,21 +323,86 @@ internal object RelationReminder {
         })
     }
 
-    /** 每个联系人一个通知 id：旧版写死 1101，多个联系人互相覆盖，只剩最后一条。 */
-    private fun noticeId(contactKey: String): Int = NOTICE_BASE + (contactKey.hashCode() and 0x3FF)
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** 指纹带日期和条目 id：同一批一天只提醒一次；当天又新增一条会重新提醒。 */
+    private fun stampKey(contactKey: String) = "stamp_" + contactKey
+
+    private fun snoozeKey(contactKey: String) = "snooze_" + contactKey
+
+    private fun snoozed(context: Context, contactKey: String, now: Long): Boolean =
+        prefs(context).getLong(snoozeKey(contactKey), 0) > now
+
+    /**
+     * 每个联系人一个固定通知 id，存在本机偏好里。
+     *
+     * 原来用 `hashCode and 0x3FF` 现算，1024 个桶里两个联系人撞上就会互相覆盖，
+     * 而且撞了只在用户那儿表现为「一条提醒莫名其妙不见了」。现在按槽位分配，
+     * 满了就回收最久没用的那个，仍写成 1100+槽位，旧版本的通知 id 不会被误认。
+     */
+    private fun noticeId(context: Context, contactKey: String): Int {
+        val prefs = prefs(context)
+        val known = prefs.getInt("nid_" + contactKey, 0)
+        if (known in 1..SLOT_COUNT && prefs.getString("nkey_" + known, null) == contactKey) {
+            prefs.edit().putLong("nused_" + known, System.currentTimeMillis()).apply()
+            return NOTICE_BASE + known
+        }
+        val now = System.currentTimeMillis()
+        var free = 0
+        var oldestSlot = 1
+        var oldestAt = Long.MAX_VALUE
+        for (slot in 1..SLOT_COUNT) {
+            val owner = prefs.getString("nkey_" + slot, null)
+            if (owner == null) {
+                free = slot
+                break
+            }
+            val used = prefs.getLong("nused_" + slot, 0)
+            if (used < oldestAt) {
+                oldestAt = used
+                oldestSlot = slot
+            }
+        }
+        if (free == 0) {
+            free = oldestSlot
+            val owner = prefs.getString("nkey_" + free, null)
+            if (!owner.isNullOrEmpty()) {
+                runCatching {
+                    (context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
+                        ?.cancel(NOTICE_BASE + free)
+                }
+                prefs.edit().remove("nid_" + owner).apply()
+            }
+        }
+        prefs.edit()
+            .putInt("nid_" + contactKey, free)
+            .putString("nkey_" + free, contactKey)
+            .putLong("nused_" + free, now)
+            .apply()
+        return NOTICE_BASE + free
+    }
+
+    private fun existingNoticeId(context: Context, contactKey: String): Int? {
+        val prefs = prefs(context)
+        val slot = prefs.getInt("nid_" + contactKey, 0)
+        if (slot in 1..SLOT_COUNT && prefs.getString("nkey_" + slot, null) == contactKey) {
+            return NOTICE_BASE + slot
+        }
+        return null
+    }
+
+    /** 指纹带日期、逾期档位和条目 id：同一批同一档只提醒一次；当天又新增一条会重新提醒。 */
     private fun markNotified(context: Context, contactKey: String, due: List<RelationFact>, now: Long): Boolean =
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val stamp = FactTimes.dayKey(now) + "|" + due.map { it.factId }.sorted().joinToString(",")
-            if (prefs.getString(contactKey, null) == stamp) return@runCatching false
-            prefs.edit().putString(contactKey, stamp).apply()
+            val prefs = prefs(context)
+            val stamp = RelationDue.stampKey(due, now)
+            if (prefs.getString(stampKey(contactKey), null) == stamp) return@runCatching false
+            prefs.edit().putString(stampKey(contactKey), stamp).apply()
             true
         }.getOrDefault(false)
 
     private fun takeGlobalSlot(context: Context): Boolean = runCatching {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         val now = System.currentTimeMillis()
         if (now - prefs.getLong(KEY_LAST_SCAN, 0) < GLOBAL_THROTTLE_MS) return@runCatching false
         prefs.edit().putLong(KEY_LAST_SCAN, now).apply()
@@ -236,7 +417,7 @@ internal object RelationReminder {
     private suspend fun names(talkers: List<String>): Map<String, String> {
         if (talkers.isEmpty()) return emptyMap()
         return withContext(Dispatchers.IO) {
-            runCatching { ReplyDatabaseHistory.displayNames(talkers) }.getOrDefault(emptyMap())
+            runCatching { ReplyDatabaseHistory.displayNames(talkers, relaxed = true) }.getOrDefault(emptyMap())
         }
     }
 }

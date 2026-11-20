@@ -171,10 +171,40 @@ object RelationDue {
     /** 通知里最多展开三条，避免一条通知占满整屏。 */
     const val MAX_ITEMS = 3
 
+    /** 逾期超过这么多天就不再天天弹，降成三天一档。 */
+    const val STALE_DAYS = 3
+
     fun select(facts: List<RelationFact>, now: Long = System.currentTimeMillis()): List<RelationFact> =
         facts.filter { it.isOpen && it.isTimed && it.occurredAt > 0 }
             .filter { FactTimes.overdue(it.occurredAt, now) || FactTimes.sameDay(it.occurredAt, now) }
             .sortedBy { it.occurredAt }
+
+    /**
+     * 逾期天数：只到日期的条目按整天算，当天到期不算逾期。
+     * 用来给提醒降频，不参与文案。
+     */
+    fun daysLate(value: Long, now: Long): Int {
+        if (value <= 0) return 0
+        val end = if (FactTimes.hasClock(value)) now else FactTimes.startOfDay(now)
+        val start = if (FactTimes.hasClock(value)) value else FactTimes.startOfDay(value)
+        return ((end - start) / 86_400_000L).toInt().coerceAtLeast(0)
+    }
+
+    /**
+     * 通知指纹：同一批同一档只提醒一次。
+     *
+     * 原来指纹里只有日期，一条拖着没做的约定会每天重新提醒一次。现在整批都逾期超过
+     * [STALE_DAYS] 天时改用三天一档，跨档才再弹；只要还有今天到期的条目，仍按天提醒。
+     */
+    fun stampKey(facts: List<RelationFact>, now: Long = System.currentTimeMillis()): String {
+        val ids = facts.map { it.factId }.sorted().joinToString(",")
+        val stale = facts.isNotEmpty() && facts.all { daysLate(it.occurredAt, now) >= STALE_DAYS }
+        val window = if (stale) {
+            val day = FactTimes.startOfDay(now) / 86_400_000L
+            "b" + (day / STALE_DAYS)
+        } else FactTimes.dayKey(now)
+        return window + "|" + ids
+    }
 
     /** 通知里的一行：时间（过期会注明）+ 内容，不再只说「1 条约会今天到期」。 */
     fun line(fact: RelationFact, now: Long = System.currentTimeMillis()): String {
