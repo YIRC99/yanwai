@@ -232,7 +232,8 @@ internal object RelationReminder {
         prefs(context).edit().remove(snoozeKey(contactKey)).apply()
         runCatching { manager.notify(noticeId, builder.build()) }
             .onFailure { MoodLog.w("RELATION_REMIND_NOTIFY_FAILED " + it.javaClass.simpleName) }
-        MoodLog.i("RELATION_REMIND posted items=" + facts.size + " title=" + title +
+        // 日志只记条数与是否拿到名字，不记名字本身：这份日志会被导出。
+        MoodLog.i("RELATION_REMIND posted items=" + facts.size + " named=" + name.isNotBlank() +
             " talker=" + (talker != null))
     }
 
