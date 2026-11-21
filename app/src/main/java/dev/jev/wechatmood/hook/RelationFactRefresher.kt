@@ -29,6 +29,17 @@ internal object RelationFactRefresher {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val running = mutableMapOf<String, Job>()
     private val lock = Any()
+    /** 失败过的联系人冷却半小时：抽不出正文时别每次进聊天都再花一次钱。 */
+    private val failures = mutableMapOf<String, Long>()
+    private const val FAILURE_COOLDOWN_MS = 30 * 60_000L
+
+    fun recentFailure(key: ReplyContactKey): Boolean = synchronized(lock) {
+        val at = failures[key.value] ?: return@synchronized false
+        if (System.currentTimeMillis() - at > FAILURE_COOLDOWN_MS) {
+            failures.remove(key.value)
+            false
+        } else true
+    }
 
     /** facts 是合并后的有效条目；nothingNew 表示增量模式下没有比水位更新的消息。 */
     data class Result(val facts: List<RelationFact>, val scanned: Int, val nothingNew: Boolean)
@@ -56,10 +67,13 @@ internal object RelationFactRefresher {
         val app = context.applicationContext ?: context
         val job = scope.launch {
             try {
-                onDone(refresh(app, key, settings, limit, incremental, snapshot), null)
+                val result = refresh(app, key, settings, limit, incremental, snapshot)
+                synchronized(lock) { failures.remove(key.value) }
+                onDone(result, null)
             } catch (e: CancellationException) {
                 throw e
             } catch (error: Throwable) {
+                synchronized(lock) { failures[key.value] = System.currentTimeMillis() }
                 MoodLog.w("RELATION_FACT_REFRESH_FAILED " + error.javaClass.simpleName)
                 onDone(null, error)
             } finally {
@@ -91,30 +105,36 @@ internal object RelationFactRefresher {
             RelationFactBridge.rememberContact(context, key, live.talker, name.orEmpty())
         }
         // 页面上往往只有十几条，抽不出稳定事实；优先用本机历史补足，读不到再退回页面消息。
-        val history = runCatching { ReplyDatabaseHistory.load(live, limit) }.getOrNull()
-        val all = history?.messages?.takeIf { it.isNotEmpty() } ?: live.messages
+        // 读一整窗（最多 100 条）来看清积压：以前只读 limit 条，间隔久了中间那段会被永久跳过。
+        val window = runCatching { ReplyDatabaseHistory.load(live, ReplyContext.MAX_MESSAGES) }
+            .getOrNull()?.messages?.takeIf { it.isNotEmpty() } ?: live.messages
         val meta = withContext(Dispatchers.IO) { RelationFactBridge.meta(context, key) }
         // 增量：只看上次水位之后的新消息；还没抽过（水位 0）时等于全量。
-        val messages = if (incremental && meta.lastMessageId > 0) {
-            all.filter { it.id > meta.lastMessageId }.takeLast(limit)
-        } else {
-            all.takeLast(limit)
-        }
-        MoodLog.i("RELATION_FACT_INPUT page=${live.messages.size} used=${messages.size} limit=$limit incremental=$incremental")
+        val backlog = if (incremental && meta.lastMessageId > 0) {
+            window.filter { it.id > meta.lastMessageId }
+        } else window
+        // 从积压里挑最旧的一批先消化，剩下的下次继续；水位只推进到这一批的末尾。
+        val messages = if (incremental && meta.lastMessageId > 0) backlog.take(limit) else window.takeLast(limit)
+        val watermark = messages.lastOrNull()?.id ?: 0
+        MoodLog.i("RELATION_FACT_INPUT page=${live.messages.size} backlog=${backlog.size} " +
+            "used=${messages.size} limit=$limit incremental=$incremental")
         if (messages.isEmpty()) return Result(emptyList(), 0, incremental)
         // 把已有档案一起给模型，它才能指出哪条被替换（换工作、搬家、改称呼）。
         val existing = withContext(Dispatchers.IO) { runCatching { RelationFactBridge.load(context, key) }.getOrDefault(emptyList()) }
         val extracted = withContext(Dispatchers.IO) { FactExtractor().extract(settings, messages, existing, limit = limit) }
         if (extracted.isEmpty()) {
-            // 模型正常回了空数组（这段只是闲聊）：水位也要往前走，否则每次打开面板都重传同一批。
+            // 模型明确回了空数组（这段只是闲聊）：水位往前走，否则每次打开面板都重传同一批。
+            // 抽不出正文的情况已经在 extract 里抛错，不会走到这里，也就不会误推进水位。
             withContext(Dispatchers.IO) {
-                RelationFactBridge.saveMeta(context, key, System.currentTimeMillis(), messages.lastOrNull()?.id ?: 0)
+                RelationFactBridge.saveMeta(context, key, System.currentTimeMillis(),
+                    watermark.coerceAtLeast(meta.lastMessageId))
             }
-            MoodLog.i("RELATION_FACT_NOTHING_NEW scanned=${messages.size}")
+            MoodLog.i("RELATION_FACT_NOTHING_NEW scanned=${messages.size} backlog=${backlog.size}")
             return Result(emptyList(), messages.size, false)
         }
         val saved = withContext(Dispatchers.IO) {
-            RelationFactBridge.save(context, key, extracted, System.currentTimeMillis(), messages.lastOrNull()?.id ?: 0)
+            RelationFactBridge.save(context, key, extracted, System.currentTimeMillis(),
+                watermark.coerceAtLeast(meta.lastMessageId))
         }
         MoodLog.i("RELATION_FACT_SAVED count=${saved.size} replaced=${extracted.count { it.replaces.isNotEmpty() }}")
         return Result(saved, messages.size, false)

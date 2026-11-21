@@ -148,7 +148,8 @@ object RelationFactBridge {
     /** 从剪贴板导入：走与自动整理相同的合并逻辑，重复条目不会翻倍。 */
     fun importFacts(context: Context, key: ReplyContactKey, facts: List<RelationFact>): Int {
         val store = store(context)
-        val merged = RelationFacts.merge(store.listAll(key), facts, System.currentTimeMillis())
+        // 导入的内容自带 status：已处理/已移出的要原样保留，不能复活成有效条目。
+        val merged = RelationFacts.merge(store.listAll(key), facts, System.currentTimeMillis(), keepStatus = true)
         store.replace(key, merged)
         MoodLog.i("RELATION_FACT_IMPORT incoming=" + facts.size + " open=" + merged.count { it.isOpen })
         return merged.count { it.isOpen }
@@ -199,7 +200,8 @@ object RelationFactBridge {
             }
             if (items.isEmpty()) return@forEach
             // 合并而不是覆盖：微信库里可能已经有新版添加的条目。
-            store.replace(key, RelationFacts.merge(store.listAll(key), items, System.currentTimeMillis()))
+            store.replace(key, RelationFacts.merge(store.listAll(key), items,
+                System.currentTimeMillis(), keepStatus = true))
             contacts++
             facts += items.size
         }
@@ -210,6 +212,20 @@ object RelationFactBridge {
 
     fun clearAllLocal(context: Context) {
         store(context).clearAll()
+        // 角标和提醒指纹在另外两个偏好文件里：只清库的话，清空后仍会挂着旧的「提醒」后缀和通知。
+        // 通知 id 的口径与 RelationReminder 对齐（1099 汇总，1100+槽位）。
+        runCatching {
+            val notice = context.getSharedPreferences("yanwai_relation_notice", Context.MODE_PRIVATE)
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            if (manager != null) {
+                manager.cancel(1099)
+                for ((name, value) in notice.all) {
+                    if (name.startsWith("nid_") && value is Int && value > 0) manager.cancel(1100 + value)
+                }
+            }
+            notice.edit().clear().apply()
+            context.getSharedPreferences("yanwai_relation_badge", Context.MODE_PRIVATE).edit().clear().apply()
+        }.onFailure { MoodLog.w("RELATION_FACT_CLEAR_PREFS_FAILED " + it.javaClass.simpleName) }
         MoodLog.i("RELATION_FACT_CLEAR_ALL_LOCAL")
     }
 

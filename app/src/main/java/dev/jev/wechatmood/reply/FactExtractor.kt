@@ -22,40 +22,73 @@ class FactExtractor(private val client: ReplyHttpClient = ReplyHttpClient()) {
         val usable = messages.filter { it.text.isNotBlank() && !it.text.startsWith("【引用") }
             .takeLast(limit.coerceIn(10, MAX_MESSAGES))
         // 每条都带上原始发送时间：周一的「明天见」拖到周四整理，不能按整理当天换算成周五。
-        val transcript = usable.withIndex()
-            .joinToString("\n") { (index, message) ->
-                val stamp = if (message.time > 0) FactTimes.formatLocal(message.time, "MM-dd E HH:mm") else "时间未知"
-                "[${index + 1}] $stamp ${message.speaker}: ${message.text.take(80)}"
+        val lines = usable.withIndex().map { (index, message) ->
+            val stamp = if (message.time > 0) FactTimes.formatLocal(message.time, "MM-dd E HH:mm") else "时间未知"
+            "[${index + 1}] $stamp ${message.speaker}: ${message.text.take(80)}"
+        }
+        // 从最新往回攒到预算上限：以前正序拼完再 take，超长时砍掉的反而是刚聊完的那几条。
+        val transcript = buildList {
+            var used = 0
+            for (line in lines.asReversed()) {
+                if (isNotEmpty() && used + line.length + 1 > MAX_CHARACTERS) break
+                add(line)
+                used += line.length + 1
             }
-            .take(MAX_CHARACTERS)
+        }.asReversed().joinToString("\n")
         check(transcript.isNotBlank()) { "没有可用的聊天内容" }
-        val payload = JSONObject().put("model", settings.model).put("stream", false)
-            // 推理模型会把预算花在思考上：800 时实测 finish=length 且 content 为空，给足空间。
-            .put("max_tokens", 6000).put("temperature", 0.2)
-            .put("messages", JSONArray()
-                .put(JSONObject().put("role", "system").put("content", instructions(now, existing)))
-                .put(JSONObject().put("role", "user").put("content", transcript)))
         val messageIdAt: (Int) -> Long = { index -> usable.getOrNull(index - 1)?.id ?: 0 }
         val messageTimeAt: (Int) -> Long = { index -> usable.getOrNull(index - 1)?.time ?: 0 }
-        return client.request(settings, payload, parse = { body -> this.parse(body, messageIdAt, messageTimeAt) })
-            .also { MoodLog.i("RELATION_FACT_EXTRACT total=${it.size} timed=${it.count { fact -> fact.isTimed }} " +
-                "dated=${it.count { fact -> fact.occurredAt > 0 }} evidence=${it.count { fact -> fact.sourceChatMessageId > 0 }} " +
-                "replaced=${it.count { fact -> fact.replaces.isNotEmpty() }}") }
+        // 推理模型会把预算花在思考上：6000 时实测 finish=length 且正文为空。
+        // 空正文就加大预算再试一次；两次都空才算失败，由调用方决定不推进水位。
+        var lastEmpty = ""
+        for (tokens in intArrayOf(6000, 8000)) {
+            val payload = JSONObject().put("model", settings.model).put("stream", false)
+                .put("max_tokens", tokens).put("temperature", 0.2)
+                .put("messages", JSONArray()
+                    .put(JSONObject().put("role", "system").put("content", instructions(now, existing)))
+                    .put(JSONObject().put("role", "user").put("content", transcript)))
+            val facts = client.request(settings, payload, parse = { body ->
+                parseOrNull(body, messageIdAt, messageTimeAt)
+            })
+            if (facts != null) {
+                MoodLog.i("RELATION_FACT_EXTRACT total=${facts.size} tokens=$tokens " +
+                    "timed=${facts.count { it.isTimed }} dated=${facts.count { it.occurredAt > 0 }} " +
+                    "evidence=${facts.count { it.sourceChatMessageId > 0 }} " +
+                    "replaced=${facts.count { it.replaces.isNotEmpty() }}")
+                return facts
+            }
+            lastEmpty = "tokens=$tokens"
+            MoodLog.w("RELATION_FACT_EMPTY 正文为空，换更大预算重试")
+        }
+        throw IllegalStateException("模型两次都没返回正文（$lastEmpty），这次整理不算数")
     }
 
+    /** 供单测直接喂响应体用：解析不出来时按「没有事实」处理。 */
     internal fun parse(body: String, messageIdAt: (Int) -> Long = { 0 },
-        messageTimeAt: (Int) -> Long = { 0 }): List<RelationFact> = runCatching {
+        messageTimeAt: (Int) -> Long = { 0 }): List<RelationFact> =
+        parseOrNull(body, messageIdAt, messageTimeAt) ?: emptyList()
+
+    /**
+     * 解析响应体；返回 null 表示这次没有正文可用（被思考截断、或者不是数组）。
+     * null 与「模型明确回了 []」是两件事：前者不能推进水位，否则这批消息再也不会重抽。
+     */
+    private fun parseOrNull(body: String, messageIdAt: (Int) -> Long,
+        messageTimeAt: (Int) -> Long): List<RelationFact>? = runCatching {
         val choice = JSONObject(body).getJSONArray("choices").getJSONObject(0)
         val content = choice.getJSONObject("message").getString("content").trim()
         // 只记长度、结构与结束原因，不落聊天原文：这份日志会被导出。
         MoodLog.i("RELATION_FACT_RAW len=${content.length} array=${content.indexOf('[') >= 0} " +
             "finish=${choice.optString("finish_reason")}")
-        if (content.isBlank() && choice.optString("finish_reason") == "length") {
-            MoodLog.w("RELATION_FACT_BUDGET 输出为空且被截断，推理占满预算")
+        if (content.isBlank()) {
+            MoodLog.w("RELATION_FACT_BUDGET 正文为空 finish=${choice.optString("finish_reason")}")
+            return@runCatching null
         }
         val start = content.indexOf('[')
         val end = content.lastIndexOf(']')
-        if (start < 0 || end <= start) return@runCatching emptyList()
+        if (start < 0 || end <= start) {
+            MoodLog.w("RELATION_FACT_NO_ARRAY len=${content.length}")
+            return@runCatching null
+        }
         val array = JSONArray(content.substring(start, end + 1))
         (0 until minOf(array.length(), MAX_FACTS))
             .mapNotNull { index ->

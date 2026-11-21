@@ -111,22 +111,33 @@ internal class RelationTodoUi(private val activity: Activity, private val talker
     }
 
     private suspend fun load(key: ReplyContactKey) {
-        val loaded = withContext(Dispatchers.IO) { RelationFactBridge.loadAll(activity, key) }
+        val loaded = runCatching { withContext(Dispatchers.IO) { RelationFactBridge.loadAll(activity, key) } }
+            .getOrElse { error ->
+                // 读库失败要说出来，别让窗口停在「正在读取…」。
+                MoodLog.w("RELATION_TODO_LOAD_FAILED " + error.javaClass.simpleName)
+                showStatus("读取档案失败，稍后重试", theme.error)
+                return
+            }
         items = loaded
         hideStatus()
         MoodLog.i("RELATION_TODO_LOAD total=${loaded.size} open=${loaded.count { it.isOpen }} " +
-            "dated=${loaded.count { it.isOpen && it.occurredAt > 0 }}")
+            "dated=${loaded.count { it.isOpen && it.isTimed && it.occurredAt > 0 }}")
         render()
     }
 
     private fun render() {
         listContainer.removeAllViews()
         val now = System.currentTimeMillis()
-        val todos = items.filter { it.isOpen && it.occurredAt > 0 }.sortedBy { it.occurredAt }
+        // 与提醒侧同一口径：只有时间型条目才算待办，否则「工作」「喜好」带个日期就只显示不提醒。
+        val todos = items.filter { it.isOpen && it.isTimed && it.occurredAt > 0 }.sortedBy { it.occurredAt }
         val overdue = todos.filter { FactTimes.overdue(it.occurredAt, now) }
         val upcoming = todos.filter { !FactTimes.overdue(it.occurredAt, now) }
-        val handled = items.filter { it.status == RelationFact.STATUS_DONE || it.status == RelationFact.STATUS_CANCELLED }
-            .sortedByDescending { it.updatedAt }.take(HANDLED_LIMIT)
+        // 已处理也只收时间型条目：普通事实（工作、喜好）被移出后不属于待办，
+        // 它们只在关系档案页的「已移出 / 已作废」里出现。
+        val handled = items.filter {
+            (it.status == RelationFact.STATUS_DONE || it.status == RelationFact.STATUS_CANCELLED) &&
+                it.isTimed && it.occurredAt > 0
+        }.sortedByDescending { it.updatedAt }.take(HANDLED_LIMIT)
 
         if (todos.isEmpty()) {
             listContainer.addView(kit.body("这个联系人还没有带时间的约定"))

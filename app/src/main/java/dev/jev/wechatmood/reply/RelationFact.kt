@@ -81,7 +81,12 @@ data class RelationFact(
         fun decode(json: JSONObject): RelationFact? {
             val kind = json.optString("kind").trim()
             val text = json.optString("text").trim()
-            if (kind !in KINDS || text.isBlank() || text.length > MAX_TEXT) return null
+            if (kind !in KINDS || text.isBlank()) return null
+            if (text.length > MAX_TEXT) {
+                // 整条丢弃是设计（宁可少一条也不截半句），但要留痕，否则用户只看到「没整理出东西」。
+                dev.jev.wechatmood.core.MoodLog.w("RELATION_FACT_TOO_LONG kind=" + kind + " len=" + text.length)
+                return null
+            }
             val confidence = json.optDouble("confidence", 0.6).takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.6
             val status = json.optString("status").takeIf { it in STATUSES } ?: STATUS_ACTIVE
             val occurredAt = json.optLong("occurred_at", 0).coerceAtLeast(0)
@@ -389,14 +394,18 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
      */
     fun setStatus(key: ReplyContactKey, factId: String, status: String): Boolean {
         if (status !in RelationFact.MANUAL_STATUSES || !factId.matches(RelationFact.ID_PATTERN)) return false
-        val payload = db.query("SELECT payload FROM relation_fact_items WHERE fact_id = ? AND contact_key = ?",
-            listOf(factId, key.value)) ?: return false
-        val fact = runCatching { RelationFact.decode(JSONObject(payload)) }.getOrNull() ?: return false
-        if (fact.status == RelationFact.STATUS_SUPERSEDED) return false
-        // 已经处于目标状态就不重复写，避免每次点都刷新 updated_at 把排序搅乱。
-        if (fact.status == status) return true
-        upsert(key.value, fact.copy(status = status, updatedAt = now()))
-        return true
+        // 读和写放在同一把锁里：后台整理正在 replace 整表时，先读后写会把已删的行按旧 payload 写回来。
+        return synchronized(writeLock) {
+            val payload = db.query("SELECT payload FROM relation_fact_items WHERE fact_id = ? AND contact_key = ?",
+                listOf(factId, key.value)) ?: return@synchronized false
+            val fact = runCatching { RelationFact.decode(JSONObject(payload)) }.getOrNull()
+                ?: return@synchronized false
+            if (fact.status == RelationFact.STATUS_SUPERSEDED) return@synchronized false
+            // 已经处于目标状态就不重复写，避免每次点都刷新 updated_at 把排序搅乱。
+            if (fact.status == status) return@synchronized true
+            upsert(key.value, fact.copy(status = status, updatedAt = now()))
+            true
+        }
     }
 
     /**
@@ -434,7 +443,15 @@ class RelationFactStore(private val db: AnalysisCacheDatabase,
             source = "manual", confidence = 1.0, occurredAt = occurredAt.coerceAtLeast(0))
         // 手动添加视为"我要它回来"，先解除上次彻底删除留下的忽略。
         forget(key, fact.factId)
-        replace(key, RelationFacts.merge(listAll(key), listOf(fact), stamp))
+        // 已处理、已移出、已作废的相似旧条不再拦这一条。
+        // 以前 merge 的「别复活」规则会把它整个 continue 掉，界面却照样报「已添加」，实际什么都没写。
+        val threshold = if (fact.isTimed) 0.45 else 0.55
+        val cleaned = listAll(key).filterNot { previous ->
+            previous.status in setOf(RelationFact.STATUS_DONE, RelationFact.STATUS_CANCELLED,
+                RelationFact.STATUS_SUPERSEDED) && previous.kind == kind &&
+                RelationFacts.similarity(previous.text, clean) >= threshold
+        }
+        replace(key, RelationFacts.merge(cleaned, listOf(fact), stamp))
         return list(key)
     }
 
@@ -533,14 +550,25 @@ object RelationFacts {
     /** 单值维度：同 kind 出现多条时大概率有一条已经过时，档案页会提示。 */
     val SINGLE_VALUE_KINDS = setOf("工作", "城市", "称呼")
 
-    /** 合并后返回全部条目（含已作废）；调用方用 [RelationFact.isOpen] 过滤后再展示或注入。 */
-    fun merge(existing: List<RelationFact>, incoming: List<RelationFact>, now: Long): List<RelationFact> {
+    /**
+     * 合并后返回全部条目（含已作废）；调用方用 [RelationFact.isOpen] 过滤后再展示或注入。
+     *
+     * [keepStatus] 给导入与旧库迁移用：带的 status 原样保留，已处理/已作废的条目不会被复活成 active，
+     * 也不参与「相似就合并」——那会把导入的历史记录改写成一条新事实。
+     */
+    fun merge(existing: List<RelationFact>, incoming: List<RelationFact>, now: Long,
+        keepStatus: Boolean = false): List<RelationFact> {
         val result = existing.toMutableList()
         for (raw in incoming) {
-            val fact = raw.copy(id = raw.factId, status = RelationFact.STATUS_ACTIVE,
+            val fact = raw.copy(id = raw.factId,
+                status = if (keepStatus) raw.status else RelationFact.STATUS_ACTIVE,
                 updatedAt = if (raw.updatedAt > 0) raw.updatedAt else now)
+            if (keepStatus && !fact.isOpen) {
+                if (result.none { it.factId == fact.factId }) result += fact
+                continue
+            }
             // 用户手动标了完成或移出的条目，不再被自动整理拉回来。
-            if (suppressed(result, fact)) continue
+            if (!keepStatus && suppressed(result, fact)) continue
             applyReplaces(result, fact, now)
             if (fact.isTimed) mergeTimed(result, fact, now) else mergeStatic(result, fact, now)
         }

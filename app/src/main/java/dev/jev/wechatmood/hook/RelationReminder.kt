@@ -81,7 +81,24 @@ internal object RelationReminder {
             clearNotified(context, key.value)
             return
         }
+        // 用户按过「一小时后」：这次只更新角标，别把通知立刻又弹回来、顺手抹掉延后。
+        if (snoozed(context, key.value, now)) {
+            MoodLog.i("RELATION_REMIND_REFRESH_SNOOZED")
+            return
+        }
         notify(context, key.value, talker, nameFor(talker).orEmpty(), due, now)
+    }
+
+    /**
+     * 非 suspend 版本，给广播接收器用：通知上点「标记完成」之后要重算角标与通知，
+     * 以前那条路径只改库，角标停在「提醒」、别的到期条目也不再重发。
+     */
+    fun refreshAsync(context: Context, key: ReplyContactKey, talker: String?) {
+        val app = context.applicationContext ?: context
+        scope.launch {
+            runCatching { refresh(app, key, talker) }
+                .onFailure { MoodLog.w("RELATION_REMIND_REFRESH_FAILED " + it.javaClass.simpleName) }
+        }
     }
 
     /** 2.9.142 之前的通知 id 固定 1101，升级后旧通知留在栏里点不动，启动时清掉。 */
@@ -221,7 +238,7 @@ internal object RelationReminder {
             builder.addAction(Notification.Action.Builder(
                 Icon.createWithResource("android", android.R.drawable.ic_menu_agenda),
                 if (facts.size > 1) "全部标记完成" else "标记完成",
-                doneIntent(context, contactKey, facts, noticeId)).build())
+                doneIntent(context, contactKey, talker, facts, noticeId)).build())
         }.onFailure { MoodLog.w("RELATION_REMIND_ACTION_FAILED " + it.javaClass.simpleName) }
         runCatching {
             builder.addAction(Notification.Action.Builder(
@@ -295,12 +312,13 @@ internal object RelationReminder {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    private fun doneIntent(context: Context, contactKey: String, facts: List<RelationFact>,
-        noticeId: Int): PendingIntent {
+    private fun doneIntent(context: Context, contactKey: String, talker: String?,
+        facts: List<RelationFact>, noticeId: Int): PendingIntent {
         val intent = Intent(RelationTodoActions.ACTION_DONE)
             .setPackage("com.tencent.mm")
             .putExtra(RelationTodoActions.EXTRA_KEY, contactKey)
             .putExtra(RelationTodoActions.EXTRA_IDS, facts.joinToString(",") { it.factId })
+            .putExtra(RelationTodoActions.EXTRA_TALKER, talker)
             .putExtra(RelationTodoActions.EXTRA_NOTICE, noticeId)
         return PendingIntent.getBroadcast(context, noticeId, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

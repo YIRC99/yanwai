@@ -57,6 +57,7 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
     private var refreshing = false
     private var removedExpanded = false
     private var supersededExpanded = false
+    private var doneExpanded = false
     private var query = ""
     private val searchField: EditText = EditText(activity).apply {
         hint = "搜索档案内容"
@@ -169,8 +170,15 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
     }
 
     private suspend fun load(key: ReplyContactKey) {
-        val loaded = withContext(Dispatchers.IO) {
-            RelationFactBridge.loadAll(activity, key) to RelationFactBridge.meta(activity, key)
+        val loaded = runCatching {
+            withContext(Dispatchers.IO) {
+                RelationFactBridge.loadAll(activity, key) to RelationFactBridge.meta(activity, key)
+            }
+        }.getOrElse { error ->
+            // 以前这里没有兜底：读库一抛异常，窗口就永远停在「正在读取…」。
+            MoodLog.w("RELATION_ARCHIVE_LOAD_FAILED " + error.javaClass.simpleName)
+            showStatus("读取档案失败，稍后重试", theme.error)
+            return
         }
         items = loaded.first
         meta = loaded.second
@@ -192,6 +200,9 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             .sortedByDescending { it.updatedAt }.take(REMOVED_LIMIT)
         val superseded = matched.filter { it.status == RelationFact.STATUS_SUPERSEDED }
             .sortedByDescending { it.updatedAt }.take(REMOVED_LIMIT)
+        // 已完成也留一个入口：待办页的「已处理」只留最近 6 条，再早的以前哪儿都翻不到。
+        val done = matched.filter { it.status == RelationFact.STATUS_DONE }
+            .sortedByDescending { it.updatedAt }.take(REMOVED_LIMIT)
         val head = buildString {
             append(if (items.isEmpty()) "还没有整理过" else "有效 $activeAll 条")
             if (query.isNotBlank()) append(" · 匹配 ${matched.size} 条")
@@ -210,7 +221,10 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
         summaryText.text = summary
 
         if (active.isEmpty()) {
-            listContainer.addView(kit.body("这个联系人还没有档案"))
+            // 只有已移出/已作废时，别说「还没有档案」，语义对不上。
+            listContainer.addView(kit.body(
+                if (items.isEmpty()) "这个联系人还没有档案" else "没有有效条目，已处理过的在下面"
+            ))
             listContainer.addView(kit.caption("点「整理一次」读最近聊天自动整理，或「添加一条」自己写"))
         }
         for (kind in RelationFact.KINDS) {
@@ -233,6 +247,17 @@ internal class RelationArchiveUi(private val activity: Activity, private val tal
             }
             listContainer.addView(toggle)
             if (removedExpanded) removed.forEach { listContainer.addView(factRow(it), rowParams()) }
+        }
+        if (done.isNotEmpty()) {
+            val toggle = kit.sectionLabel(
+                if (doneExpanded) "已完成 · ${done.size} 条 ▴" else "已完成 · ${done.size} 条 ▾"
+            ).apply {
+                isClickable = true; isFocusable = true
+                contentDescription = "已完成 ${done.size} 条，${if (doneExpanded) "点击收起" else "点击展开"}"
+                setOnClickListener { doneExpanded = !doneExpanded; render() }
+            }
+            listContainer.addView(toggle)
+            if (doneExpanded) done.forEach { listContainer.addView(factRow(it), rowParams()) }
         }
         if (superseded.isNotEmpty()) {
             // 改期、换工作留下的旧说法：默认不展开，但能翻出来还原。

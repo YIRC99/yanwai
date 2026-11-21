@@ -7,6 +7,7 @@ import dev.jev.wechatmood.core.ModulePrefs
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.RelationFactBridge
 import dev.jev.wechatmood.reply.ReplyContactKey
+import dev.jev.wechatmood.reply.ReplyContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,11 +75,20 @@ internal object RelationAutoRefresh {
         }
         RelationReminder.check(activity, key, talker, facts)
         if (!RelationFactBridge.enabled(activity)) return
+        // 上一次抽取刚失败过：半小时内别再花一次请求，等用户主动点整理或冷却结束。
+        if (RelationFactRefresher.recentFailure(key)) {
+            MoodLog.i("RELATION_FACT_AUTOPAGE skipped recent_failure")
+            return
+        }
         val meta = withContext(Dispatchers.IO) { runCatching { RelationFactBridge.meta(activity, key) }.getOrNull() } ?: return
         val gap = System.currentTimeMillis() - meta.lastAt
-        val fresh = live.messages.count { it.id > meta.lastMessageId }
+        // 页面往往只有十几条，拿它数增量永远到不了 30 条；按库里的真实新增来算。
+        val window = withContext(Dispatchers.IO) {
+            runCatching { ReplyDatabaseHistory.load(live, ReplyContext.MAX_MESSAGES) }.getOrNull()?.messages
+        }.orEmpty()
+        val fresh = window.count { it.id > meta.lastMessageId }
         val due = meta.lastAt <= 0 || gap > STALE_MS || fresh >= FRESH_MESSAGES
-        MoodLog.i("RELATION_FACT_AUTOPAGE due=$due gap_hours=${gap / 3600_000L} fresh=$fresh")
+        MoodLog.i("RELATION_FACT_AUTOPAGE due=$due gap_hours=${gap / 3600_000L} fresh=$fresh window=${window.size}")
         if (!due) return
         val started = RelationFactRefresher.launch(activity, key, settings, snapshot = snapshot) { result, error ->
             when {

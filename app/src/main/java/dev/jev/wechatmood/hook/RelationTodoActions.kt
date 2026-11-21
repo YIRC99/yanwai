@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.os.Build
 import dev.jev.wechatmood.core.MoodLog
 import dev.jev.wechatmood.core.RelationFactBridge
+import dev.jev.wechatmood.reply.ReplyContactKey
 
 /**
  * 通知上的三个动作：进聊天、标记完成、稍后再提醒。
@@ -62,6 +63,14 @@ internal object RelationTodoActions {
         // 只改「已完成」这个可逆状态；标记错了可以在「附加 · 待办」里恢复。
         val changed = RelationFactBridge.markDone(c, key, ids)
         cancelNotice(c, intent)
+        if (changed > 0) {
+            // 通知上的动作也要把角标和剩余通知一起刷新：
+            // 以前只改库，标记完成后角标还停在「提醒」，别的到期条目也不再重发。
+            val contact = runCatching { ReplyContactKey(key) }.getOrNull()
+            if (contact != null) {
+                RelationReminder.refreshAsync(c, contact, intent.getStringExtra(EXTRA_TALKER))
+            }
+        }
         MoodLog.i("RELATION_TODO_DONE_BY_NOTICE asked=" + ids.size + " changed=" + changed)
     }
 
