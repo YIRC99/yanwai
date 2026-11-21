@@ -7,6 +7,9 @@ import java.security.MessageDigest
 interface AnalysisCacheDatabase : Closeable {
     fun execute(sql: String, args: List<String> = emptyList())
     fun query(sql: String, args: List<String> = emptyList()): String?
+
+    /** 取第一列的多行结果；逐条查询的场景（例如关系事实）不再整份 JSON 搬运。 */
+    fun queryRows(sql: String, args: List<String> = emptyList()): List<String>
 }
 
 /** No credentials or account paths are stored: namespace and message identity are hashes. */

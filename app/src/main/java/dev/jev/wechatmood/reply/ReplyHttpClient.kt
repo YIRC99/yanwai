@@ -41,9 +41,18 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
             if (error.message?.contains("截断") == true) {
                 once(settings, JSONObject(payload.toString()).put("max_tokens", 2400), parse, onPartial)
             } else if (hasImage(payload)) {
-                // 模型不接受图片（常见 400）时退回纯文本，功能不至于整块失败。
+                // 图片必须最先回退：若先去掉 response_format / stream_options，重试仍带着图片，
+                // 再失败就直接抛错，纯文本兜底永远走不到。
                 MoodLog.w("REPLY_FALLBACK_TEXT 模型不接受图片，已回退纯文本：${error.message?.take(60)}")
                 once(settings, withoutImage(payload), parse, onPartial)
+            } else if (payload.has("response_format")) {
+                // 一些服务不支持 response_format，会直接 400；去掉再试。
+                MoodLog.w("RESPONSE_FORMAT_UNSUPPORTED 去掉 response_format 重试")
+                once(settings, JSONObject(payload.toString()).apply { remove("response_format") }, parse, onPartial)
+            } else if (payload.has("stream_options")) {
+                // 一些网关不认 stream_options，直接 400；去掉参数再试，不影响回复本身。
+                MoodLog.w("REPLY_STREAM_OPTIONS_UNSUPPORTED 去掉 stream_options 重试")
+                once(settings, JSONObject(payload.toString()).apply { remove("stream_options") }, parse, onPartial)
             } else throw error
         }
 
@@ -58,7 +67,7 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
         return false
     }
 
-    /** 把多模态 user 消息还原成纯文本，作为不支持图片时的兜底。 */
+    /** 把多模态 user 消息还原成纯文本，作为模型不支持图片时的兜底。 */
     private fun withoutImage(payload: JSONObject): JSONObject {
         val copy = JSONObject(payload.toString())
         val messages = copy.optJSONArray("messages") ?: return copy
@@ -113,11 +122,21 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
             })
         }
 
+    /** usage 只在服务返回时才有；流式拼出来的响应没有 usage，至少要记一次请求。 */
+    private fun reportUsage(body: String) {
+        val usage = runCatching { JSONObject(body).optJSONObject("usage") }.getOrNull()
+        dev.jev.wechatmood.core.UsageReporter.report(
+            usage?.optLong("prompt_tokens", 0L) ?: 0L,
+            usage?.optLong("completion_tokens", 0L) ?: 0L)
+    }
+
     private fun readWhole(body: ResponseBody): String {
         val source = body.source()
         source.request(1024 * 1024L + 1)
         check(source.buffer.size <= 1024 * 1024L) { "模型响应过长，请换一个模型后重试" }
-        return source.readUtf8()
+        val text = source.readUtf8()
+        reportUsage(text)
+        return text
     }
 
     /**
@@ -132,6 +151,8 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
         var size = 0L
         val startedAt = System.currentTimeMillis()
         var firstAt = 0L
+        var usagePrompt = 0L
+        var usageCompletion = 0L
         while (true) {
             val line = source.readUtf8Line() ?: break
             size += line.length
@@ -140,6 +161,10 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
             val data = line.substring(5).trim()
             if (data.isEmpty() || data == "[DONE]") continue
             val json = runCatching { JSONObject(data) }.getOrNull() ?: continue
+            json.optJSONObject("usage")?.let { usage ->
+                usagePrompt = usage.optLong("prompt_tokens", 0L)
+                usageCompletion = usage.optLong("completion_tokens", 0L)
+            }
             val choices = json.optJSONArray("choices") ?: continue
             if (choices.length() == 0) continue
             val choice = choices.optJSONObject(0) ?: continue
@@ -159,7 +184,8 @@ class ReplyHttpClient(private val client: Call.Factory = HttpClients.shared.newB
         check(content.isNotEmpty()) { "模型没有返回内容，请重试" }
         // 只记耗时和长度，不记内容：用于确认流式是否真的生效。
         dev.jev.wechatmood.core.MoodLog.i(
-            "REPLY_STREAM ok chars=${content.length} first=${if (firstAt == 0L) -1 else firstAt - startedAt}ms total=${System.currentTimeMillis() - startedAt}ms")
+            "REPLY_STREAM ok chars=${content.length} first=${if (firstAt == 0L) -1 else firstAt - startedAt}ms total=${System.currentTimeMillis() - startedAt}ms usage=${usagePrompt}+${usageCompletion}")
+        dev.jev.wechatmood.core.UsageReporter.report(usagePrompt, usageCompletion)
         return JSONObject().put("choices", JSONArray().put(JSONObject()
             .put("message", JSONObject().put("content", content.toString()).put("refusal", JSONObject.NULL))
             .put("finish_reason", if (truncated) "length" else "stop"))).toString()

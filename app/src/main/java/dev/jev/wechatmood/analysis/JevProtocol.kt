@@ -91,7 +91,7 @@ object JevProtocol {
                 "不要重复已经给过的安慰、解释或问题。新话题优先接新话题，吐槽第三方不要求我方道歉。" +
                 "没有明确约定不能建议兑现，没求办法不急着指导。候选都不合适或前提不成立就选 none。",
             ChatActions.options(profile)))
-        for (action in actions) {
+        for (action in actions.take(2)) {
             questions.put("support_${action.id}", choice(
                 "独立核对这一建议的前提是否真的成立，而且尚未做过？只依据原文，不依据 first_pass 的标签。" +
                     "建议：${action.text} 适用前提：${action.condition}。对方已拒绝或要求暂停时，不能建议继续追问、劝说或催促。",
@@ -127,7 +127,7 @@ object JevProtocol {
         val action = if (actions.isNotEmpty()) readChoice(answers, "action", ChatActions.options(profile)) else null
         // Validate every requested answer, even when the focus is none. Partial replies must be retryable failures.
         val readings = candidates.associate { it.id to readChoice(answers, "reading_${it.id}", it.options) }
-        val supports = actions.associate { it.id to readChoice(answers, "support_${it.id}", supportOptions) }
+        val supports = actions.take(2).associate { it.id to readChoice(answers, "support_${it.id}", supportOptions) }
         val compatibleCards = ChatTemplates.candidates(reviewed).map { it.id }.toSet()
         val card = candidates.firstOrNull { it.id in compatibleCards && it.id == focus?.takeIf { result -> result.clear }?.choice }
         val reading = card?.let { readings.getValue(it.id) }?.takeIf { it.clear && it.choice != "unclear" }
@@ -173,6 +173,7 @@ object JevProtocol {
         "clarify" to "澄清或解释", "busy" to "暂时无暇回应")
 
     private fun emotionProbabilities(profile: ChatProfile): String {
+        // 模型没给分布时只报定性结论，不拿本地摊平的百分比冒充概率。
         if (!profile.emotion.distributionKnown) {
             val label = emotions[profile.emotion.choice] ?: profile.emotion.choice
             return "情绪：$label（模型未给出概率分布）"

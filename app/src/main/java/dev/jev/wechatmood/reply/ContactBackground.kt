@@ -32,9 +32,4 @@ class ContactBackgroundCache {
         values[key] = value
         return true
     }
-    /** Drops one contact so the next read has to confirm it with the provider again. */
-    @Synchronized fun remove(owner: String, key: ReplyContactKey) {
-        if (owner != generation) return
-        values.remove(key)
-    }
 }

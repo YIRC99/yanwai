@@ -29,6 +29,14 @@ class PersistentAnalysisCacheTest {
             args.forEachIndexed { index, value -> statement.setString(index + 1, value) }
             statement.executeQuery().use { if (it.next()) it.getString(1) else null }
         }
+        override fun queryRows(sql: String, args: List<String>): List<String> = connection.prepareStatement(sql).use { statement ->
+            args.forEachIndexed { index, value -> statement.setString(index + 1, value) }
+            statement.executeQuery().use { result ->
+                val rows = ArrayList<String>()
+                while (result.next()) result.getString(1)?.let { rows.add(it) }
+                rows
+            }
+        }
         override fun close() = connection.close()
     }
 

@@ -31,6 +31,15 @@ class ReplyProtocolTest {
         assertThrows(IllegalStateException::class.java) { ReplyProtocol.parse("{\"choices\":[]}") }
     }
 
+    @Test fun `truncated response is rejected even when its content parses`() {
+        // 模型自报 length 时，正文片段可能恰好是完整 JSON；这种“看起来完整”的结果不能采信。
+        val error = assertThrows(IllegalStateException::class.java) {
+            ReplyProtocol.parse(envelope("""{"replies":["好的"],"reason":"截断前刚好写完"}""", "length"))
+        }
+        assertTrue(error.message.orEmpty().contains("截断"))
+        assertEquals("好的", ReplyProtocol.parse(envelope("""{"replies":["好的"]}""")).parts.single())
+    }
+
     @Test fun `model sees whether evidence was expanded or limited to loaded page`() {
         for (source in ReplyContextSource.entries) {
             val payload = ReplyProtocol.payload(settings, context.copy(source = source), "", "", "")

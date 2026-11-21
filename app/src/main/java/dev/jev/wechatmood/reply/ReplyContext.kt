@@ -23,7 +23,8 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
     val source: ReplyContextSource = ReplyContextSource.LOADED_PAGE, val historyFailure: String? = null,
     val requestedMessages: Int = ReplyHistoryLimit.DEFAULT, val historyAnchor: ReplyHistoryAnchor? = null,
     val background: ContactBackground = ContactBackground(), val focusMessageId: Long = 0,
-    val targetMedia: String? = null, val targetImageDataUri: String? = null) {
+    val targetMedia: String? = null, val targetImageDataUri: String? = null, val focusText: String? = null,
+    val facts: List<RelationFact> = emptyList()) {
     val fingerprint: String get() {
         val text = messages.joinToString("\u0000") { "${it.id}:${it.speaker.length}:${it.speaker}:${it.time}:${it.text.length}:${it.text}:${it.voice?.key.orEmpty()}:${it.voiceState}" }
         return MessageDigest.getInstance("SHA-256").digest("$talker:$latestLoadedId:${background.revision}:$text".toByteArray())
@@ -59,7 +60,14 @@ data class ReplyContext(val talker: String, val messages: List<ReplyMessage>, va
                         val own = record.plainText().orEmpty()
                         val quoted = record.quotedMessage()
                         val quotedText = quoted?.text?.takeIf { it.isNotBlank() }?.take(200)
+                        // 合并转发：正文是 XML，回复时模型看不到，先把要点摊平给它。
+                        val forwarded = if (own.isBlank() && quotedText == null && ForwardDigest.isForward(record.content))
+                            ForwardDigest.parse(record.content) else null
                         when {
+                            forwarded != null -> "【合并转发：${forwarded.title.take(40)}】\n" +
+                                forwarded.items.take(40).joinToString("\n") { item ->
+                                    (if (item.sender.isBlank()) "" else item.sender + ": ") + item.text.take(150)
+                                }.take(4000)
                             quotedText != null -> "【引用${quoted.displayName?.take(32).orEmpty()}：$quotedText】$own"
                             own.isNotBlank() -> own
                             else -> "【引用消息，内容未能解析】"

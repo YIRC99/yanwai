@@ -21,6 +21,12 @@ object AnalysisCacheProvider {
                 override fun query(sql: String, args: List<String>): String? = db.rawQuery(sql, args.toTypedArray()).use {
                     if (it.moveToFirst()) it.getString(0) else null
                 }
+                override fun queryRows(sql: String, args: List<String>): List<String> =
+                    db.rawQuery(sql, args.toTypedArray()).use { cursor ->
+                        val rows = ArrayList<String>(cursor.count)
+                        while (cursor.moveToNext()) cursor.getString(0)?.let { rows.add(it) }
+                        rows
+                    }
                 override fun close() = db.close()
             }).also { store = it }
         } catch (error: Exception) { db.close(); throw error }
